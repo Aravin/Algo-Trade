@@ -39,3 +39,8 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 ## Supported Brokers
 
 * Finvasia
+
+Important Links
+
+* To get NIFTY50 data nseindia.com/api/equity-stockIndices?index=NIFTY%2050
+* To get Global data 
