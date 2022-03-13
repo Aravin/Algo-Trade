@@ -11,6 +11,8 @@
   "dependencies": {
     "5paisajs": "0.0.10",
     "axios": "^0.21.1",
+    "cheerio": "^1.0.0-rc.10",
+    "puppeteer": "^13.5.1",
     "smartapi-javascript": "^1.0.14",
     "stocknotejsbridge": "^1.0.2",
     "ws": "^7.4.6"
