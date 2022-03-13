@@ -2,6 +2,9 @@
 
 NIFTY50 Option Trading based on Global sentiment and well-known technical indicators.
 
+![Basic Flow Diagram](https://github.com/Aravin/Algo-Trade/raw/main/assets/images/basic-flow-diagram.png)
+
+
 ## Global Sentiments
 
 1. Dow Jones
