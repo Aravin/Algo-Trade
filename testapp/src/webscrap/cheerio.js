@@ -99,7 +99,7 @@ async function scrapGlobalMarket() {
     });
 
     console.log({
-        globalData,
+        globalData: filteredInfo,
         marketSentiment,
         pivotPoints,
     })
