@@ -1,5 +1,5 @@
 const axios = require("axios");
-const cheerio = require('cheerio')
+const cheerio = require('cheerio');
 
 // const symbols = `N225,000001,HSI,KOSPI,GDAXI,AIM1,FCHI,DJI,DXY`;
 // const investingSite = `https://in.investing.com/indices/major-indices`;
@@ -168,9 +168,40 @@ async function scrapGlobalMarketV2() {
     }
 }
 
-module.exports.scrapGlobalMarket = scrapGlobalMarketV2;
+async function scrapGlobalMarketV3() {
+    try {
+        const globalColumn = ['name', 'last', 'change', 'changePercent', 'open', 'high', 'low', 'prevClose', 'last5DayPerf'];
+        const globalData = [];
+        const requiredMarkets = ['Nasdaq', 'FTSE', 'CAC', 'DAX', 'SGX Nifty', 'Nikkei 225', 'Hang Seng', 'KOSPI'];
 
-// console.log(scrapInvestingSite(investingSite));
-// console.log(scrapMarketSentiment(moneyControlSite));
-// scrapGlobalMarket('https://www.moneycontrol.com/markets/global-indices/')
-// console.log(scrapGlobalMarketV2());/
+        const uniAxios = axios.create();
+
+        // Global data
+        const globalResponseData = await uniAxios.get(GLOBAL_MARKET_URL);
+        const $1 = cheerio.load(globalResponseData.data, null, false);
+
+        $1('.glob_indi_lft table tbody tr').each((i, tr) => {
+            const obj = {};
+            $1('td', tr).each((j, td) => {
+                if (j === 0) {
+                    obj[globalColumn[j]] = $1(td).text().replace(/\((.*?)\)/g, '').trim();
+                } else {
+                    obj[globalColumn[j]] = parseFloat($1(td).text().split('\n').join('').split(' ')[0].trim());
+                }
+            })
+            globalData.push(obj);
+        });
+        
+        const filteredInfo = globalData.filter((v) => requiredMarkets.includes(v.name));
+
+        return {
+            globalData: filteredInfo,
+            status: 'success',
+        };
+    } catch (err) {
+        // console.log(err);
+        throw new Error(err.message);
+    }
+}
+
+module.exports.scrapGlobalMarket = scrapGlobalMarketV3;
