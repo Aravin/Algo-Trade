@@ -1,58 +1,55 @@
+const { scrapGlobalMarket } = require('../webscrap/cheerio');
+const cron = require('node-cron');
+const placeOrder = require('../finvasia/index');
 const dayjs = require('dayjs');
-const weekday = require('dayjs/plugin/weekday');
-dayjs.extend(weekday);
 
-// remove holiday
-const holidays = [
-    '2022-01-26',
-    '2022-03-01',
-    '2022-03-18',
-    '2022-04-14',
-    '2022-04-15',
-    '2022-05-03',
-    '2022-08-09',
-    '2022-08-15',
-    '2022-08-31',
-    '2022-10-05',
-    '2022-10-24',
-    '2022-10-26',
-    '2022-11-08',
-]
+let STATE = 'START';
+let orderId = null;
+let script = null;
 
-// find thursday
-module.exports = findNextExpiry = () => {
-    const now = dayjs();
-    let nextExpiryDay;
-    
-    if (now.weekday() === 4) { // 0 - sunday 4 - thursday
-        nextExpiryDay = now.add(7, 'day');
-    } else {
-        nextExpiryDay = now.weekday(4);
+const startAlgoTrade = async () => {
+    try {
+        if (STATE === 'STOP') {
+            console.log('Order closed. No Action needed');
+            return;
+        } else if (STATE === 'ORDERED') {
+            const globalMarket = await scrapGlobalMarket();
+
+            if (script && (globalMarket.marketSentiment.includes('sell') || parseInt(dayjs().format('HHmm')) > 1430)) {
+                console.log('Market is negative ❌, closing the order');
+                orderId = await placeOrder('S', script);
+                STATE = 'STOP';
+            } else {
+                console.log('Market is positive ✅, holding the position');
+            }
+
+        } else if (STATE === 'START') {
+            const globalMarket = await scrapGlobalMarket();
+
+            const positiveMarketCount = globalMarket.globalData.filter((v, i) => v.changePercent > 0);
+
+            if (positiveMarketCount.length >= 4 && globalMarket.marketSentiment.includes('buy')) {
+                console.log('Market is positive ✅, placing the order');
+                const order = await placeOrder('B');
+
+                if (order?.orderId) {
+                    orderId = order?.orderId;
+                    script = order?.script;
+                    STATE = 'ORDERED';
+                }
+
+            } else {
+                console.log('Market is Negative ❌');
+            }
+        }
+    } catch (err) {
+        console.log(err.message);
+    } finally {
+        console.log('Retry after 1 min. ');
     }
-
-    let newExpiryDay = removeHoliday(nextExpiryDay);
-
-    if (newExpiryDay !== nextExpiryDay) {
-        newExpiryDay = newExpiryDay.add(7 + nextExpiryDay.diff(newExpiryDay, 'day'), 'day');
-    }
-
-    return newExpiryDay.format('DDMMMYY').toUpperCase();
 }
 
-// remove holiday
-const removeHoliday = (date) => {
-    let nextExpiryDay = date;
-
-    if (nextExpiryDay.diff(dayjs(), 'day') <= 0) {
-        return nextExpiryDay;
-    }
-    
-    if (holidays.includes(nextExpiryDay.format('YYYY-MM-DD'))) { 
-        nextExpiryDay = nextExpiryDay.subtract(1, 'day')
-    } else {
-        return nextExpiryDay;
-    }
-
-    return removeHoliday(nextExpiryDay);
-}
-
+cron.schedule('* * * * *', () => {
+    console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    startAlgoTrade();
+});

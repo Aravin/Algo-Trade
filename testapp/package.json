@@ -11,10 +11,13 @@
   "dependencies": {
     "5paisajs": "0.0.10",
     "axios": "^0.21.1",
+    "casperjs": "^1.1.4",
     "cheerio": "^1.0.0-rc.10",
     "crypto-js": "^4.1.1",
     "dayjs": "^1.10.8",
     "dotenv": "^16.0.0",
+    "node-cron": "^3.0.0",
+    "playwright": "^1.20.0",
     "puppeteer": "^13.5.1",
     "smartapi-javascript": "^1.0.14",
     "stocknotejsbridge": "^1.0.2",

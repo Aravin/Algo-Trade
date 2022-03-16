@@ -38,14 +38,14 @@ var NorenRestApi = function(params) {
   }
   
     axios.interceptors.request.use(req => {
-    console.log(`${req.method} ${req.url} ${req.data}`);
+    // console.log(`${req.method} ${req.url} ${req.data}`);
     // Important: request interceptors **must** return the request.
     return req;
   });
     // Add a response interceptor
     axios.interceptors.response.use(response => {
-        if (API.debug)
-         console.log(response);
+        // if (API.debug)
+        //  console.log(response);
         // console.log("response::", response)
         if (response.status === 200) {
             if (response.data.success || response.data.status) {
@@ -116,7 +116,7 @@ var NorenRestApi = function(params) {
             "imei": params.imei            
         };
 
-        console.log(authparams);
+        // console.log(authparams);
         let auth_data = post_request("authorize", authparams);
 
         auth_data
