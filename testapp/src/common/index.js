@@ -1,3 +1,4 @@
+const { getIndiaMarket } = require('../api');
 const { scrapGlobalMarket } = require('../webscrap/cheerio');
 const cron = require('node-cron');
 const placeOrder = require('../finvasia/index');
@@ -12,15 +13,27 @@ const startAlgoTrade = async () => {
         if (STATE === 'STOP') {
             console.log('Order closed. No Action needed');
             return;
-        } else if (STATE === 'ORDERED') {
-            const globalMarket = await scrapGlobalMarket();
+        } else if (STATE === 'ORDERED' && script) {
 
-            if (script && (globalMarket.marketSentiment.includes('sell') || parseInt(dayjs().format('HHmm')) > 1430)) {
-                console.log('Market is negative ❌, closing the order');
+            // special case
+            if (parseInt(dayjs().format('HHmm')) > 1430) {
+                console.log('Market Closing Time ⌛, exiting the position');
+                orderId = await placeOrder('S', script);
+                STATE = 'STOP';
+                return;
+            }
+
+            const niftyTrend1Min = await getIndiaMarket(60);
+            const niftyTrend5Min = await getIndiaMarket(300);
+
+            if ((niftyTrend5Min.summary === 'buy' && niftyTrend1Min.summary === 'neutral')
+                || (niftyTrend5Min.summary === 'neutral' && niftyTrend1Min.summary === 'sell')
+             ) {
+                console.log('Indian Market is negative ❌, exiting the position');
                 orderId = await placeOrder('S', script);
                 STATE = 'STOP';
             } else {
-                console.log('Market is positive ✅, holding the position');
+                console.log('Indian Market is positive ✅, holding the position');
             }
 
         } else if (STATE === 'START') {
@@ -28,18 +41,29 @@ const startAlgoTrade = async () => {
 
             const positiveMarketCount = globalMarket.globalData.filter((v, i) => v.changePercent > 0);
 
-            if (positiveMarketCount.length >= 4 && globalMarket.marketSentiment.includes('buy')) {
-                console.log('Market is positive ✅, placing the order');
+            if (positiveMarketCount.length < 4) {
+                console.log('Global Market is Negative ❌');
+                return;
+            }
+
+            console.log('Global Market is positive ✅');
+
+            const niftyTrend1Min = await getIndiaMarket(60);
+            const niftyTrend5Min = await getIndiaMarket(300);
+            console.log(niftyTrend1Min, niftyTrend5Min);
+
+            if ((niftyTrend5Min.summary === 'sell' && niftyTrend1Min.summary === 'neutral')
+                || (niftyTrend5Min.summary === 'neutral' && niftyTrend1Min.summary === 'buy')
+                || (niftyTrend5Min.summary === 'buy' && niftyTrend1Min.summary === 'buy')
+             ) {
+                console.log('Indian Market is positive ✅, Placing the Order 💹');
+    
                 const order = await placeOrder('B');
-
-                if (order?.orderId) {
-                    orderId = order?.orderId;
-                    script = order?.script;
-                    STATE = 'ORDERED';
-                }
-
+                orderId = order?.orderId;
+                script = order?.script;
+                STATE = 'ORDERED';
             } else {
-                console.log('Market is Negative ❌');
+                console.log('Indian Market is Negative ❌');
             }
         }
     } catch (err) {

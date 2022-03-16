@@ -18,7 +18,7 @@ async function getIndiaMarket(duration) {
 
         const $ = cheerio.load(niftyTrend.data, null, false);
 
-        console.log({
+        return {
             summary: $('.summary > span').text().toLowerCase(),
             ma: {
                 summary: $('#techStudiesInnerWrap > div:nth-child(2) > span:eq(1)').text().toLowerCase(),
@@ -31,7 +31,7 @@ async function getIndiaMarket(duration) {
                 sell: $('#tiSell').text().toLowerCase().replace(/[()]/g, ''),
             },
             status: 'success',
-        })
+        }
 
     } catch (err) {
         // console.log(err);
@@ -39,7 +39,7 @@ async function getIndiaMarket(duration) {
     }
 }
 
-getIndiaMarket(60);
-getIndiaMarket(300);
+// getIndiaMarket(60);
+// getIndiaMarket(300);
 
-module.exports.scrapGlobalMarket = getIndiaMarket;
+module.exports.getIndiaMarket = getIndiaMarket;
