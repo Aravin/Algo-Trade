@@ -37,7 +37,8 @@ let WebSocketClient = function (cred, params) {
                     }, timeout);
 
                     //prepare the data
-                    let values              = { "t": "c" };
+                    let values              = { "t": "c" }; // connect API
+                    // let values              = { "t": "o" };/
                     values["uid"]       = params.uid;
                     values["actid"]     = params.actid;
                     values["susertoken"] = params.apikey;

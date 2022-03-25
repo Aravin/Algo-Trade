@@ -21,14 +21,14 @@ api = new Api({});
 //         console.error(err);
 //     });
 
-module.exports = placeOrder = async (orderType, script) => {
+const placeOrder = async (orderType, sellScript) => {
     try {
         const login = await api.login(authparams);
 
         if (orderType === 'S') {
-            const order = await api.place_order({buy_or_sell: orderType, product_type: 'M', exchange: 'NFO', tradingsymbol: script, quantity: 50, discloseqty: 0, price_type: 'M', price: 0});
+            const order = await api.place_order({buy_or_sell: orderType, product_type: 'M', exchange: 'NFO', tradingsymbol: sellScript, quantity: 50, discloseqty: 0, price_type: 'M', price: 0});
 
-            return {orderId: order.norenordno, script };
+            return {orderId: order.norenordno, script: sellScript };
         }
 
         const limits = await api.get_limits();
@@ -67,4 +67,20 @@ module.exports = placeOrder = async (orderType, script) => {
     }
 }
 
+const getPositionBook = async () => {
+    const login = await api.login(authparams);
+
+    const positionBook = await api.get_positions();
+    // console.log(positionBook);
+
+    return positionBook;
+}
+
+// getPositionBook();
+
 // placeOrder();
+
+module.exports = {
+    placeOrder: placeOrder,
+    getPositionBook: getPositionBook,
+}

@@ -454,6 +454,12 @@ var NorenRestApi = function(params) {
           self.web_socket.send(JSON.stringify(values));         
     }
 
+    self.subscribeOrder = function (feedtype) {
+      let values = {};
+      values['t'] =  'o';
+      self.web_socket.send(JSON.stringify(values));         
+}
+
     
 }
 

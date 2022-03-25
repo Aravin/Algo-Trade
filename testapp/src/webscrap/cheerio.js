@@ -173,6 +173,9 @@ async function scrapGlobalMarketV3() {
         const globalColumn = ['name', 'last', 'change', 'changePercent', 'open', 'high', 'low', 'prevClose', 'last5DayPerf'];
         const globalData = [];
         const requiredMarkets = ['Nasdaq', 'FTSE', 'CAC', 'DAX', 'SGX Nifty', 'Nikkei 225', 'Hang Seng', 'KOSPI'];
+        const asiaMarkets = ['KOSPI', 'Hang Seng', 'Nikkei 225', 'SGX Nifty'];
+        const europeMarkets = ['DAX', 'CAC', 'FTSE'];
+        const usMarket = ['Nasdaq']
 
         const uniAxios = axios.create();
 
@@ -194,8 +197,20 @@ async function scrapGlobalMarketV3() {
         
         const filteredInfo = globalData.filter((v) => requiredMarkets.includes(v.name));
 
+        const marketWithRegion = filteredInfo.map((d, v) => { 
+            if (asiaMarkets.includes(d.name)) {
+                d.market = 'Asia';
+            } else if (europeMarkets.includes(d.name)) {
+                d.market = 'Europe';
+            } else if (usMarket.includes(d.name)) {
+                d.market = 'US';
+            }
+            delete d.last5DayPerf;
+            return d;
+        })
+
         return {
-            globalData: filteredInfo,
+            globalData: marketWithRegion,
             status: 'success',
         };
     } catch (err) {
