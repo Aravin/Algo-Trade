@@ -6,8 +6,9 @@ const getPositionBook = require('../finvasia/index');
 const dayjs = require('dayjs');
 
 let STATE = 'START';
-let orderId = null || '2203210009110';
-let script = null || 'NIFTY24MAR22C17700';
+let ORDER_ID = null || '2203210009110';
+let SCRIPT = null || 'NIFTY24MAR22C17700';
+let ORDERED_SENTIMENT = null;
 
 const getGlobalSentiment = async () => {
     const globalMarketData = await scrapGlobalMarket();
@@ -58,7 +59,6 @@ const getIndiaSentiment = async () => {
     } else if ((niftyTrend5Min.summary === 'strong buy' && ['buy', 'neutral', 'sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'buy' && ['neutral', 'sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'neutral' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'neutral' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'strong sell' && ['strong sell'].includes(niftyTrend1Min.summary))
     ) {
@@ -84,61 +84,64 @@ const startAlgoTrade = async () => {
                 // place call order
                 console.log('Market is positive ✅, placing call Order 💹');
                 const order = await apis.placeOrder('B', 'CE');
-                orderId = order.orderId;
-                script = order.script;
+                ORDER_ID = order.orderId;
+                SCRIPT = order.script;
                 STATE = 'ORDERED';
+                ORDERED_SENTIMENT = 'positive';
+                return;
             }
 
             if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
                 // place put order
                 console.log('Market is negative ✅, placing put Order 💹');
                 const order = await apis.placeOrder('B', 'PE');
-                orderId = order.orderId;
-                script = order.script;
+                ORDER_ID = order.orderId;
+                SCRIPT = order.script;
                 STATE = 'ORDERED';
+                ORDERED_SENTIMENT = 'negative';
+                return;
             }
         }
-        else if (STATE === 'ORDERED' && script && orderId) {
-            // special case - TODO: convert to event.
+        else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
+            // special case - TODO: convert to event
             if (parseInt(dayjs().format('HHmm')) > 1500) {
                 console.log('Market Closing Time ⌛, exiting the position');
-                orderId = await placeOrder('S', null, script);
+                ORDER_ID = await placeOrder('S', null, SCRIPT);
                 STATE = 'STOP';
                 return;
             }
 
             // exit in case of loss
             const positions = await apis.getPositionBook();
-            const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions?.find((d) => d.tsym = script);
+            const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions?.find((d) => d.tsym = SCRIPT);
 
             const changePercent = ((parseFloat(lp) - parseFloat(netavgprc)) / parseFloat(netavgprc)) * 100;
             console.log(daybuyqty, netavgprc, daybuyamt, lp, urmtom, changePercent);
 
             if (changePercent > 50 || changePercent < -25) {
-                console.log('Indian Market is negative ❌, exiting the position');
-                orderId = await apis.placeOrder('S', script);
+                console.log(`P&L reached ${changePercent}, exiting the position`);
+                ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
                 STATE = 'STOP';
                 return;
             }
 
             const indiaSentiment = await getIndiaSentiment();
 
-            if (indiaSentiment === 'negative') {
-                console.log('Indian Market is negative ❌, exiting the position');
-                orderId = await apis.placeOrder('S', script);
-                STATE = 'STOP';
-            } else {
+            if (indiaSentiment === ORDERED_SENTIMENT) {
                 console.log('Indian Market is positive ✅, holding the position');
+                return;
             }
+
+            console.log('Indian Market is negative ❌, exiting the position');
+            ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
+            STATE = 'STOP';
 
         } else if (STATE === 'STOP') {
             console.log('Order closed. No Action needed');
-            return;
         }
     } catch (err) {
         console.log(err.message);
         console.log('Error: Retry after 1 min. ');
-    } finally {
     }
 }
 
