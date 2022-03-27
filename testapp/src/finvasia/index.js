@@ -5,23 +5,7 @@ const findNextExpiry = require('../common/expiryDate');
 
 api = new Api({});
 
-// api.login(authparams)
-//     .then((res) => {
-//         console.log('Login Reply: ', res);
-
-//         if (res.stat !== 'Ok')
-//             return;
-
-//         //search scrip example
-//         // api.searchscrip('NFO', 'NIFTY 17900 CE').then((reply) => { console.log(reply); });
-
-//         api.get_limits().then((reply) => { console.log(reply); });
-
-//     }).catch((err) => {
-//         console.error(err);
-//     });
-
-const placeOrder = async (orderType, sellScript) => {
+const placeOrder = async (orderType, callPut, sellScript) => {
     try {
         const login = await api.login(authparams);
 
@@ -41,9 +25,9 @@ const placeOrder = async (orderType, sellScript) => {
 
         const niftyLastPrice = parseFloat(quote.lp);
 
-        const bestStrike = (Math.round(niftyLastPrice/100) * 100) + 300;
+        const bestStrike = (Math.round(niftyLastPrice/100) * 100) + (callPut === 'CE' ? 300 : -300 );
 
-        const script = await api.searchscrip('NFO', `NIFTY ${expiryDate} ${bestStrike} CE`);
+        const script = await api.searchscrip('NFO', `NIFTY ${expiryDate} ${bestStrike} ${callPut}`);
 
         const scriptQuote = await api.get_quotes('NFO', script.values[0].token);
 
@@ -60,8 +44,6 @@ const placeOrder = async (orderType, sellScript) => {
             console.log(`Insufficient fund to place order. Required Rs.${Math.round(scriptLastPrice * scriptLot)} - Available Rs. ${margin}`);
             return null;
         }
-        
-        console.log(margin, niftyLastPrice, scriptLastPrice);
     } catch (err) {
         console.log(err);
     }
@@ -69,16 +51,8 @@ const placeOrder = async (orderType, sellScript) => {
 
 const getPositionBook = async () => {
     const login = await api.login(authparams);
-
-    const positionBook = await api.get_positions();
-    // console.log(positionBook);
-
-    return positionBook;
+    return await api.get_positions();
 }
-
-// getPositionBook();
-
-// placeOrder();
 
 module.exports = {
     placeOrder: placeOrder,
