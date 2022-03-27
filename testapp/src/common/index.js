@@ -9,11 +9,12 @@ let STATE = 'START';
 let ORDER_ID = null || '2203210009110';
 let SCRIPT = null || 'NIFTY24MAR22C17700';
 let ORDERED_SENTIMENT = null;
+let NAX_ORDER_PER_DAY = 3;
 
 const getGlobalSentiment = async () => {
     const globalMarketData = await scrapGlobalMarket();
     let globalMarket = globalMarketData.globalData;
-    let marketToWatch = ['US', 'Europe'];
+    let marketToWatch = ['US'];
     const currentTimeHHmm = parseInt(dayjs().format('HHmm'));
     let positiveMarketCount = 0;
     let negativeMarketCount = 0;
@@ -110,6 +111,7 @@ const startAlgoTrade = async () => {
                 console.log('Market Closing Time ⌛, exiting the position');
                 ORDER_ID = await placeOrder('S', null, SCRIPT);
                 STATE = 'STOP';
+                NAX_ORDER_PER_DAY = NAX_ORDER_PER_DAY - 1;
                 return;
             }
 
@@ -123,6 +125,7 @@ const startAlgoTrade = async () => {
                 console.log(`P&L reached ${changePercent}, exiting the position`);
                 ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
                 STATE = 'STOP';
+                NAX_ORDER_PER_DAY = NAX_ORDER_PER_DAY - 1;
                 return;
             }
 
@@ -136,12 +139,18 @@ const startAlgoTrade = async () => {
             console.log('Indian Market is negative ❌, exiting the position');
             ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
             STATE = 'STOP';
+            NAX_ORDER_PER_DAY = NAX_ORDER_PER_DAY - 1;
 
         }
         else if (STATE === 'STOP') {
-            console.log('Order closed. No Action needed');
+            if (NAX_ORDER_PER_DAY > 0) {
+                STATE = 'START';
+            } else {
+                console.log('Order closed. No Action needed');
+            }
         }
-    } catch (err) {
+    }
+    catch (err) {
         console.log(err.message);
         console.log('Error: Retry after 1 min. ');
     }
