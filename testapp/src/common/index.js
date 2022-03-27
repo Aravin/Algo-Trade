@@ -50,17 +50,19 @@ const getIndiaSentiment = async () => {
     const niftyTrend1Min = await getIndiaMarket(60);
     const niftyTrend5Min = await getIndiaMarket(300);
 
-    if ((niftyTrend5Min.summary === 'sell' && ['neutral', 'buy', 'strong buy'].includes(niftyTrend1Min.summary))
+    if ((niftyTrend5Min.summary === 'strong sell' && ['neutral', 'buy', 'strong buy'].includes(niftyTrend1Min.summary))
+        || (niftyTrend5Min.summary === 'sell' && ['neutral', 'buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'neutral' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'buy' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'strong buy' && niftyTrend1Min.summary === 'strong buy') // risk
     ) {
         return 'positive';
-    } else if ((niftyTrend5Min.summary === 'strong buy' && ['buy', 'neutral', 'sell', 'strong sell'].includes(niftyTrend1Min.summary))
+    }
+    else if ((niftyTrend5Min.summary === 'strong buy' && ['neutral', 'sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'buy' && ['neutral', 'sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'neutral' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'strong sell' && ['strong sell'].includes(niftyTrend1Min.summary))
+        || (niftyTrend5Min.summary === 'strong sell' && niftyTrend1Min.summary === 'strong sell')
     ) {
         return 'negative';
     }
@@ -114,7 +116,6 @@ const startAlgoTrade = async () => {
             // exit in case of loss
             const positions = await apis.getPositionBook();
             const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions?.find((d) => d.tsym = SCRIPT);
-
             const changePercent = ((parseFloat(lp) - parseFloat(netavgprc)) / parseFloat(netavgprc)) * 100;
             console.log(daybuyqty, netavgprc, daybuyamt, lp, urmtom, changePercent);
 
@@ -136,7 +137,8 @@ const startAlgoTrade = async () => {
             ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
             STATE = 'STOP';
 
-        } else if (STATE === 'STOP') {
+        }
+        else if (STATE === 'STOP') {
             console.log('Order closed. No Action needed');
         }
     } catch (err) {
@@ -147,6 +149,5 @@ const startAlgoTrade = async () => {
 
 cron.schedule('* * * * *', () => {
     console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
-    // startAlgoTrade();
+    startAlgoTrade();
 });
-startAlgoTrade();
