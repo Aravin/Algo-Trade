@@ -33,13 +33,17 @@ const placeOrder = async (orderType, callPut, sellScript) => {
 
         const scriptLastPrice = parseFloat(scriptQuote.lp);
 
-        const scriptLot = parseFloat(scriptQuote.ls);
+        const scriptLot = +scriptQuote.ls;
 
         if (scriptLastPrice * scriptLot < margin) {
             console.log('Placing Order');
             const order = await api.place_order({buy_or_sell: orderType, product_type: 'M', exchange: 'NFO', tradingsymbol: script.values[0].tsym, quantity: scriptLot, discloseqty: 0, price_type: 'M', price: 0});
+            
+            const orders = await apis.getOrderBook();
+            const lastOrder = orders.find((d) => d.norenordno === order.norenordno);
+            console.log(lastOrder);
 
-            return {orderId: order.norenordno, script: script.values[0].tsym };
+            return {orderId: order.norenordno, script: script.values[0].tsym, orderPrice: lastOrder.prc/scriptLot };
         } else {
             console.log(`Insufficient fund to place order. Required Rs.${Math.round(scriptLastPrice * scriptLot)} - Available Rs. ${margin}`);
             return null;

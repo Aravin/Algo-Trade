@@ -7,6 +7,7 @@ const dayjs = require('dayjs');
 
 let STATE = 'START';
 let ORDER_ID = null || '2203210009110';
+let ORDER_BUY_PRICE = 0.0;
 let SCRIPT = null || 'NIFTY24MAR22C17700';
 let ORDERED_SENTIMENT = null;
 let NAX_ORDER_PER_DAY = 3;
@@ -79,7 +80,7 @@ const startAlgoTrade = async () => {
             const indiaSentiment = await getIndiaSentiment();
 
             if (globalSentiment !== indiaSentiment) {
-                console.log('Global and Indian Sentiment are different!');
+                console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
                 return;
             }
 
@@ -89,6 +90,7 @@ const startAlgoTrade = async () => {
                 const order = await apis.placeOrder('B', 'CE');
                 ORDER_ID = order.orderId;
                 SCRIPT = order.script;
+                ORDER_BUY_PRICE = order.orderPrice,
                 STATE = 'ORDERED';
                 ORDERED_SENTIMENT = 'positive';
                 return;
@@ -100,6 +102,7 @@ const startAlgoTrade = async () => {
                 const order = await apis.placeOrder('B', 'PE');
                 ORDER_ID = order.orderId;
                 SCRIPT = order.script;
+                ORDER_BUY_PRICE = order.orderPrice,
                 STATE = 'ORDERED';
                 ORDERED_SENTIMENT = 'negative';
                 return;
@@ -111,15 +114,16 @@ const startAlgoTrade = async () => {
                 console.log('Market Closing Time ⌛, exiting the position');
                 ORDER_ID = await placeOrder('S', null, SCRIPT);
                 STATE = 'STOP';
-                NAX_ORDER_PER_DAY = NAX_ORDER_PER_DAY - 1;
+                NAX_ORDER_PER_DAY = 0;
                 return;
             }
 
             // exit in case of loss
             const positions = await apis.getPositionBook();
+            console.log(positions?.find((d) => d.tsym = SCRIPT));
             const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions?.find((d) => d.tsym = SCRIPT);
-            const changePercent = ((parseFloat(lp) - parseFloat(netavgprc)) / parseFloat(netavgprc)) * 100;
-            console.log(daybuyqty, netavgprc, daybuyamt, lp, urmtom, changePercent);
+            const changePercent = ((parseFloat(lp) - parseFloat(ORDER_BUY_PRICE)) / parseFloat(ORDER_BUY_PRICE)) * 100;
+            console.log(ORDER_BUY_PRICE, lp, urmtom, changePercent);
 
             if (changePercent > 50 || changePercent < -25) {
                 console.log(`P&L reached ${changePercent}, exiting the position`);
@@ -132,11 +136,11 @@ const startAlgoTrade = async () => {
             const indiaSentiment = await getIndiaSentiment();
 
             if (indiaSentiment === ORDERED_SENTIMENT) {
-                console.log('Indian Market is positive ✅, holding the position');
+                console.log(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
 
-            console.log('Indian Market is negative ❌, exiting the position');
+            console.log(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
             STATE = 'STOP';
             NAX_ORDER_PER_DAY = NAX_ORDER_PER_DAY - 1;
