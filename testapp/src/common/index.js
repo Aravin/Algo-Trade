@@ -15,9 +15,9 @@ const MAX_LOSS_PER_TRADE = 25;
 
 const getGlobalSentiment = async () => {
     const globalMarketData = await scrapGlobalMarket();
+    const currentTimeHHmm = parseInt(dayjs().format('HHmm'));
     let globalMarket = globalMarketData.globalData;
     let marketToWatch = ['US'];
-    const currentTimeHHmm = parseInt(dayjs().format('HHmm'));
     let positiveMarketCount = 0;
     let negativeMarketCount = 0;
     let averagePercentage = 0.0;
@@ -95,12 +95,10 @@ const startAlgoTrade = async () => {
                 console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
                 return;
             }
-
-            if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
+            else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
                 callOrPut = 'CE';
             }
-
-            if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
+            else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
                 callOrPut = 'PE';
             }
 
