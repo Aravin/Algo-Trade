@@ -17,7 +17,7 @@ const placeOrder = async (orderType, callPut, sellScript) => {
 
         const limits = await api.get_limits();
 
-        const margin = (parseFloat(limits.cash) || parseFloat(limits.payin)) * 90/100;
+        const margin = (parseFloat(limits.cash) || parseFloat(limits.payin)) * 97/100;
 
         const expiryDate = findNextExpiry(); // external call
 
@@ -39,11 +39,10 @@ const placeOrder = async (orderType, callPut, sellScript) => {
             console.log('Placing Order');
             const order = await api.place_order({buy_or_sell: orderType, product_type: 'M', exchange: 'NFO', tradingsymbol: script.values[0].tsym, quantity: scriptLot, discloseqty: 0, price_type: 'M', price: 0});
             
-            const orders = await apis.getOrderBook();
+            const orders = await api.get_orderbook();
             const lastOrder = orders.find((d) => d.norenordno === order.norenordno);
-            console.log(lastOrder);
 
-            return {orderId: order.norenordno, script: script.values[0].tsym, orderPrice: lastOrder.prc/scriptLot };
+            return {orderId: order.norenordno, script: script.values[0].tsym, orderPrice: lastOrder.avgprc };
         } else {
             console.log(`Insufficient fund to place order. Required Rs.${Math.round(scriptLastPrice * scriptLot)} - Available Rs. ${margin}`);
             return null;
