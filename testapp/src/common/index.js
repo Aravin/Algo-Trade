@@ -5,9 +5,10 @@ const apis = require('../finvasia/index');
 const dayjs = require('dayjs');
 
 let STATE = 'START';
-let ORDER_ID = null || '2203210009110';
+let ORDER_ID = null;
 let ORDER_BUY_PRICE = 0.0;
-let SCRIPT = null || 'NIFTY31MAR22C17600';
+let ORDER_LOT = 50;
+let SCRIPT = null;
 let ORDERED_SENTIMENT = null;
 let MAX_TRADE_PER_DAY = 3;
 const MAX_PROFIT_PER_TRADE = 50;
@@ -107,14 +108,15 @@ const startAlgoTrade = async () => {
             ORDER_ID = order.orderId;
             SCRIPT = order.script;
             ORDER_BUY_PRICE = +order.orderPrice;
-            ORDERED_SENTIMENT = indiaSentiments;
+            ORDER_LOT = +order.orderLot;
+            ORDERED_SENTIMENT = indiaSentiment;
             STATE = 'ORDERED';
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
             if (parseInt(dayjs().format('HHmm')) > 1500) {
                 console.log('Market Closing Time ⌛, exiting the position');
-                ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
+                ORDER_ID = await apis.placeOrder('S', null, SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 return;
@@ -124,11 +126,11 @@ const startAlgoTrade = async () => {
             const positions = await apis.getPositionBook();
             const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions?.find((d) => d.tsym = SCRIPT);
             const changePercent = ((parseFloat(lp) - ORDER_BUY_PRICE) / parseFloat(ORDER_BUY_PRICE)) * 100;
-            console.log(ORDER_BUY_PRICE, lp, urmtom, changePercent);
+            console.log({ORDER_BUY_PRICE, lp, urmtom, changePercent});
 
             if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
                 console.log(`P&L reached ${changePercent}, exiting the position`);
-                ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
+                ORDER_ID = await apis.placeOrder('S', null, SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
                 return;
@@ -142,7 +144,7 @@ const startAlgoTrade = async () => {
             }
 
             console.log(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
-            ORDER_ID = await apis.placeOrder('S', null, SCRIPT);
+            ORDER_ID = await apis.placeOrder('S', null, SCRIPT, ORDER_LOT);
             STATE = 'STOP';
             MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
 
