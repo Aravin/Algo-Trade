@@ -15,13 +15,9 @@ const MAX_PROFIT_PER_TRADE = 50;
 const MAX_LOSS_PER_TRADE = 25;
 
 const getGlobalSentiment = async () => {
-    const globalMarketData = await scrapGlobalMarket();
+    const globalMarket = await scrapGlobalMarket();
     const currentTimeHHmm = parseInt(dayjs().format('HHmm'));
-    let globalMarket = globalMarketData.globalData;
     let marketToWatch = ['US'];
-    let positiveMarketCount = 0;
-    let negativeMarketCount = 0;
-    let averagePercentage = 0.0;
 
     if (currentTimeHHmm >= 0900 && currentTimeHHmm < 1230) {
         marketToWatch.push('Asia');
@@ -30,23 +26,15 @@ const getGlobalSentiment = async () => {
         marketToWatch.push('Europe');
     }
 
+    marketToWatch.push('Europe');
+
     const activeMarket = globalMarket.filter((v, i) => marketToWatch.includes(v.market));
+    const activeMarketSentiment = activeMarket.reduce((acc, obj) =>  acc + obj.sentimentValue, 0)
 
-    for (const market of activeMarket) {
-        market.changePercent > 0.0 ? positiveMarketCount++ : negativeMarketCount++;
-        averagePercentage = averagePercentage + market.changePercent;
-    }
-
-    if (positiveMarketCount > negativeMarketCount) {
+    if (activeMarketSentiment > 0) {
         return 'positive';
     }
-    else if (negativeMarketCount > positiveMarketCount) {
-        return 'negative';
-    }
-    else if (averagePercentage > 0) {
-        return 'positive';
-    }
-    else if (averagePercentage < 0) {
+    else if (activeMarketSentiment < 0) {
         return 'negative';
     }
 
@@ -92,7 +80,8 @@ const startAlgoTrade = async () => {
             const indiaSentiment = await getIndiaSentiment();
             let callOrPut = '';
 
-            if (globalSentiment !== indiaSentiment) {
+            if (globalSentiment !== indiaSentiment
+                || new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
                 console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
                 return;
             }

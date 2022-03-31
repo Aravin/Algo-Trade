@@ -56,6 +56,9 @@ const cheerio = require('cheerio');
 const GLOBAL_MARKET_URL = `https://www.moneycontrol.com/markets/global-indices/`;
 const MARKET_SENTIMENT_URL = `https://www.moneycontrol.com/technical-analysis/indian-indices/nifty-50-9/daily`;
 const MARKET_SENTIMENT_INVESTING_URL = 'https://in.investing.com/indices/s-p-cnx-nifty-technical'
+const INVESTING_MAJOR_INDICES = 'https://in.investing.com/indices/major-indices';
+const INVESTING_MAJOR_INDICES_API = 'https://api.investing.com/api/financialdata/table/sml/74?fieldmap=indices.technical';
+// TODO: using https://in.investing.com/indices/major-indices
 
 async function scrapGlobalMarket() {
     try {
@@ -219,4 +222,50 @@ async function scrapGlobalMarketV3() {
     }
 }
 
-module.exports.scrapGlobalMarket = scrapGlobalMarketV3;
+ 
+async function scrapGlobalMarketV4() {
+    try {
+        const globalData = [];
+        const requiredMarkets = {
+            'Dow Jones': 'US',
+            'FTSE 100': 'Europe',
+            'CAC 40': 'Europe',
+            'DAX': 'Europe', 
+            'Nikkei 225': 'Asia',
+            'Hang Seng': 'Asia',
+            'KOSPI': 'Asia',
+        };
+        const marketSentimentRating = {
+            strong_sell: -2,
+            sell: -1,
+            neutral: 0,
+            buy: 1,
+            strong_buy: 2,
+        };
+
+        const uniAxios = axios.create();
+
+        // Global data
+        const globalResponse = await uniAxios.get(INVESTING_MAJOR_INDICES_API);
+        const globalResponseData = globalResponse.data.data;
+        const filteredGlobalResponseData = globalResponseData.filter((d) => Object.keys(requiredMarkets).includes(d.shortname_translated))
+
+        for (const data of filteredGlobalResponseData) {
+            const obj = {
+                name: data.shortname_translated,
+                sentiment: data.data[2],
+                sentimentValue: marketSentimentRating[data.data[2]],
+                market: requiredMarkets[data.shortname_translated],
+            };
+
+            globalData.push(obj);
+        }
+
+        return globalData;
+    }
+    catch (err) {
+        throw new Error(err.message);
+    }
+}
+
+module.exports.scrapGlobalMarket = scrapGlobalMarketV4;
