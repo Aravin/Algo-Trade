@@ -233,6 +233,7 @@ async function scrapGlobalMarketV4() {
             'DAX': 'Europe', 
             'Nikkei 225': 'Asia',
             'Hang Seng': 'Asia',
+            'Shanghai': 'Asia',
             'KOSPI': 'Asia',
         };
         const marketSentimentRating = {
@@ -248,7 +249,7 @@ async function scrapGlobalMarketV4() {
         // Global data
         const globalResponse = await uniAxios.get(INVESTING_MAJOR_INDICES_API);
         const globalResponseData = globalResponse.data.data;
-        const filteredGlobalResponseData = globalResponseData.filter((d) => Object.keys(requiredMarkets).includes(d.shortname_translated))
+        const filteredGlobalResponseData = globalResponseData.filter((d) => Object.keys(requiredMarkets).includes(d.shortname_translated));
 
         for (const data of filteredGlobalResponseData) {
             const obj = {
