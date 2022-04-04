@@ -30,6 +30,12 @@ async function getIndiaMarket(duration) {
                 buy: $('#tiBuy').text().toLowerCase().replace(/[()]/g, ''),
                 sell: $('#tiSell').text().toLowerCase().replace(/[()]/g, ''),
             },
+            trend: {
+                atr: {
+                    value: $('#curr_table > tbody > tr:nth-child(8) > td.right').text().toLowerCase(),
+                    action: $('#curr_table > tbody > tr:nth-child(8) > td.left > span').text().toLowerCase(),
+                }
+            },
             status: 'success',
         }
 
