@@ -24,6 +24,7 @@ const getGlobalSentiment = async () => {
     }
     else if (currentTimeHHmm >= 1230 && currentTimeHHmm < 1600) {
         marketToWatch.push('Europe');
+        marketToWatch.push('Asia');
     }
 
     marketToWatch.push('Europe');
@@ -44,30 +45,33 @@ const getGlobalSentiment = async () => {
 const getIndiaSentiment = async () => {
     const niftyTrend1Min = await getIndiaMarket(60);
     const niftyTrend5Min = await getIndiaMarket(300);
-    console.log({ _5min: niftyTrend5Min.summary, _1min: niftyTrend1Min.summary});
+    console.log({ _5min: niftyTrend5Min.summary, _1min: niftyTrend1Min.summary, atr: niftyTrend1Min.trend.atr});
 
     if ((niftyTrend5Min.summary === 'strong sell' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'sell' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'neutral' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'buy' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'strong buy' && niftyTrend1Min.summary === 'strong buy') // risk
+        || (niftyTrend5Min.summary === 'strong buy' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary)) // risk
     ) {
-        return 'positive';
+        return { sentiment: 'positive', trend: niftyTrend1Min.trend.atr };
     }
     else if ((niftyTrend5Min.summary === 'strong buy' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'buy' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'neutral' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
         || (niftyTrend5Min.summary === 'sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'strong sell' && niftyTrend1Min.summary === 'strong sell')
+        || (niftyTrend5Min.summary === 'strong sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
     ) {
-        return 'negative';
+        return { sentiment: 'negative', trend: niftyTrend1Min.trend.atr };
     }
 
-    return 'neutral';
+    return { sentiment: 'neutral', trend: niftyTrend1Min.trend.atr };
 }
 
 const startAlgoTrade = async () => {
     try {
+        const globalSentiment = await getGlobalSentiment();
+        const { sentiment: indiaSentiment, trend} = await getIndiaSentiment();
+
         if (STATE === 'STOP') {
             if (MAX_TRADE_PER_DAY) {
                 STATE = 'START';
@@ -76,13 +80,22 @@ const startAlgoTrade = async () => {
             }
         }
         else if (STATE === 'START') {
-            const globalSentiment = await getGlobalSentiment();
-            const indiaSentiment = await getIndiaSentiment();
+            
             let callOrPut = '';
 
-            if (globalSentiment !== indiaSentiment
-                || new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
-                console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
+            console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
+
+            if (globalSentiment !== indiaSentiment) {
+                    console.log(`Global & Indian Market Sentiment is different`);
+                    return;
+            }
+            else if (new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
+                    console.log(`Market Sentiment is neutral`);
+                    return;
+            }
+            else if (trend.action.includes('less'))
+            {
+                console.log(`No volalite in NIFTY50 - ATR value ${trend.value} - action - ${trend.action}`);
                 return;
             }
             else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
@@ -125,8 +138,6 @@ const startAlgoTrade = async () => {
                 return;
             }
 
-            const indiaSentiment = await getIndiaSentiment();
-
             if (indiaSentiment === ORDERED_SENTIMENT) {
                 console.log(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
@@ -140,7 +151,7 @@ const startAlgoTrade = async () => {
         }
     }
     catch (err) {
-        console.log(err.message);
+        console.log(err);
         console.log('Error: Retry after 1 min. ');
     }
 }
