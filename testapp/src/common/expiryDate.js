@@ -24,18 +24,24 @@ module.exports = findNextExpiry = () => {
     const now = dayjs();
     let nextExpiryDay;
     
-    if (now.weekday() === 4) { // 0 - sunday 4 - thursday
-        nextExpiryDay = now.add(7, 'day');
-    } else {
+    if (now.weekday() < 4) {
         nextExpiryDay = now.weekday(4);
+    }
+    else if (now.weekday() === 4) { // 0 - sunday 4 - thursday
+        nextExpiryDay = now.add(7, 'day');
+    }
+    else {
+        nextExpiryDay = now.add(7, 'day').weekday(4);
     }
 
     let newExpiryDay = removeHoliday(nextExpiryDay);
+    const diffInDays = nextExpiryDay.diff(newExpiryDay, 'day');
 
-    if (newExpiryDay !== nextExpiryDay) {
-        newExpiryDay = newExpiryDay.add(7 + nextExpiryDay.diff(newExpiryDay, 'day'), 'day');
+    if (diffInDays > 3) {
+        newExpiryDay = newExpiryDay.add(7 + diffInDays, 'day');
     }
 
+    // TODO: handle if multiple week ends in holiday. IMPORTANT
     return newExpiryDay.format('DDMMMYY').toUpperCase();
 }
 
