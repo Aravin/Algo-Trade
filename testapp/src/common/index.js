@@ -10,9 +10,9 @@ let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 50;
 let SCRIPT = null;
 let ORDERED_SENTIMENT = null;
-let MAX_TRADE_PER_DAY = 3;
-const MAX_PROFIT_PER_TRADE = 50;
-const MAX_LOSS_PER_TRADE = 25;
+let MAX_TRADE_PER_DAY = 5;
+const MAX_PROFIT_PER_TRADE = 40;
+const MAX_LOSS_PER_TRADE = 20;
 
 const getGlobalSentiment = async () => {
     const globalMarket = await scrapGlobalMarket();
@@ -156,7 +156,7 @@ const startAlgoTrade = async () => {
     }
 }
 
-cron.schedule('* * * * *', () => {
+cron.schedule('*/30 * * * * *', () => {
     console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     startAlgoTrade();
 });
