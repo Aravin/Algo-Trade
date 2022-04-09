@@ -16,11 +16,12 @@ const placeOrder = async (orderType, callPut, sellScript, lot) => {
         }
 
         const limits = await api.get_limits();
-        const margin = (parseFloat(limits.cash) || parseFloat(limits.payin)) * 90/100;
-        const expiryDate = findNextExpiry(); // external call
+        const margin = ((+limits.cash || +limits.payin) - 0) * 95/100; // +limits.marginused
+        const {expiryDate, daysLeft} = findNextExpiry(); // external call
         const quote = await api.get_quotes('NSE', '26000');
         const niftyLastPrice = parseFloat(quote.lp);
-        const bestStrike = (Math.round(niftyLastPrice/100) * 100) + (callPut === 'CE' ? 300 : -300 );
+        const strikePrice = (daysLeft * 100) + 200;
+        const bestStrike = (Math.round(niftyLastPrice/100) * 100) + (callPut === 'CE' ? strikePrice : -strikePrice );
         const script = await api.searchscrip('NFO', `NIFTY ${expiryDate} ${bestStrike} ${callPut}`);
         const scriptQuote = await api.get_quotes('NFO', script.values[0].token);
         const scriptLastPrice = parseFloat(scriptQuote.lp);

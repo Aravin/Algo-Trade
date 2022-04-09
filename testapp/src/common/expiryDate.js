@@ -42,7 +42,7 @@ module.exports = findNextExpiry = () => {
     }
 
     // TODO: handle if multiple week ends in holiday. IMPORTANT
-    return newExpiryDay.format('DDMMMYY').toUpperCase();
+    return { expiryDate: newExpiryDay.format('DDMMMYY').toUpperCase(), daysLeft: newExpiryDay.diff(now, 'day')};
 }
 
 // remove holiday
