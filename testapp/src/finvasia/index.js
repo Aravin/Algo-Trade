@@ -16,7 +16,7 @@ const placeOrder = async (orderType, callPut, sellScript, lot) => {
         }
 
         const limits = await api.get_limits();
-        const margin = ((+limits.cash || +limits.payin) - 0) * 95/100; // +limits.marginused
+        const margin = ((+limits.cash || +limits.payin) - +limits.premium ) * 90/100;
         const {expiryDate, daysLeft} = findNextExpiry(); // external call
         const quote = await api.get_quotes('NSE', '26000');
         const niftyLastPrice = parseFloat(quote.lp);
@@ -35,6 +35,10 @@ const placeOrder = async (orderType, callPut, sellScript, lot) => {
         console.log('Placing Order');
         const orderLot = Math.floor(margin / (scriptLot * scriptLastPrice)) * scriptLot;
         const order = await api.place_order({buy_or_sell: orderType, product_type: 'M', exchange: 'NFO', tradingsymbol: script.values[0].tsym, quantity: orderLot, discloseqty: 0, price_type: 'M', price: 0});
+
+        if (order.stat === 'Not_Ok') {
+            throw new Error('Order placement failure');
+        }
         
         const orders = await api.get_orderbook();
         const lastOrder = orders.find((d) => d.norenordno === order.norenordno);
