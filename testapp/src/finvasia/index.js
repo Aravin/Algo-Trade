@@ -3,7 +3,7 @@ const Api = require("./lib/RestApi");
 let { authparams } = require("./cred");
 const findNextExpiry = require('../common/expiryDate');
 
-api = new Api({});
+const api = new Api({});
 
 const placeOrder = async (orderType, callPut, sellScript, lot) => {
     try {

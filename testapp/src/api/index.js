@@ -40,7 +40,6 @@ async function getIndiaMarket(duration) {
         }
 
     } catch (err) {
-        // console.log(err);
         throw new Error(err.message);
     }
 }
