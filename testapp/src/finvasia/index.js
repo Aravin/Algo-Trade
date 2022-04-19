@@ -16,7 +16,7 @@ const placeOrder = async (orderType, callPut, sellScript, lot) => {
         }
 
         const limits = await api.get_limits();
-        const margin = ((+limits.cash || +limits.payin) - +limits.premium ) * 90/100;
+        const margin = ((+limits.cash || +limits.payin) - +(limits.premium || 0) ) * 95/100;
         const {expiryDate, daysLeft} = findNextExpiry(); // external call
         const quote = await api.get_quotes('NSE', '26000');
         const niftyLastPrice = parseFloat(quote.lp);
