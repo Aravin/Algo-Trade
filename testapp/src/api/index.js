@@ -2,6 +2,7 @@ const axios = require("axios");
 const cheerio = require('cheerio');
 
 const INVESTING_NIFTY_TECH_API = 'https://in.investing.com/instruments/Service/GetTechincalData';
+// TODO: use new API https://in.investing.com/indices/s-p-cnx-nifty-technical?timeFrame=60
 
 async function getIndiaMarket(duration) {
     try {
@@ -34,7 +35,15 @@ async function getIndiaMarket(duration) {
                 atr: {
                     value: $('#curr_table > tbody > tr:nth-child(8) > td.right').text().toLowerCase(),
                     action: $('#curr_table > tbody > tr:nth-child(8) > td.left > span').text().toLowerCase(),
-                }
+                },
+                rsi: {
+                    value: $('#curr_table > tbody > tr:nth-child(1) > td.right').text().toLowerCase(),
+                    action: $('#curr_table > tbody > tr:nth-child(1) > td.left > span').text().toLowerCase().includes('sell') ? 'negative' : 'positive',
+                },
+                hl: {
+                    value: $('#curr_table > tbody > tr:nth-child(9) > td.right').text().toLowerCase(),
+                    action: $('#curr_table > tbody > tr:nth-child(9) > td.left > span').text().toLowerCase().includes('sell') ? 'negative' : 'positive',
+                },
             },
             status: 'success',
         }
