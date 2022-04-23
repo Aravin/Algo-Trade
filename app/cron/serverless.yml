@@ -1,0 +1,48 @@
+service: algo-trade-cron
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  region: ap-south-1
+  runtime: nodejs14.x
+  stackName: algo-trade-cron-stack
+  timeout: 30
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - Fn::GetAtt: [ sentimentTable, Arn ]
+
+functions:
+  cron:
+    handler: dist/handler.run
+    name: ${sls:stage}-algo-trade-cron
+    events:
+      # Invoke Lambda function every minute from Mon-Fri 9:30-3:30
+      - schedule: cron(0/1 4-10 ? * MON-SAT *)
+
+resources:
+  Resources:
+    sentimentTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: algo_trade_sentiment
+        KeySchema:
+          - AttributeName: date_time
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: date_time
+            AttributeType: S
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+  
