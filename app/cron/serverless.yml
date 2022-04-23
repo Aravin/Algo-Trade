@@ -21,6 +21,7 @@ provider:
             - dynamodb:DeleteItem
           Resource:
             - Fn::GetAtt: [ sentimentTable, Arn ]
+            - Fn::GetAtt: [ sentimentLastTable, Arn ]
 
 functions:
   cron:
@@ -28,7 +29,7 @@ functions:
     name: ${sls:stage}-algo-trade-cron
     events:
       # Invoke Lambda function every minute from Mon-Fri 9:30-3:30
-      - schedule: cron(0/1 4-10 ? * MON-SAT *)
+      - schedule: cron(0/1 4-10 ? * MON-FRI *)
 
 resources:
   Resources:
@@ -41,6 +42,19 @@ resources:
             KeyType: HASH
         AttributeDefinitions:
           - AttributeName: date_time
+            AttributeType: S
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+    sentimentLastTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: algo_trade_sentiment_latest
+        KeySchema:
+          - AttributeName: latest
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: latest
             AttributeType: S
         ProvisionedThroughput:
           ReadCapacityUnits: 5
