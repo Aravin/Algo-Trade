@@ -10,7 +10,7 @@ let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 50;
 let SCRIPT = null;
 let ORDERED_SENTIMENT = null;
-let MAX_TRADE_PER_DAY = 5;
+let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
@@ -83,6 +83,13 @@ const startAlgoTrade = async () => {
             }
         }
         else if (STATE === 'START') {
+            // special case - TODO: convert to event
+            if (parseInt(dayjs().format('HHmm')) > 1500) {
+                console.log('Market Closing Time ⌛, stop the application');
+                STATE = 'STOP';
+                MAX_TRADE_PER_DAY = 0;
+                return;
+            }
 
             let callOrPut = '';
 
@@ -96,15 +103,15 @@ const startAlgoTrade = async () => {
                 console.log(`Market Sentiment is neutral`);
                 return;
             }
-            else if (trend.hl.action) {
-                console.log(trend.hl.action);
-                // console.log(`No volalite in NIFTY50 - ATR value ${trend.value} - action - ${trend.action}`);
-                // return;
+            else if (trend.atr.action.includes('less'))
+            {
+                console.log(`No volalite in NIFTY50 - ATR action - ${trend.atr.action}`);
+                return;
             }
-            else if (new Set([globalSentiment, indiaSentiment, trend.rsi.action, 'positive']).size === 1) {
+            else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
                 callOrPut = 'CE';
             }
-            else if (new Set([globalSentiment, indiaSentiment, trend.rsi.action, 'negative']).size === 1) {
+            else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
                 callOrPut = 'PE';
             }
 
@@ -155,7 +162,7 @@ const startAlgoTrade = async () => {
     }
     catch (err) {
         console.log(err);
-        console.log('Error: Retry after 1 min. ');
+        console.log('Error: Retry at next attempt. ');
     }
 }
 

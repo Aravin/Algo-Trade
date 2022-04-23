@@ -213,7 +213,7 @@ var NorenRestApi = function(params) {
          * @param {string} product_type
          */
     self.place_order = function (order) {
-      console.log(order)
+      // console.log(order)
 
           let values          = {'ordersource':'API'};
           values["uid"]       = self.__username;

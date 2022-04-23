@@ -29,7 +29,7 @@ const placeOrder = async (orderType, callPut, sellScript, lot) => {
         const requiredMargin = Math.ceil(scriptLastPrice * scriptLot);
 
         if (requiredMargin > margin) {
-            throw new Error(`Insufficient fund to place order. Required Rs.${requiredMargin} - Available Rs. ${margin}`);
+            throw new Error(`Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${margin}`);
         }
 
         console.log('Placing Order');
