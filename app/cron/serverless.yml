@@ -8,9 +8,6 @@ provider:
   runtime: nodejs14.x
   stackName: algo-trade-cron-stack
   timeout: 30
-  websocketsApiName: algo-trade-websockets
-  websocketsApiRouteSelectionExpression: $request.body.action
-  websocketsDescription: Algo Trading WebSocket
   iam:
     role:
       statements:
@@ -22,11 +19,6 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
-            - dynamodb:DescribeStream
-            - dynamodb:ListStreams
-            - dynamodb:GetShardIterator
-            - dynamodb:GetRecords
-            - apigateway:*
           Resource:
             - Fn::GetAtt: [ sentimentTable, Arn ]
             - Fn::GetAtt: [ sentimentLastTable, Arn ]
@@ -38,15 +30,6 @@ functions:
     events:
       # Invoke Lambda function every minute from Mon-Fri 9:30-3:30
       - schedule: cron(0/1 4-10 ? * MON-FRI *)
-  websocketHandler:
-    handler: dist/websocket.run
-    events:
-      - websocket:
-          route: $connect
-      - websocket:
-          route: $disconnect
-      - websocket:
-          route: $default
 
 resources:
   Resources:
