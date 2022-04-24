@@ -1,0 +1,29 @@
+{
+  "name": "algo-trade-console",
+  "version": "1.0.0",
+  "description": "Algo Trade Console",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node-cron": "^3.0.1",
+    "@types/ws": "^8.5.3",
+    "@typescript-eslint/eslint-plugin": "^5.20.0",
+    "@typescript-eslint/parser": "^5.20.0",
+    "eslint": "^8.14.0",
+    "eslint-plugin-import": "^2.26.0",
+    "typescript": "^4.6.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.76.0",
+    "@aws-sdk/client-dynamodb-streams": "^3.76.0",
+    "axios": "^0.26.1",
+    "dayjs": "^1.11.1",
+    "dotenv": "^16.0.0",
+    "node-cron": "^3.0.0",
+    "ws": "^8.5.0"
+  }
+}
