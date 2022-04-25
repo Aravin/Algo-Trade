@@ -15,7 +15,7 @@ export const scriptQuote = async (exch: string, symbol: string): Promise<any> =>
         'x-api-key': appConfig.proxyApiKey,
     };
 
-    const response =  await axios.post(apiPath.accountLimit, body, { headers });
+    const response =  await axios.post(apiPath.scriptQuote, body, { headers });
 
     return response.data;
 }

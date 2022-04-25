@@ -15,7 +15,7 @@ export const scriptSearch = async (search: string): Promise<any> => {
         'x-api-key': appConfig.proxyApiKey,
     };
 
-    const response =  await axios.post(apiPath.accountLimit, body, { headers });
+    const response =  await axios.post(apiPath.scriptSearch, body, { headers });
 
     return response.data;
 }

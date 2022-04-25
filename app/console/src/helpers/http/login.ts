@@ -17,8 +17,6 @@ export const login = async (): Promise<string> => {
         'x-api-key': appConfig.proxyApiKey,
     };
 
-    console.log(apiPath.login, body);
-
     const response =  await axios.post(apiPath.login, body, { headers });
 
     return response.data.susertoken;

@@ -14,7 +14,7 @@ export const orderList = async (): Promise<any> => {
         'x-api-key': appConfig.proxyApiKey,
     };
 
-    const response =  await axios.post(apiPath.accountLimit, body, { headers });
+    const response =  await axios.post(apiPath.orderList, body, { headers });
 
     return response.data;
 }
