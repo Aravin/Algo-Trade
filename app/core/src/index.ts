@@ -40,7 +40,7 @@ const run = async () => {
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
-            if (parseInt(dayjs().format('HHmm')) > 1500) {
+            if (parseInt(dayjs().format('HHmm')) > 1000) {
                 console.log('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
@@ -62,7 +62,7 @@ const run = async () => {
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
-            if (parseInt(dayjs().format('HHmm')) > 1500) {
+            if (parseInt(dayjs().format('HHmm')) > 1000) {
                 console.log('Market Closing Time ⌛, exiting the position');
                 await placeSellOrder(SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
