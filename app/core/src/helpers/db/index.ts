@@ -47,6 +47,8 @@ export const ddbClient = (() => {
                     global: item?.global_sentiment.S,
                     local: item?.local_sentiment.S,
                     volatility: item?.volatility.S,
+                    status: item?.market_status.S,
+                    signal: item?.order_signal.S,
                 }
             } catch (err: any) {
                 console.log(err.message);

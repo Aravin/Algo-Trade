@@ -15,7 +15,7 @@ let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
-cron.schedule('* * * * *', () => {
+cron.schedule('* 4-10 * * 1-5', () => {
     console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 });
@@ -24,9 +24,8 @@ const run = async () => {
     try {
         // from aws
         const data = await ddbClient.get();
-        const globalSentiment = data?.global;
         const indiaSentiment = data?.local;
-        const trend = data?.volatility
+        const signal = data?.signal
 
         // finvasia
         const account = Account.getInstance();
@@ -48,28 +47,7 @@ const run = async () => {
                 return;
             }
 
-            let callOrPut = '';
-
-            console.log(`Global sentiment is ${globalSentiment}, Indian Sentiment is ${indiaSentiment}`);
-
-            if (globalSentiment !== indiaSentiment) {
-                console.log(`Global & Indian Market Sentiment is different`);
-                return;
-            }
-            else if (new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
-                console.log(`Market Sentiment is neutral`);
-                return;
-            }
-            else if (trend?.includes('less')) {
-                console.log(`No volalite in NIFTY50 - ATR action - ${trend}`);
-                return;
-            }
-            else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
-                callOrPut = 'CE';
-            }
-            else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
-                callOrPut = 'PE';
-            }
+            const callOrPut = signal?.includes('Call') ? 'CE' : 'PE';
 
             console.log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order 💹`);
             const order = await placeBuyOrder(callOrPut);
