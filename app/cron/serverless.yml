@@ -50,8 +50,6 @@ resources:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: algo_trade_sentiment_latest
-        StreamSpecification:
-          StreamViewType: NEW_IMAGE
         KeySchema:
           - AttributeName: latest
             KeyType: HASH

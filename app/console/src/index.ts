@@ -130,7 +130,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
-    const strikePrice = (daysLeft * 100) + 400;
+    const strikePrice = (daysLeft * 100) + 200;
     const bestStrike = (Math.round(niftyLastPrice / 100) * 100) + (callOrPut === 'CE' ? strikePrice : -strikePrice);
     const script = await api.scriptSearch(`NIFTY ${expiryDate} ${bestStrike} ${callOrPut}`);
     const scriptQuote = await api.scriptQuote('NFO', script.values[0].token);
@@ -147,7 +147,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
-    return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder.avgprc };
+    return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc };
 }
 
 const placeSellOrder = async (script: string, lot: number) => {

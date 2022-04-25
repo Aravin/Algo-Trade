@@ -1,4 +1,4 @@
-import { DeleteItemCommand, DeleteItemCommandInput, DynamoDBClient, PutItemCommand, PutItemCommandInput } from '@aws-sdk/client-dynamodb';
+import { DeleteItemCommand, DeleteItemCommandInput, DynamoDBClient, PutItemCommand, PutItemCommandInput, UpdateItemCommand, UpdateItemCommandInput } from '@aws-sdk/client-dynamodb';
 
 export const ddbClient = (() => {
     let instance: DynamoDBClient;
@@ -19,8 +19,8 @@ export const ddbClient = (() => {
                 TableName: "algo_trade_sentiment",
                 Item: {
                     date_time: { S: data.dateTime },
-                    global: { S: data.globalSentiment },
-                    local: { S: data.indiaSentiment },
+                    global_sentiment: { S: data.globalSentiment },
+                    local_sentiment: { S: data.indiaSentiment },
                     volatility: { S: data.volatility },
                 },
             };
@@ -35,40 +35,40 @@ export const ddbClient = (() => {
 
             try {
                 // delete
-                const deleteInput: DeleteItemCommandInput = {
-                    TableName: 'algo_trade_sentiment_latest',
-                    Key: {
-                        latest: { S: "latest" },
-                    }
-                }
-                local.send(new DeleteItemCommand(deleteInput));
-
-                // insert
-                const params: PutItemCommandInput = {
-                    TableName: "algo_trade_sentiment_latest",
-                    Item: {
-                        date_time: { S: data.dateTime },
-                        global: { S: data.globalSentiment },
-                        local: { S: data.indiaSentiment },
-                        volatility: { S: data.volatility },
-                        latest: { S: "latest" },
-                    },
-                };
-
-                return local.send(new PutItemCommand(params));
-
-                // const params: UpdateItemCommandInput = {
+                // const deleteInput: DeleteItemCommandInput = {
                 //     TableName: 'algo_trade_sentiment_latest',
-                //     Key: { latest: { S: "latest" } },
-                //     UpdateExpression: 'set date_time = :a, global = :b, local = :c, volatility = :d',
-                //     ExpressionAttributeValues: {
-                //         ':a': data.dateTime,
-                //         ':b': data.global,
-                //         ':c': data.local,
-                //         ':d': data.volatility,
+                //     Key: {
+                //         latest: { S: "latest" },
                 //     }
                 // }
-                // local.send(new UpdateItemCommand(params));
+                // local.send(new DeleteItemCommand(deleteInput));
+
+                // // insert
+                // const params: PutItemCommandInput = {
+                //     TableName: "algo_trade_sentiment_latest",
+                //     Item: {
+                //         date_time: { S: data.dateTime },
+                //         global: { S: data.globalSentiment },
+                //         local: { S: data.indiaSentiment },
+                //         volatility: { S: data.volatility },
+                //         latest: { S: "latest" },
+                //     },
+                // };
+
+                // return local.send(new PutItemCommand(params));
+
+                const params: UpdateItemCommandInput = {
+                    TableName: 'algo_trade_sentiment_latest',
+                    Key: { latest: { S: "latest" } },
+                    UpdateExpression: 'set date_time = :a, global_sentiment = :b, local_sentiment = :c, volatility = :d',
+                    ExpressionAttributeValues: {
+                        ':a': { S: data.dateTime },
+                        ':b': { S: data.globalSentiment },
+                        ':c': { S: data.indiaSentiment },
+                        ':d': { S: data.volatility },
+                    }
+                }
+                local.send(new UpdateItemCommand(params));
             } catch (err: any) {
                 console.log(err.message);
             }

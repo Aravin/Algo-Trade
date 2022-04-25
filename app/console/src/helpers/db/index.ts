@@ -40,12 +40,12 @@ export const ddbClient = (() => {
 
             try {
                 const data = await local.send(new GetItemCommand(params));
-                const item = data?.Item;
+                const item = data.Item;
 
                 return {
                     date_time: item?.date_time.S,
-                    global: item?.global.S,
-                    local: item?.local.S,
+                    global: item?.global_sentiment.S,
+                    local: item?.local_sentiment.S,
                     volatility: item?.volatility.S,
                 }
             } catch (err: any) {

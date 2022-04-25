@@ -9,13 +9,13 @@ export const placeOrder = async (transType: string, symbol: string, qty: number)
         userId: appConfig.userId,
         userToken: Account.getInstance().token,
         actid: appConfig.userId,
-        exch: 'nfo',
+        exch: 'NFO',
         tsym: symbol,
-        qty: qty,
+        qty: qty + '',
         prc: '',
         trgprc: '',
         prd: 'M',
-        transType: transType,
+        trantype: transType,
         prctyp: 'M',
         ret: 'DAY',
     };
@@ -26,5 +26,5 @@ export const placeOrder = async (transType: string, symbol: string, qty: number)
 
     const response =  await axios.post(apiPath.orderPlace, body, { headers });
 
-    return response.data.norenordno;
+    return response?.data?.norenordno;
 }
