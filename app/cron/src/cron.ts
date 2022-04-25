@@ -23,11 +23,11 @@ export const run = async (event: any, context: any): Promise<void> => {
         }
         else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
             marketStatus = `Market is Positive`;
-            signal = 'Buy Call';
+            signal = 'Call';
         }
         else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
             marketStatus = `Market is Negative`;
-            signal = 'Put Call';
+            signal = 'Put';
         }
 
         console.log(globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal);
