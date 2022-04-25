@@ -15,7 +15,7 @@ let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
-cron.schedule('* 4-10 * * 1-5', () => {
+cron.schedule('* * * * 1-5', () => {
     console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 });
