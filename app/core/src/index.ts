@@ -22,7 +22,7 @@ let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
-cron.schedule('* 30-59/1 9 * * 1-5', () => {
+cron.schedule('30-59/1 9 * * 1-5', () => {
     log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
@@ -40,6 +40,13 @@ const run = async () => {
         const data = await ddbClient.get();
         const indiaSentiment = data?.local;
         const signal = data?.signal
+        const volatility = data?.volatility;
+
+
+        if (volatility?.toLowerCase().includes('less')) {
+            log('No volatility in market!');
+            return;
+        }
 
         // finvasia
         const account = Account.getInstance();
