@@ -1,9 +1,15 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone  from 'dayjs/plugin/timezone';
 import cron from 'node-cron';
 import { ddbClient } from './helpers/db';
 import { api } from './helpers/http';
 import { Account } from './models/account';
 import { findNextExpiry } from './shared/expirtyDate';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.tz.setDefault("Asia/Kolkata");
 
 let STATE = 'START';
 let ORDER_ID = '';
@@ -15,13 +21,20 @@ let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
-cron.schedule('* 4-10 * * 1-5', () => {
+cron.schedule('* 30-59/1 9 * * 1-5', () => {
     console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
-});
+}, { timezone: 'Asia/Kolkata' });
+
+cron.schedule('* 10-15 * * 1-5', () => {
+    console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    run();
+}, { timezone: 'Asia/Kolkata' });
 
 const run = async () => {
     try {
+        // time
+        const now = dayjs();
         // from aws
         const data = await ddbClient.get();
         const indiaSentiment = data?.local;
@@ -40,7 +53,7 @@ const run = async () => {
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
-            if (parseInt(dayjs().format('HHmm')) > 1000) {
+            if (parseInt(now.format('HHmm')) > 1500) {
                 console.log('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
@@ -62,7 +75,7 @@ const run = async () => {
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
-            if (parseInt(dayjs().format('HHmm')) > 1000) {
+            if (parseInt(now.format('HHmm')) > 1500) {
                 console.log('Market Closing Time ⌛, exiting the position');
                 await placeSellOrder(SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
