@@ -6,6 +6,7 @@ import { ddbClient } from './helpers/db';
 import { api } from './helpers/http';
 import { Account } from './models/account';
 import { findNextExpiry } from './shared/expirtyDate';
+import log from 'fancy-log';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -22,12 +23,12 @@ const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
 cron.schedule('* 30-59/1 9 * * 1-5', () => {
-    console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
 
 cron.schedule('* 10-15 * * 1-5', () => {
-    console.log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
 
@@ -48,13 +49,13 @@ const run = async () => {
             if (MAX_TRADE_PER_DAY) {
                 STATE = 'START';
             } else {
-                console.log('Order closed. No Action needed');
+                log('Order closed. No Action needed');
             }
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
             if (parseInt(now.format('HHmm')) > 1500) {
-                console.log('Market Closing Time ⌛, stop the application');
+                log('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 return;
@@ -62,7 +63,7 @@ const run = async () => {
 
             const callOrPut = signal?.includes('Call') ? 'CE' : 'PE';
 
-            console.log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order 💹`);
+            log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order 💹`);
             const order = await placeBuyOrder(callOrPut);
 
 
@@ -76,7 +77,7 @@ const run = async () => {
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
             if (parseInt(now.format('HHmm')) > 1500) {
-                console.log('Market Closing Time ⌛, exiting the position');
+                log('Market Closing Time ⌛, exiting the position');
                 await placeSellOrder(SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
@@ -87,10 +88,10 @@ const run = async () => {
             const positions = await api.orderPositions();
             const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions.find((d: any) => d.tsym = SCRIPT);
             const changePercent = ((parseFloat(lp) - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100;
-            console.log({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
+            log({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
 
             if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
-                console.log(`P&L reached ${changePercent}, exiting the position`);
+                log(`P&L reached ${changePercent}, exiting the position`);
                 await placeSellOrder(SCRIPT, ORDER_LOT);
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
@@ -98,11 +99,11 @@ const run = async () => {
             }
 
             if (indiaSentiment === ORDERED_SENTIMENT) {
-                console.log(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+                log(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
 
-            console.log(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
+            log(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             await placeSellOrder(SCRIPT, ORDER_LOT);
             STATE = 'STOP';
             MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
@@ -110,8 +111,8 @@ const run = async () => {
         }
     }
     catch (err: any) {
-        console.log(err?.message);
-        console.log('Error: Retry at next attempt. ');
+        log(err?.message);
+        log('Error: Retry at next attempt. ');
     }
 }
 
