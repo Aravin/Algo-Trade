@@ -6,11 +6,13 @@ import { ddbClient } from './helpers/db';
 import { api } from './helpers/http';
 import { Account } from './models/account';
 import { findNextExpiry } from './shared/expirtyDate';
-import log from 'fancy-log';
+import log4js from 'log4js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault("Asia/Kolkata");
+const log = log4js.getLogger()
+log.level = 'debug';
 
 let STATE = 'START';
 let ORDER_ID = '';
@@ -23,12 +25,12 @@ const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
 cron.schedule('30-59/1 9 * * 1-5', () => {
-    log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
 
 cron.schedule('* 10-15 * * 1-5', () => {
-    log(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
+    log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
 
@@ -44,7 +46,7 @@ const run = async () => {
 
 
         if (!ORDERED_SENTIMENT && volatility?.toLowerCase().includes('less')) {
-            log('No volatility in market!');
+            log.info('No volatility in market!');
             return;
         }
 
@@ -56,13 +58,13 @@ const run = async () => {
             if (MAX_TRADE_PER_DAY) {
                 STATE = 'START';
             } else {
-                log('Order closed. No Action needed');
+                log.info('Order closed. No Action needed');
             }
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
             if (parseInt(now.format('HHmm')) > 1500) {
-                log('Market Closing Time ⌛, stop the application');
+                log.info('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 return;
@@ -70,9 +72,8 @@ const run = async () => {
 
             const callOrPut = signal?.includes('Call') ? 'CE' : 'PE';
 
-            log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);
+            log.info(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);
             const order = await placeBuyOrder(callOrPut);
-
 
             ORDER_ID = order.orderId;
             SCRIPT = order.script;
@@ -80,12 +81,16 @@ const run = async () => {
             ORDER_LOT = +order.orderLot;
             ORDERED_SENTIMENT = indiaSentiment + '';
             STATE = 'ORDERED';
+
+            ddbClient.insertTradeLog({orderId: ORDER_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT});
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
             if (parseInt(now.format('HHmm')) > 1500) {
-                log('Market Closing Time ⌛, exiting the position');
-                await placeSellOrder(SCRIPT, ORDER_LOT);
+                log.info('Market Closing Time ⌛, exiting the position');
+                const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+                const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
+                ddbClient.exitTradeLog({orderId, sellPrice, pnl: changePercent, exitReason: 'Market Closing'});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 return;
@@ -93,33 +98,36 @@ const run = async () => {
 
             // exit in case of loss
             const positions = await api.orderPositions();
-            const { daybuyqty, netavgprc, daybuyamt, lp, urmtom } = positions.find((d: any) => d.tsym = SCRIPT);
-            const changePercent = ((parseFloat(lp) - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100;
-            log({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
+            const { lp, urmtom } = positions.find((d: any) => d.tsym = SCRIPT);
+            const changePercent = (((parseFloat(lp) - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
+            const absChangePercent = changePercent.toFixed(2);
+            log.debug({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
 
             if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
-                log(`P&L reached ${changePercent}, exiting the position`);
-                await placeSellOrder(SCRIPT, ORDER_LOT);
+                log.info(`P&L reached ${changePercent}, exiting the position`);
+                const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+                ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
                 return;
             }
 
             if (indiaSentiment === ORDERED_SENTIMENT) {
-                log(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
 
-            log(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
-            await placeSellOrder(SCRIPT, ORDER_LOT);
+            log.info(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
+            const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+            ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed'});
             STATE = 'STOP';
             MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
 
         }
     }
     catch (err: any) {
-        log(err?.message);
-        log('Error: Retry at next attempt. ');
+        log.error(err?.message);
+        log.error('Error: Retry at next attempt. ');
     }
 }
 
@@ -151,6 +159,8 @@ const placeBuyOrder = async (callOrPut: string) => {
 
 const placeSellOrder = async (script: string, lot: number) => {
     const order = await api.placeOrder('S', script, lot);
+    const orders = await api.orderList();
+    const lastOrder = orders.find((d: any) => d.norenordno === order);
 
-    return { orderId: order, script: script };
+    return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }

@@ -1,4 +1,4 @@
-import { DynamoDBClient, PutItemCommand, PutItemCommandInput, GetItemCommand, GetItemCommandInput } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, PutItemCommandInput, GetItemCommand, GetItemCommandInput, UpdateItemCommandInput, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 
 export const ddbClient = (() => {
     let instance: DynamoDBClient;
@@ -53,6 +53,44 @@ export const ddbClient = (() => {
             } catch (err: any) {
                 console.log(err.message);
             }
-        }
+        },
+        insertTradeLog: (data: any) => {
+            const local = createInstance();
+            const params: PutItemCommandInput = {
+                TableName: "algo_trade_log",
+                Item: {
+                    date_time: { S: new Date().toISOString() },
+                    orderId: {S: data.orderId},
+                    script: { S: data.script },
+                    lotSize: { S: data.lotSize },
+                    buyPrice: { S: data.buyPrice },
+                    orderStatus: { S: 'open' },
+                },
+            };
+            try {
+                return local.send(new PutItemCommand(params));
+            } catch (err: any) {
+                console.log(err.message);
+            }
+        },
+        exitTradeLog: (data: any) => {
+            const local = createInstance();
+            const params: UpdateItemCommandInput = {
+                TableName: "algo_trade_log",
+                Key: { orderId: { S: data.orderId } },
+                UpdateExpression: 'set sellPrice = :a, pnl = :b, exitReason = :c, orderStatus = :d',
+                ExpressionAttributeValues: {
+                    ':a': { S: data.sellPrice },
+                    ':b': { S: data.pnl},
+                    ':c': { S: data.exitReason },
+                    ':d': { S: 'closed' },
+                },
+            };
+            try {
+                return local.send(new UpdateItemCommand(params));
+            } catch (err: any) {
+                console.log(err.message);
+            }
+        },
     }
 })();
