@@ -43,7 +43,7 @@ const run = async () => {
         const volatility = data?.volatility;
 
 
-        if (volatility?.toLowerCase().includes('less')) {
+        if (!ORDERED_SENTIMENT && volatility?.toLowerCase().includes('less')) {
             log('No volatility in market!');
             return;
         }
@@ -70,7 +70,7 @@ const run = async () => {
 
             const callOrPut = signal?.includes('Call') ? 'CE' : 'PE';
 
-            log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order 💹`);
+            log(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);
             const order = await placeBuyOrder(callOrPut);
 
 
@@ -125,7 +125,7 @@ const run = async () => {
 
 const placeBuyOrder = async (callOrPut: string) => {
     const limits = await api.accountLimit();
-    const margin = ((+limits.cash || +limits.payin) - +(limits.premium || 0)) * 95 / 100;
+    const margin = ((+(limits.cash || 0) + +(limits.payin || 0)) - +(limits.premium || 0)) * 95 / 100;
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
