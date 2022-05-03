@@ -14,6 +14,9 @@ dayjs.tz.setDefault("Asia/Kolkata");
 const log = log4js.getLogger()
 log.level = 'debug';
 
+const shortTime = +dayjs.tz(new Date()).format('HHMM');
+const marketClosed = shortTime < 930 && shortTime > 1500;
+
 let STATE = 'START';
 let ORDER_ID = '';
 let ORDER_BUY_PRICE = 0.0;
@@ -36,8 +39,6 @@ cron.schedule('* 10-15 * * 1-5', () => {
 
 const run = async () => {
     try {
-        // time
-        const now = dayjs();
         // from aws
         const data = await ddbClient.get();
         const indiaSentiment = data?.local;
@@ -63,7 +64,7 @@ const run = async () => {
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
-            if (parseInt(now.format('HHmm')) > 1500) {
+            if (marketClosed) {
                 log.info('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
@@ -86,7 +87,7 @@ const run = async () => {
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
-            if (parseInt(now.format('HHmm')) > 1500) {
+            if (marketClosed) {
                 log.info('Market Closing Time ⌛, exiting the position');
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
