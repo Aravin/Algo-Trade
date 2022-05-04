@@ -4,19 +4,23 @@ import { getIndiaMarket } from './indianMarket';
 
 export const run = async (event: any, context: any): Promise<void> => {
     try {
+        console.time('cron');
+
+        const dateTime = new Date().toISOString();
+        console.timeLog('cron', 'cron called', dateTime);
+
         const globalSentiment = await getGlobalMarket();
         const { sentiment: indiaSentiment, trend } = await getIndiaMarket();
-        const dateTime = new Date().toISOString();
         let marketStatus = '';
         let signal = '';
 
+        console.timeLog('cron', 'getGlobalMarket & getIndiaMarket completed');
+
         if (globalSentiment !== indiaSentiment) {
             marketStatus = `Global & Indian Market Sentiment is different`;
-            return;
         }
         else if (new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
             marketStatus = `Market Sentiment is neutral`;
-            return;
         }
         else if (trend.atr.action?.includes('less')) {
             marketStatus = `No volalite in NIFTY50 - ATR action - ${trend}`;
@@ -30,10 +34,10 @@ export const run = async (event: any, context: any): Promise<void> => {
             signal = 'Put';
         }
 
-        console.log(globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal);
-
+        console.timeLog('cron', globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal);
         ddbClient.insert({ globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal });
         ddbClient.update({ globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal });
+        console.timeEnd('cron');
     }
     catch (err: any) {
         console.log(err.message);
