@@ -1,11 +1,13 @@
 {
   "name": "algo-trade-cron",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Example of creating a function that runs as a cron job using the serverless `schedule` event",
   "author": "",
   "license": "MIT",
+  "scripts": {
+    "deploy": "yarn install --prod && tsc && sls deploy"
+  },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.95",
     "@types/node": "^17.0.25",
     "@typescript-eslint/eslint-plugin": "^5.20.0",
     "@typescript-eslint/parser": "^5.20.0",
