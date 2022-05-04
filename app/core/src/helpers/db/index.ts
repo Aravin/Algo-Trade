@@ -17,6 +17,7 @@ export const ddbClient = (() => {
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_sentiment",
                 Item: {
+                    ttl: { S: Math.floor(Date.now() / 1000) + '' },
                     date_time: { S: new Date().toISOString() },
                     global: { S: data.globalSentiment },
                     local: { S: data.indiaSentiment },
@@ -58,8 +59,7 @@ export const ddbClient = (() => {
             const local = createInstance();
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_log",
-                Item: {
-                    ttl: { S: Math.floor(Date.now() / 1000) + '' },
+                Item: {    
                     date_time: { S: new Date().toISOString() },
                     orderId: {S: data.orderId },
                     script: { S: data.script },
