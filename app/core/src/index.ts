@@ -94,6 +94,7 @@ const run = async () => {
                 ddbClient.exitTradeLog({orderId, sellPrice, pnl: changePercent, exitReason: 'Market Closing'});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
+                ORDERED_SENTIMENT = '';
                 return;
             }
 
@@ -110,6 +111,7 @@ const run = async () => {
                 ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
+                ORDERED_SENTIMENT = '';
                 return;
             }
 
@@ -123,6 +125,7 @@ const run = async () => {
             ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed'});
             STATE = 'STOP';
             MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
+            ORDERED_SENTIMENT = '';
 
         }
     }
