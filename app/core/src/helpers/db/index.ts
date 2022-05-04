@@ -59,11 +59,12 @@ export const ddbClient = (() => {
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_log",
                 Item: {
+                    ttl: { S: Math.floor(Date.now() / 1000) + '' },
                     date_time: { S: new Date().toISOString() },
-                    orderId: {S: data.orderId},
+                    orderId: {S: data.orderId },
                     script: { S: data.script },
-                    lotSize: { S: data.lotSize },
-                    buyPrice: { S: data.buyPrice },
+                    lotSize: { S: data.lotSize + ''},
+                    buyPrice: { S: data.buyPrice + '' },
                     orderStatus: { S: 'open' },
                 },
             };
@@ -80,8 +81,8 @@ export const ddbClient = (() => {
                 Key: { orderId: { S: data.orderId } },
                 UpdateExpression: 'set sellPrice = :a, pnl = :b, exitReason = :c, orderStatus = :d',
                 ExpressionAttributeValues: {
-                    ':a': { S: data.sellPrice },
-                    ':b': { S: data.pnl},
+                    ':a': { S: data.sellPrice + '' },
+                    ':b': { S: data.pnl + ''},
                     ':c': { S: data.exitReason },
                     ':d': { S: 'closed' },
                 },
