@@ -44,10 +44,11 @@ const run = async () => {
         const indiaSentiment = data?.local;
         const signal = data?.signal
         const volatility = data?.volatility;
+        log.info({orderSentiment: ORDERED_SENTIMENT, data});
+        // return;
 
-
-        if (!ORDERED_SENTIMENT && volatility?.toLowerCase().includes('less')) {
-            log.info('No volatility in market!');
+        if (!signal) {
+            log.info(`No single in market! - Volatility ${volatility}`);
             return;
         }
 
@@ -68,6 +69,11 @@ const run = async () => {
                 log.info('Market Closing Time ⌛, stop the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
+                return;
+            }
+
+            if (volatility?.toLowerCase().includes('less')) {
+                log.info('No volatility in market!');
                 return;
             }
 
