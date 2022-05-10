@@ -44,11 +44,11 @@ const run = async () => {
         const indiaSentiment = data?.local;
         const signal = data?.signal
         const volatility = data?.volatility;
-        log.info({orderSentiment: ORDERED_SENTIMENT, data});
+        log.info({orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility });
         // return;
 
         if (!signal) {
-            log.info(`No single in market! - Volatility ${volatility}`);
+            log.info(`No signal in market! - Volatility ${volatility}`);
             return;
         }
 
@@ -104,6 +104,12 @@ const run = async () => {
                 return;
             }
 
+            // holding the position
+            if (indiaSentiment === ORDERED_SENTIMENT) {
+                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+                return;
+            }
+
             // exit in case of loss
             const positions = await api.orderPositions();
             const { lp, urmtom } = positions.find((d: any) => d.tsym = SCRIPT);
@@ -118,11 +124,6 @@ const run = async () => {
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
                 ORDERED_SENTIMENT = '';
-                return;
-            }
-
-            if (indiaSentiment === ORDERED_SENTIMENT) {
-                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
 
