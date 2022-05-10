@@ -12,24 +12,6 @@ export const ddbClient = (() => {
 
     return {
         getInstance: () => createInstance(),
-        insert: (data: any) => {
-            const local = createInstance();
-            const params: PutItemCommandInput = {
-                TableName: "algo_trade_sentiment",
-                Item: {
-                    ttl: { S: Math.floor(Date.now() / 1000) + '' },
-                    date_time: { S: new Date().toISOString() },
-                    global: { S: data.globalSentiment },
-                    local: { S: data.indiaSentiment },
-                    volatility: { S: data.volatility },
-                },
-            };
-            try {
-                return local.send(new PutItemCommand(params));
-            } catch (err: any) {
-                console.log(err.message);
-            }
-        },
         get: async () => {
             const local = createInstance();
             const params: GetItemCommandInput = {
