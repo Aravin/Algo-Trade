@@ -23,7 +23,7 @@ export const run = async (event: any, context: any): Promise<void> => {
             marketStatus = `Market Sentiment is neutral`;
         }
         else if (trend.atr.action?.includes('less')) {
-            marketStatus = `No volalite in NIFTY50 - ATR action - ${trend}`;
+            marketStatus = `No volatility in market`;
         }
         else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
             marketStatus = `Market is Positive`;
