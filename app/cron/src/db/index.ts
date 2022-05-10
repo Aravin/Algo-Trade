@@ -17,7 +17,7 @@ export const ddbClient = (() => {
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_sentiment",
                 Item: {
-                    ttl: { S: Math.floor(Date.now() / 1000) + '' },
+                    ttl: { N: Math.floor((Date.now() + 30*24*60*60*1000)/ 1000).toString() },
                     date_time: { S: data.dateTime },
                     global_sentiment: { S: data.globalSentiment },
                     local_sentiment: { S: data.indiaSentiment },
