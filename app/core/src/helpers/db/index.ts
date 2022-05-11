@@ -42,8 +42,9 @@ export const ddbClient = (() => {
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_log",
                 Item: {    
-                    date_time: { S: new Date().toISOString() },
-                    orderId: {S: data.orderId },
+                    order_date_time: { S: new Date().toISOString() },
+                    orderId: { S: data.orderId + '' },
+                    brokerOrderId: {S: data.brokerOrderId },
                     script: { S: data.script },
                     lotSize: { S: data.lotSize + ''},
                     buyPrice: { S: data.buyPrice + '' },
@@ -60,13 +61,15 @@ export const ddbClient = (() => {
             const local = createInstance();
             const params: UpdateItemCommandInput = {
                 TableName: "algo_trade_log",
-                Key: { orderId: { S: data.orderId } },
-                UpdateExpression: 'set sellPrice = :a, pnl = :b, exitReason = :c, orderStatus = :d',
+                Key: { orderId: { S: data.orderId + '' } },
+                UpdateExpression: 'set brokerOrderId =:a, sellPrice = :b, pnl = :c, exitReason = :d, orderStatus = :e, exit_date_time = :f',
                 ExpressionAttributeValues: {
-                    ':a': { S: data.sellPrice + '' },
-                    ':b': { S: data.pnl + ''},
-                    ':c': { S: data.exitReason },
-                    ':d': { S: 'closed' },
+                    ':a': { S: data.brokerOrderId },
+                    ':b': { S: data.sellPrice + '' },
+                    ':c': { S: data.pnl + ''},
+                    ':d': { S: data.exitReason },
+                    ':e': { S: 'closed' },
+                    ':f': { S: new Date().toISOString() },
                 },
             };
             try {
