@@ -19,6 +19,7 @@ const marketClosed = shortTime < 930 && shortTime > 1500;
 
 let STATE = 'START';
 let ORDER_ID = '';
+let INTERNAL_ORDER_ID = 0;
 let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 0;
 let SCRIPT = '';
@@ -47,11 +48,6 @@ const run = async () => {
         log.info({orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility });
         // return;
 
-        if (!signal) {
-            log.info(`No signal in market! - Volatility ${volatility}`);
-            return;
-        }
-
         // finvasia
         const account = Account.getInstance();
         account.token = await api.login();
@@ -72,6 +68,11 @@ const run = async () => {
                 return;
             }
 
+            if (!signal) {
+                log.info(`No signal in market! - Volatility ${volatility}`);
+                return;
+            }
+
             if (volatility?.toLowerCase().includes('less')) {
                 log.info('No volatility in market!');
                 return;
@@ -83,13 +84,14 @@ const run = async () => {
             const order = await placeBuyOrder(callOrPut);
 
             ORDER_ID = order.orderId;
+            INTERNAL_ORDER_ID = Date.now();
             SCRIPT = order.script;
             ORDER_BUY_PRICE = +order.orderPrice;
             ORDER_LOT = +order.orderLot;
             ORDERED_SENTIMENT = indiaSentiment + '';
             STATE = 'ORDERED';
 
-            ddbClient.insertTradeLog({orderId: ORDER_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT});
+            ddbClient.insertTradeLog({ brokerOrderId: ORDER_ID, orderId: INTERNAL_ORDER_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT});
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
@@ -97,16 +99,12 @@ const run = async () => {
                 log.info('Market Closing Time ⌛, exiting the position');
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
-                ddbClient.exitTradeLog({orderId, sellPrice, pnl: changePercent, exitReason: 'Market Closing'});
+                ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: changePercent, exitReason: 'Market Closing'});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 ORDERED_SENTIMENT = '';
-                return;
-            }
-
-            // holding the position
-            if (indiaSentiment === ORDERED_SENTIMENT) {
-                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+                ORDER_ID = '';
+                INTERNAL_ORDER_ID = 0;
                 return;
             }
 
@@ -120,19 +118,30 @@ const run = async () => {
             if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
                 log.info(`P&L reached ${changePercent}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-                ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
+                ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
                 ORDERED_SENTIMENT = '';
+                ORDER_ID = '';
+                INTERNAL_ORDER_ID = 0;
                 return;
             }
 
+            // holding the position
+            if (indiaSentiment === ORDERED_SENTIMENT) {
+                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+                return;
+            }
+            
+
             log.info(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-            ddbClient.exitTradeLog({orderId, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed'});
+            ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed'});
             STATE = 'STOP';
             MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
             ORDERED_SENTIMENT = '';
+            ORDER_ID = '';
+            INTERNAL_ORDER_ID = 0;
 
         }
     }

@@ -1,0 +1,6 @@
+expiry date not working on friday 
+margin issue when in failure trade - fixed, yet to verify
+order failure still waiting to close order - fixed, yet to verify
+calc daily PnL, per trade PnL, investment PnL
+handle order closing / new order after 3 pm
+use new api for india sentiment - https://in.investing.com/indices/s-p-cnx-nifty-technical?timeFrame=60
