@@ -15,7 +15,7 @@ const log = log4js.getLogger()
 log.level = 'debug';
 
 const shortTime = +dayjs.tz(new Date()).format('HHMM');
-const marketClosed = shortTime < 930 && shortTime > 1500;
+const marketClosed = shortTime < 930 || shortTime > 1500;
 
 let STATE = 'START';
 let ORDER_ID = '';
@@ -28,12 +28,12 @@ let MAX_TRADE_PER_DAY = 10;
 const MAX_PROFIT_PER_TRADE = 40;
 const MAX_LOSS_PER_TRADE = 20;
 
-cron.schedule('30-59/1 9 * * 1-5', () => {
+cron.schedule('35 30-59/1 9 * * 1-5', () => {
     log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
 
-cron.schedule('* 10-15 * * 1-5', () => {
+cron.schedule('35  * 10-15 * * 1-5', () => {
     log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
@@ -116,7 +116,7 @@ const run = async () => {
             log.debug({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
 
             if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
-                log.info(`P&L reached ${changePercent}, exiting the position`);
+                log.info(`P&L reached ${absChangePercent}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
                 STATE = 'STOP';
