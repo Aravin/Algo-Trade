@@ -14,9 +14,6 @@ dayjs.tz.setDefault("Asia/Kolkata");
 const log = log4js.getLogger()
 log.level = 'debug';
 
-const shortTime = +dayjs.tz(new Date()).format('HHMM');
-const marketClosed = shortTime < 930 || shortTime > 1500;
-
 let STATE = 'START';
 let ORDER_ID = '';
 let INTERNAL_ORDER_ID = 0;
@@ -40,6 +37,9 @@ cron.schedule('35  * 10-15 * * 1-5', () => {
 
 const run = async () => {
     try {
+        const shortTime = +dayjs.tz(new Date()).format('HHmm');
+        const marketClosed = shortTime < 930 || shortTime > 1500;
+
         // from aws
         const data = await ddbClient.get();
         const indiaSentiment = data?.local;
@@ -56,13 +56,13 @@ const run = async () => {
             if (MAX_TRADE_PER_DAY) {
                 STATE = 'START';
             } else {
-                log.info('Order closed. No Action needed');
+                log.info('Service Stopped, Trading over for the day');
             }
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
             if (marketClosed) {
-                log.info('Market Closing Time ⌛, stop the application');
+                log.info('Market Closing Time ⌛, stopping the application');
                 STATE = 'STOP';
                 MAX_TRADE_PER_DAY = 0;
                 return;
