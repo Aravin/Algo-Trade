@@ -7,6 +7,7 @@ import { api } from './helpers/http';
 import { Account } from './models/account';
 import { findNextExpiry } from './shared/expirtyDate';
 import log4js from 'log4js';
+import { appConfig } from './config/app';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -21,9 +22,7 @@ let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 0;
 let SCRIPT = '';
 let ORDERED_SENTIMENT = '';
-let MAX_TRADE_PER_DAY = 10;
-const MAX_PROFIT_PER_TRADE = 40;
-const MAX_LOSS_PER_TRADE = 20;
+let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 
 cron.schedule('35 30-59/1 9 * * 1-5', () => {
     log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
@@ -53,18 +52,14 @@ const run = async () => {
         account.token = await api.login();
 
         if (STATE === 'STOP') {
-            if (MAX_TRADE_PER_DAY) {
-                STATE = 'START';
-            } else {
-                log.info('Service Stopped, Trading over for the day');
-            }
+            log.info('Service Stopped, Trading over for the day');
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
             if (marketClosed) {
                 log.info('Market Closing Time ⌛, stopping the application');
                 STATE = 'STOP';
-                MAX_TRADE_PER_DAY = 0;
+                PENDING_TRADE_PER_DAY = 0;
                 return;
             }
 
@@ -101,7 +96,7 @@ const run = async () => {
                 const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
                 ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: changePercent, exitReason: 'Market Closing'});
                 STATE = 'STOP';
-                MAX_TRADE_PER_DAY = 0;
+                PENDING_TRADE_PER_DAY = 0;
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
                 INTERNAL_ORDER_ID = 0;
@@ -115,12 +110,12 @@ const run = async () => {
             const absChangePercent = changePercent.toFixed(2);
             log.debug({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
 
-            if (changePercent > MAX_PROFIT_PER_TRADE || changePercent < -MAX_LOSS_PER_TRADE) {
+            if (changePercent > appConfig.maxProfitPerTrade || changePercent < -appConfig.maxLossPerTrade) {
                 log.info(`P&L reached ${absChangePercent}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}`});
                 STATE = 'STOP';
-                MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
+                PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
                 INTERNAL_ORDER_ID = 0;
@@ -138,11 +133,10 @@ const run = async () => {
             const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
             ddbClient.exitTradeLog({brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed'});
             STATE = 'STOP';
-            MAX_TRADE_PER_DAY = MAX_TRADE_PER_DAY - 1;
+            --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
             ORDERED_SENTIMENT = '';
             ORDER_ID = '';
             INTERNAL_ORDER_ID = 0;
-
         }
     }
     catch (err: any) {

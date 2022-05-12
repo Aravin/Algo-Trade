@@ -3,6 +3,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const appConfig = {
+    // general user settings
+    maxLossPerDay: +(process.env.SETTINGS_MAX_LOSS_PER_DAY || 50),
+    maxLossPerTrade: +(process.env.SETTINGS_MAX_LOSS_PER_TRADE || 20),
+    maxProfitPerDay: +(process.env.SETTINGS_MAX_PROFIT_PER_DAY || 100),
+    maxProfitPerTrade: +(process.env.SETTINGS_MAX_PROFIT_PER_TRADE || 40),
+    maxTradesPerDay: +(process.env.SETTINGS_MAX_TRADES_PER_DAY || 5),
+    // finvasia
     proxyApiPath: process.env.FINVASIA_PROXY_PATH || '',
     proxyApiKey: process.env.FINVASIA_PROXY_APIKEY || '',
     userId: process.env.FINVASIA_USERID || '',
