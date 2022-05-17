@@ -30,7 +30,7 @@ cron.schedule('35 30-59/1 9 * * 1-5', () => {
     run();
 }, { timezone: 'Asia/Kolkata' });
 
-cron.schedule('35  * 10-15 * * 1-5', () => {
+cron.schedule('35 * 10-14 * * 1-5', () => {
     log.info(`Service Running... Order State: ${STATE} - ${dayjs().format('hh:mm:ss')}`);
     run();
 }, { timezone: 'Asia/Kolkata' });
