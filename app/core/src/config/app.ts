@@ -9,6 +9,7 @@ export const appConfig = {
     maxProfitPerDay: +(process.env.SETTINGS_MAX_PROFIT_PER_DAY || 100),
     maxProfitPerTrade: +(process.env.SETTINGS_MAX_PROFIT_PER_TRADE || 40),
     maxTradesPerDay: +(process.env.SETTINGS_MAX_TRADES_PER_DAY || 5),
+    skipGlobalMarket: process.env.SETTINGS_GLOBAL_MARKET === 'true' ? true : false,
     // finvasia
     proxyApiPath: process.env.FINVASIA_PROXY_PATH || '',
     proxyApiKey: process.env.FINVASIA_PROXY_APIKEY || '',

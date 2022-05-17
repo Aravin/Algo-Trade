@@ -22,6 +22,7 @@ let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 0;
 let SCRIPT = '';
 let ORDERED_SENTIMENT = '';
+let ORDERED_TOKEN = '';
 let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 
 cron.schedule('35 30-59/1 9 * * 1-5', () => {
@@ -45,7 +46,6 @@ const run = async () => {
         const signal = data?.signal
         const volatility = data?.volatility;
         log.info({orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility });
-        // return;
 
         // finvasia
         const account = Account.getInstance();
@@ -63,7 +63,7 @@ const run = async () => {
                 return;
             }
 
-            if (!signal) {
+            if (!appConfig.skipGlobalMarket && !signal) {
                 log.info(`No signal in market! - Volatility ${volatility}`);
                 return;
             }
@@ -84,6 +84,7 @@ const run = async () => {
             ORDER_BUY_PRICE = +order.orderPrice;
             ORDER_LOT = +order.orderLot;
             ORDERED_SENTIMENT = indiaSentiment + '';
+            ORDERED_TOKEN = order.scriptToken;
             STATE = 'ORDERED';
 
             ddbClient.insertTradeLog({ brokerOrderId: ORDER_ID, orderId: INTERNAL_ORDER_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT});
@@ -100,15 +101,16 @@ const run = async () => {
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
                 INTERNAL_ORDER_ID = 0;
+                ORDERED_TOKEN = '';
                 return;
             }
 
             // exit in case of loss
-            const positions = await api.orderPositions();
-            const { lp, urmtom } = positions.find((d: any) => d.tsym = SCRIPT);
-            const changePercent = (((parseFloat(lp) - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
+            const scriptQuote = await api.scriptQuote('NFO', ORDERED_TOKEN);
+            const lp = +scriptQuote.lp;
+            const changePercent = (((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
             const absChangePercent = changePercent.toFixed(2);
-            log.debug({ ORDER_BUY_PRICE, lp, urmtom, changePercent });
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent });
 
             if (changePercent > appConfig.maxProfitPerTrade || changePercent < -appConfig.maxLossPerTrade) {
                 log.info(`P&L reached ${absChangePercent}, exiting the position`);
@@ -119,6 +121,7 @@ const run = async () => {
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
                 INTERNAL_ORDER_ID = 0;
+                ORDERED_TOKEN = '';
                 return;
             }
 
@@ -127,7 +130,6 @@ const run = async () => {
                 log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
-            
 
             log.info(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
@@ -151,7 +153,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
-    const strikePrice = (daysLeft * 100) + 200;
+    const strikePrice = (daysLeft * 100) + 300;
     const bestStrike = (Math.round(niftyLastPrice / 100) * 100) + (callOrPut === 'CE' ? strikePrice : -strikePrice);
     const script = await api.scriptSearch(`NIFTY ${expiryDate} ${bestStrike} ${callOrPut}`);
     const scriptQuote = await api.scriptQuote('NFO', script.values[0].token);
@@ -168,7 +170,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
-    return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc };
+    return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
 
 const placeSellOrder = async (script: string, lot: number) => {
