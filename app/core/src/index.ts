@@ -38,7 +38,7 @@ cron.schedule('35 * 10-14 * * 1-5', () => {
 const run = async () => {
     try {
         const shortTime = +dayjs.tz(new Date()).format('HHmm');
-        const marketClosed = shortTime < 930 || shortTime > 1500;
+        const marketClosed = shortTime < 930 || shortTime >= 1458;
 
         // from aws
         const data = await ddbClient.get();
