@@ -28,8 +28,18 @@ functions:
     handler: dist/cron.run
     name: ${sls:stage}-algo-trade-cron
     events:
-      # Invoke Lambda function every minute from Mon-Fri 9:30-3:30
-      - schedule: cron(0/1 4-10 ? * MON-FRI *)
+      - schedule:
+          name: algo-trade-cron-9_29am
+          description: Cron Job from 9-29 am (1 min)
+          rate: cron(59/1 3 ? * MON-FRI *)
+      - schedule:
+          name: algo-trade-cron-9_30am-to-2_30pm
+          description: Cron Job from 9-31 am to 2-29 pm (5 hours)
+          rate: cron(0/1 4-9 ? * MON-FRI *)
+      - schedule:
+          name: algo-trade-cron-2_30pm-to-3_01pm
+          description: Cron Job from 2-30 pm to 3-01 pm (31 mins)
+          rate: cron(0-31/1 9 ? * MON-FRI *)
 
 resources:
   Resources:
