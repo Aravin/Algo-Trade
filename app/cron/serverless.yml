@@ -35,7 +35,7 @@ functions:
       - schedule:
           name: algo-trade-cron-9_30am-to-2_30pm
           description: Cron Job from 9-31 am to 2-29 pm (5 hours)
-          rate: cron(0/1 4-9 ? * MON-FRI *)
+          rate: cron(0/1 4-8 ? * MON-FRI *)
       - schedule:
           name: algo-trade-cron-2_30pm-to-3_01pm
           description: Cron Job from 2-30 pm to 3-01 pm (31 mins)
