@@ -1,3 +1,5 @@
+import axios from 'axios';
+import { appConfig } from './config';
 import { ddbClient } from './db';
 import { getGlobalMarket } from './globalMarket';
 import { getIndiaMarket } from './indianMarket';
@@ -35,8 +37,10 @@ export const run = async (event: any, context: any): Promise<void> => {
         }
 
         console.timeLog('cron', globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal);
-        ddbClient.insert({ globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal });
-        ddbClient.update({ globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal });
+        const data = { globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal };
+        axios.post(appConfig.webhookURL, data);
+        ddbClient.insert(data);
+        ddbClient.update(data);
         console.timeEnd('cron');
     }
     catch (err: any) {
