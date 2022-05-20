@@ -153,7 +153,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
-    const strikePrice = (daysLeft * 100) + 300;
+    const strikePrice = (daysLeft * 100) + appConfig.otmPrice;
     const bestStrike = (Math.round(niftyLastPrice / 100) * 100) + (callOrPut === 'CE' ? strikePrice : -strikePrice);
     const script = await api.scriptSearch(`NIFTY ${expiryDate} ${bestStrike} ${callOrPut}`);
     const scriptQuote = await api.scriptQuote('NFO', script.values[0].token);
