@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node dist/ws.js",
+    "start": "node dist/server.js",
     "build": "tsc",
     "dev": "tsc --watch && node dist/index.js"
   },

@@ -43,8 +43,17 @@ export const run = async (event: any, context: any): Promise<void> => {
         ddbClient.update(data);
         console.timeEnd('cron');
     }
-    catch (err: any) {
-        console.log(err.message);
+    catch (err: unknown) {
+        console.log((err as Error).message);
+    }
+};
+
+export const reset = async (event: any, context: any): Promise<void> => {
+    try {
+        axios.get(appConfig.webhookURL + '/reset');
+    }
+    catch (err: unknown) {
+        console.log((err as Error).message);
     }
 };
 

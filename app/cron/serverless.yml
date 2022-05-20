@@ -40,6 +40,14 @@ functions:
           name: algo-trade-cron-2_30pm-to-3_01pm
           description: Cron Job from 2-30 pm to 3-01 pm (31 mins)
           rate: cron(0-31/1 9 ? * MON-FRI *)
+  reset:
+    handler: dist/cron.reset
+    name: ${sls:stage}-algo-trade-cron-reset-day-trades
+    events:
+      - schedule:
+          name: algo-trade-cron-reset-day-trades
+          description: Cron Job every day after end of market
+          rate: cron(0 12 ? * MON-FRI *)
 
 resources:
   Resources:

@@ -181,8 +181,22 @@ app.use(bodyParser.json());
 app.post('/', (req: Request, res: Response) => {
     run(req.body);
     res.send('OK')
+});
+
+app.get('/reset', (req: Request, res: Response) => {
+    STATE = 'START';
+    ORDER_ID = '';
+    INTERNAL_ORDER_ID = 0;
+    ORDER_BUY_PRICE = 0.0;
+    ORDER_LOT = 0;
+    SCRIPT = '';
+    ORDERED_SENTIMENT = '';
+    ORDERED_TOKEN = '';
+    PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
+    log.info(`Day's trade data reset successful`);
+    res.send('OK')
 })
 
 app.listen(port, () => {
-    console.log(`Algo Trade app listening on port ${port}`)
-})
+    log.info(`Algo Trade app listening on port ${port}`)
+});
