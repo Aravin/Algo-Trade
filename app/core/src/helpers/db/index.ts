@@ -41,9 +41,9 @@ export const ddbClient = (() => {
             const local = createInstance();
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_log",
-                Item: { 
+                Item: {
                     tradeId: { N: data.tradeId + '' },
-                    orderId: {S: data.orderId },
+                    orderId: { S: data.orderId },
                     orderStatus: { S: 'open' },
                     script: { S: data.script },
                     lotSize: { N: data.lotSize + '' },
@@ -66,7 +66,7 @@ export const ddbClient = (() => {
                 UpdateExpression: 'set exitTime = :a, sellPrice = :b, orderId =:c, pnl = :d, exitReason = :e, orderStatus = :f',
                 ExpressionAttributeValues: {
                     ':a': { S: new Date().toISOString() },
-                    ':b': { N: data.sellPrice + ''  },
+                    ':b': { N: data.sellPrice + '' },
                     ':c': { S: data.orderId },
                     ':d': { N: data.pnl },
                     ':e': { S: data.exitReason },
