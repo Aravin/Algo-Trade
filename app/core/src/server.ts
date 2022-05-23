@@ -18,7 +18,7 @@ log.level = 'debug';
 
 let STATE = 'START';
 let ORDER_ID = '';
-let INTERNAL_ORDER_ID = 0;
+let TRADE_ID = 0;
 let ORDER_BUY_PRICE = 0.0;
 let ORDER_LOT = 0;
 let SCRIPT = '';
@@ -32,7 +32,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
-    const strikePrice = (daysLeft * 100) + 300;
+    const strikePrice = (daysLeft * 100) + appConfig.otmPrice;
     const bestStrike = (Math.round(niftyLastPrice / 100) * 100) + (callOrPut === 'CE' ? strikePrice : -strikePrice);
     const script = await api.scriptSearch(`NIFTY ${expiryDate} ${bestStrike} ${callOrPut}`);
     const scriptQuote = await api.scriptQuote('NFO', script.values[0].token);
@@ -105,7 +105,7 @@ const run = async (data: any) => {
             const order = await placeBuyOrder(callOrPut);
 
             ORDER_ID = order.orderId;
-            INTERNAL_ORDER_ID = Date.now();
+            TRADE_ID = Date.now();
             SCRIPT = order.script;
             ORDER_BUY_PRICE = +order.orderPrice;
             ORDER_LOT = +order.orderLot;
@@ -113,7 +113,7 @@ const run = async (data: any) => {
             ORDERED_TOKEN = order.scriptToken;
             STATE = 'ORDERED';
 
-            ddbClient.insertTradeLog({ brokerOrderId: ORDER_ID, orderId: INTERNAL_ORDER_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT });
+            ddbClient.insertTradeLog({ orderId: ORDER_ID, tradeId: TRADE_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT });
         }
         else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
             // special case - TODO: convert to event
@@ -121,12 +121,12 @@ const run = async (data: any) => {
                 log.info('Market Closing Time ⌛, exiting the position');
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
-                ddbClient.exitTradeLog({ brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: changePercent, exitReason: 'Market Closing' });
+                ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: changePercent, exitReason: 'Market Closing' });
                 STATE = 'STOP';
                 PENDING_TRADE_PER_DAY = 0;
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
-                INTERNAL_ORDER_ID = 0;
+                TRADE_ID = 0;
                 ORDERED_TOKEN = '';
                 return;
             }
@@ -141,12 +141,12 @@ const run = async (data: any) => {
             if (changePercent > appConfig.maxProfitPerTrade || changePercent < -appConfig.maxLossPerTrade) {
                 log.info(`P&L reached ${absChangePercent}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-                ddbClient.exitTradeLog({ brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}` });
+                ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}` });
                 STATE = 'STOP';
                 PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
                 ORDERED_SENTIMENT = '';
                 ORDER_ID = '';
-                INTERNAL_ORDER_ID = 0;
+                TRADE_ID = 0;
                 ORDERED_TOKEN = '';
                 return;
             }
@@ -159,12 +159,12 @@ const run = async (data: any) => {
 
             log.info(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-            ddbClient.exitTradeLog({ brokerOrderId: orderId, orderId: INTERNAL_ORDER_ID, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed' });
+            ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed' });
             STATE = 'STOP';
             --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
             ORDERED_SENTIMENT = '';
             ORDER_ID = '';
-            INTERNAL_ORDER_ID = 0;
+            TRADE_ID = 0;
         }
     }
     catch (err: any) {
@@ -186,7 +186,7 @@ app.post('/', (req: Request, res: Response) => {
 app.get('/reset', (req: Request, res: Response) => {
     STATE = 'START';
     ORDER_ID = '';
-    INTERNAL_ORDER_ID = 0;
+    TRADE_ID = 0;
     ORDER_BUY_PRICE = 0.0;
     ORDER_LOT = 0;
     SCRIPT = '';

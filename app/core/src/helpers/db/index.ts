@@ -42,14 +42,13 @@ export const ddbClient = (() => {
             const params: PutItemCommandInput = {
                 TableName: "algo_trade_log",
                 Item: { 
-                    timestamp: { N: Math.floor((Date.now() + 30*24*60*60*1000)/ 1000).toString() },   
-                    orderId: { S: data.orderId + '' },
-                    brokerOrderId: {S: data.brokerOrderId },
+                    tradeId: { N: data.tradeId + '' },
+                    orderId: {S: data.orderId },
                     orderStatus: { S: 'open' },
                     script: { S: data.script },
-                    lotSize: { S: data.lotSize + ''},
-                    order_date_time: { S: new Date().toISOString() },
-                    buyPrice: { S: data.buyPrice + '' },
+                    lotSize: { N: data.lotSize + '' },
+                    orderTime: { S: new Date().toISOString() },
+                    buyPrice: { N: data.buyPrice + '' },
                 },
             };
             try {
@@ -59,16 +58,17 @@ export const ddbClient = (() => {
             }
         },
         exitTradeLog: (data: any) => {
+            console.log(data);
             const local = createInstance();
             const params: UpdateItemCommandInput = {
                 TableName: "algo_trade_log",
-                Key: { orderId: { S: data.orderId + '' } },
-                UpdateExpression: 'set exit_date_time = :a, sellPrice = :b, brokerOrderId =:c, pnl = :d, exitReason = :e, orderStatus = :f',
+                Key: { tradeId: { N: data.tradeId + '' } },
+                UpdateExpression: 'set exitTime = :a, sellPrice = :b, orderId =:c, pnl = :d, exitReason = :e, orderStatus = :f',
                 ExpressionAttributeValues: {
                     ':a': { S: new Date().toISOString() },
-                    ':b': { S: data.sellPrice + '' },
-                    ':c': { S: data.brokerOrderId },
-                    ':d': { S: data.pnl + ''},
+                    ':b': { N: data.sellPrice + ''  },
+                    ':c': { S: data.orderId },
+                    ':d': { N: data.pnl },
                     ':e': { S: data.exitReason },
                     ':f': { S: 'closed' },
                 },
