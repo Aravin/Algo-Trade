@@ -99,7 +99,12 @@ const run = async (data: any) => {
                 return;
             }
 
-            const callOrPut = signal?.includes('Call') ? 'CE' : 'PE';
+            if (appConfig.skipGlobalMarket && indiaSentiment === 'neutral') {
+                log.info(`No signal in Indian market!`);
+                return;
+            }
+
+            const callOrPut = signal.includes('Call') ? 'CE' : 'PE';
 
             log.info(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);
             const order = await placeBuyOrder(callOrPut);
