@@ -50,7 +50,8 @@ export const run = async (event: any, context: any): Promise<void> => {
 
 export const reset = async (event: any, context: any): Promise<void> => {
     try {
-        axios.get(appConfig.webhookURL + '/reset');
+        const response = await axios.get(appConfig.webhookURL + '/reset');
+        console.log(response.data);
     }
     catch (err: unknown) {
         console.log((err as Error).message);
