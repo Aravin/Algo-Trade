@@ -36,7 +36,7 @@ export const core = async (data: any) => {
         const indiaSentiment = data?.indiaSentiment;
         const signal = data?.signal
         const volatility = data?.volatility;
-        log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility });
+        log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility, strength: data.strengths });
 
         // finvasia
         const account = Account.getInstance();
@@ -106,7 +106,7 @@ export const core = async (data: any) => {
             const lp = +scriptQuote.lp;
             const changePercent = (((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
             const absChangePercent = changePercent.toFixed(2);
-            log.debug({ ORDER_BUY_PRICE, lp, changePercent });
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent, strength: data.strength });
 
             if (changePercent > appConfig.maxProfitPerTrade || changePercent < -appConfig.maxLossPerTrade) {
                 log.info(`P&L reached ${absChangePercent}, exiting the position`);
