@@ -12,7 +12,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
-        const { sentiment: indiaSentiment, trend } = await getIndiaMarket();
+        const { sentiment: indiaSentiment, trend, strength } = await getIndiaMarket();
         let marketStatus = '';
         let signal = '';
 
@@ -36,8 +36,8 @@ export const run = async (event: any, context: any): Promise<void> => {
             signal = 'Put';
         }
 
-        console.timeLog('cron', globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal);
-        const data = { globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal };
+        console.timeLog('cron', globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal, strength);
+        const data = { globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal, strength };
         axios.post(appConfig.webhookURL, data);
         ddbClient.insert(data);
         ddbClient.update(data);

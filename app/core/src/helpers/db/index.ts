@@ -32,6 +32,7 @@ export const ddbClient = (() => {
                     volatility: item?.volatility.S,
                     status: item?.market_status.S,
                     signal: item?.order_signal.S,
+                    strength: item?.strength.S,
                 }
             } catch (err: any) {
                 console.log(err.message);

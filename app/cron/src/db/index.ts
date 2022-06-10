@@ -24,6 +24,7 @@ export const ddbClient = (() => {
                     volatility: { S: data.volatility },
                     market_status: { S: data.marketStatus },
                     order_signal: { S: data.signal },
+                    strength: { S: data.strength }
                 },
             };
             try {
@@ -62,7 +63,7 @@ export const ddbClient = (() => {
                 const params: UpdateItemCommandInput = {
                     TableName: 'algo_trade_sentiment_latest',
                     Key: { latest: { S: "latest" } },
-                    UpdateExpression: 'set date_time = :a, global_sentiment = :b, local_sentiment = :c, volatility = :d, market_status = :e, order_signal = :f',
+                    UpdateExpression: 'set date_time = :a, global_sentiment = :b, local_sentiment = :c, volatility = :d, market_status = :e, order_signal = :f, strength = :g',
                     ExpressionAttributeValues: {
                         ':a': { S: data.dateTime },
                         ':b': { S: data.globalSentiment },
@@ -70,6 +71,7 @@ export const ddbClient = (() => {
                         ':d': { S: data.volatility },
                         ':e': { S: data.marketStatus },
                         ':f': { S: data.signal },
+                        ':g': { S: data.strength }
                     }
                 }
                 local.send(new UpdateItemCommand(params));

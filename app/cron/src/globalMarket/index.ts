@@ -46,7 +46,7 @@ export async function getGlobalMarket() {
         }
 
         const currentTimeHHmm = parseInt(dayjs().format('HHmm'));
-        let marketToWatch = ['US'];
+        const marketToWatch = ['US'];
 
         if (currentTimeHHmm >= 900 && currentTimeHHmm < 1230) {
             marketToWatch.push('Asia');

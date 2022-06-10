@@ -1,28 +1,225 @@
 import { scrapIndiaMarket } from './scrap';
 
 export async function getIndiaMarket() {
-    const [ niftyTrend1Min, niftyTrend5Min ] = await Promise.all([scrapIndiaMarket(60), scrapIndiaMarket(300)]);
+    const [niftyTrend1Min, niftyTrend5Min] = await Promise.all([scrapIndiaMarket(60), scrapIndiaMarket(300)]);
 
-    if ((niftyTrend5Min.summary === 'strong sell' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'sell' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'neutral' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'buy' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'strong buy' && ['buy', 'strong buy'].includes(niftyTrend1Min.summary)) // risk
-    ) {
-        return {
-            sentiment: 'positive', trend: { atr: niftyTrend1Min.trend.atr, rsi: niftyTrend1Min.trend.rsi, hl: niftyTrend1Min.trend.hl }
-        };
-    }
-    else if ((niftyTrend5Min.summary === 'strong buy' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'buy' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'neutral' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-        || (niftyTrend5Min.summary === 'strong sell' && ['sell', 'strong sell'].includes(niftyTrend1Min.summary))
-    ) {
-        return {
-            sentiment: 'negative', trend: { atr: niftyTrend1Min.trend.atr, rsi: niftyTrend1Min.trend.rsi, hl: niftyTrend1Min.trend.hl }
-        };
-    }
+    const sentiment =
+        sentimentMapping.find(s =>
+                s['5minTrend'].toLowerCase() ===  niftyTrend5Min.summary
+                && s['1minTrend'].toLowerCase() ===  niftyTrend1Min.summary
+                )
 
-    return { sentiment: 'neutral', trend: { atr: niftyTrend1Min.trend.atr, rsi: niftyTrend1Min.trend.rsi, hl: niftyTrend1Min.trend.hl } };
+    return {
+        sentiment: sentiment?.Signal2,
+        strength: sentiment?.Strength2,
+        trend:
+        {
+            atr: niftyTrend1Min.trend.atr,
+            rsi: niftyTrend1Min.trend.rsi,
+            hl: niftyTrend1Min.trend.hl
+        }
+    };
 }
+
+const sentimentMapping = [
+    {
+        "5minTrend": "Strong Sell",
+        "1minTrend": "Strong Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Strong Sell",
+        "1minTrend": "Sell",
+        "Signal": "Sell",
+        "Strength": "Risk",
+        "Strength2": "Risk",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Strong Sell",
+        "1minTrend": "Netrual",
+        "Signal": "Netrual",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "neutral"
+    },
+    {
+        "5minTrend": "Strong Sell",
+        "1minTrend": "Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Strong Sell",
+        "1minTrend": "Strong Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Sell",
+        "1minTrend": "Strong Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Sell",
+        "1minTrend": "Sell",
+        "Signal": "Sell",
+        "Strength": "",
+        "Strength2": "Hold",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Sell",
+        "1minTrend": "Netrual",
+        "Signal": "Netrual",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "neutral"
+    },
+    {
+        "5minTrend": "Sell",
+        "1minTrend": "Buy",
+        "Signal": "Buy",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Sell",
+        "1minTrend": "Strong Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Neutral",
+        "1minTrend": "Strong Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Neutral",
+        "1minTrend": "Sell",
+        "Signal": "Sell",
+        "Strength": "Risk",
+        "Strength2": "Risk",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Neutral",
+        "1minTrend": "Netrual",
+        "Signal": "Netrual",
+        "Strength": "",
+        "Strength2": "NA",
+        "Signal2": "neutral"
+    },
+    {
+        "5minTrend": "Neutral",
+        "1minTrend": "Buy",
+        "Signal": "Buy",
+        "Strength": "Risk",
+        "Strength2": "Risk",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Neutral",
+        "1minTrend": "Strong Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Buy",
+        "1minTrend": "Strong Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Buy",
+        "1minTrend": "Sell",
+        "Signal": "Sell",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Buy",
+        "1minTrend": "Netrual",
+        "Signal": "Netrual",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "neutral"
+    },
+    {
+        "5minTrend": "Buy",
+        "1minTrend": "Buy",
+        "Signal": "Buy",
+        "Strength": "",
+        "Strength2": "Hold",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Buy",
+        "1minTrend": "Strong Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Strong Buy",
+        "1minTrend": "Strong Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Strong Buy",
+        "1minTrend": "Sell",
+        "Signal": "Sell",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "negative"
+    },
+    {
+        "5minTrend": "Strong Buy",
+        "1minTrend": "Netrual",
+        "Signal": "Netrual",
+        "Strength": "",
+        "Strength2": "Exit",
+        "Signal2": "neutral"
+    },
+    {
+        "5minTrend": "Strong Buy",
+        "1minTrend": "Buy",
+        "Signal": "Buy",
+        "Strength": "Risk",
+        "Strength2": "Risk",
+        "Signal2": "positive"
+    },
+    {
+        "5minTrend": "Strong Buy",
+        "1minTrend": "Strong Buy",
+        "Signal": "Buy",
+        "Strength": "Strong",
+        "Strength2": "Strong",
+        "Signal2": "positive"
+    }
+];
