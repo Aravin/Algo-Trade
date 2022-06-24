@@ -123,7 +123,7 @@ const sentimentMapping = [
         "1minTrend": "Neutral",
         "Signal": "Neutral",
         "Strength": "",
-        "Strength2": "NA",
+        "Strength2": "Risk",
         "Signal2": "neutral"
     },
     {
