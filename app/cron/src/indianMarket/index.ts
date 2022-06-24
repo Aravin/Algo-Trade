@@ -3,15 +3,15 @@ import { scrapIndiaMarket } from './scrap';
 export async function getIndiaMarket() {
     const [niftyTrend1Min, niftyTrend5Min] = await Promise.all([scrapIndiaMarket(60), scrapIndiaMarket(300)]);
 
-    const sentiment =
+    const currentSentiment =
         sentimentMapping.find(s =>
                 s['5minTrend'].toLowerCase() ===  niftyTrend5Min.summary
                 && s['1minTrend'].toLowerCase() ===  niftyTrend1Min.summary
                 )
 
     return {
-        sentiment: sentiment?.Signal2,
-        strength: sentiment?.Strength2,
+        sentiment: currentSentiment?.Signal2,
+        strength: currentSentiment?.Strength2,
         trend:
         {
             atr: niftyTrend1Min.trend.atr,
@@ -40,8 +40,8 @@ const sentimentMapping = [
     },
     {
         "5minTrend": "Strong Sell",
-        "1minTrend": "Netrual",
-        "Signal": "Netrual",
+        "1minTrend": "Neutral",
+        "Signal": "Neutral",
         "Strength": "",
         "Strength2": "Exit",
         "Signal2": "neutral"
@@ -80,8 +80,8 @@ const sentimentMapping = [
     },
     {
         "5minTrend": "Sell",
-        "1minTrend": "Netrual",
-        "Signal": "Netrual",
+        "1minTrend": "Neutral",
+        "Signal": "Neutral",
         "Strength": "",
         "Strength2": "Exit",
         "Signal2": "neutral"
@@ -120,8 +120,8 @@ const sentimentMapping = [
     },
     {
         "5minTrend": "Neutral",
-        "1minTrend": "Netrual",
-        "Signal": "Netrual",
+        "1minTrend": "Neutral",
+        "Signal": "Neutral",
         "Strength": "",
         "Strength2": "NA",
         "Signal2": "neutral"
@@ -160,8 +160,8 @@ const sentimentMapping = [
     },
     {
         "5minTrend": "Buy",
-        "1minTrend": "Netrual",
-        "Signal": "Netrual",
+        "1minTrend": "Neutral",
+        "Signal": "Neutral",
         "Strength": "",
         "Strength2": "Exit",
         "Signal2": "neutral"
@@ -200,8 +200,8 @@ const sentimentMapping = [
     },
     {
         "5minTrend": "Strong Buy",
-        "1minTrend": "Netrual",
-        "Signal": "Netrual",
+        "1minTrend": "Neutral",
+        "Signal": "Neutral",
         "Strength": "",
         "Strength2": "Exit",
         "Signal2": "neutral"
