@@ -36,7 +36,8 @@ export const core = async (data: any) => {
         const indiaSentiment = data?.indiaSentiment;
         const signal = data?.signal
         const volatility = data?.volatility;
-        log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility, strength: data.strengths });
+        const strength: string = data?.strength;
+        log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility, strength: data.strength });
 
         // finvasia
         const account = Account.getInstance();
@@ -108,8 +109,8 @@ export const core = async (data: any) => {
             const absChangePercent = changePercent.toFixed(2);
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, strength: data.strength });
 
-            if (changePercent > appConfig.maxProfitPerTrade || changePercent < -appConfig.maxLossPerTrade) {
-                log.info(`P&L reached ${absChangePercent}, exiting the position`);
+            if (await canExitPosition(changePercent, strength)) {
+                log.info(`P&L reached ${absChangePercent} with market strength ${strength}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}` });
                 STATE = 'STOP';
@@ -175,6 +176,37 @@ const placeSellOrder = async (script: string, lot: number) => {
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
+}
+
+const canExitPosition = async (changePercent: number, strength: string) => {
+    let maxProfitPerTrade = appConfig.maxProfitPerTrade;
+    let maxLossPerTrade = appConfig.maxLossPerTrade;
+
+    switch (strength.toLowerCase()) {
+        case 'strong':
+            maxProfitPerTrade = maxProfitPerTrade * 4;
+            maxLossPerTrade = maxLossPerTrade * 4;
+            break;
+        case 'hold':
+            maxProfitPerTrade = maxProfitPerTrade * 2;
+            maxLossPerTrade = maxLossPerTrade * 2;
+            break;
+        case 'risk':
+            maxProfitPerTrade = maxProfitPerTrade / 2;
+            maxLossPerTrade = maxLossPerTrade / 2;
+            break;
+        case 'exit':
+            maxProfitPerTrade = 0;
+            maxLossPerTrade = 0;
+            break;
+    }
+
+    if (changePercent > maxProfitPerTrade || changePercent < -maxLossPerTrade)
+    {
+        return true;
+    }
+
+    return false;
 }
 
 export const resetTrades = () => {
