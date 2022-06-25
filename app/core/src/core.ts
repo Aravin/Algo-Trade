@@ -201,6 +201,8 @@ const canExitPosition = async (changePercent: number, strength: string) => {
             break;
     }
 
+    log.info({maxProfitPerTrade, maxLossPerTrade});
+
     if (changePercent > maxProfitPerTrade || changePercent < -maxLossPerTrade)
     {
         return true;
