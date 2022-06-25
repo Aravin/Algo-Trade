@@ -109,7 +109,7 @@ export const core = async (data: any) => {
             const absChangePercent = changePercent.toFixed(2);
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, strength: data.strength });
 
-            if (await canExitPosition(changePercent, strength)) {
+            if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
                 log.info(`P&L reached ${absChangePercent} with market strength ${strength}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}` });
@@ -178,7 +178,25 @@ const placeSellOrder = async (script: string, lot: number) => {
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }
 
-const canExitPosition = async (changePercent: number, strength: string) => {
+// move to new file
+const inverseStrength = {
+    strong: 'exit',
+    hold: 'risk',
+    risk: 'hold',
+    exit: 'strong'
+}
+
+const canExitPosition = (
+    changePercent: number,
+    strength: string,
+    orderedSentiment: string,
+    currentSentiment: string,
+) => {
+
+    if (orderedSentiment !== currentSentiment) {
+        strength = inverseStrength[strength.toLowerCase() as keyof typeof inverseStrength];
+    }
+
     let maxProfitPerTrade = appConfig.maxProfitPerTrade;
     let maxLossPerTrade = appConfig.maxLossPerTrade;
 
@@ -201,10 +219,9 @@ const canExitPosition = async (changePercent: number, strength: string) => {
             break;
     }
 
-    log.info({maxProfitPerTrade, maxLossPerTrade});
+    log.info({ maxProfitPerTrade, maxLossPerTrade });
 
-    if (changePercent > maxProfitPerTrade || changePercent < -maxLossPerTrade)
-    {
+    if (changePercent > maxProfitPerTrade || changePercent < -maxLossPerTrade) {
         return true;
     }
 
