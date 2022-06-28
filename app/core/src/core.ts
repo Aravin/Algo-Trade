@@ -7,13 +7,13 @@ import { api } from "./helpers/http";
 import { Account } from "./models/account";
 import log4js from 'log4js';
 import { findNextExpiry } from "./shared/expirtyDate";
+import { toFixedNumber } from "./helpers/number/toFixed";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault("Asia/Kolkata");
 const log = log4js.getLogger()
 log.level = 'debug';
-
 
 let STATE = 'START';
 let ORDER_ID = '';
@@ -24,6 +24,25 @@ let SCRIPT = '';
 let ORDERED_SENTIMENT = '';
 let ORDERED_TOKEN = '';
 let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
+let ACCOUNT_VALUE = 0;
+
+const resetLastTrade = () => {
+    STATE = 'STOP';
+    PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
+    ORDERED_SENTIMENT = '';
+    ORDER_ID = '';
+    TRADE_ID = 0;
+    ORDERED_TOKEN = '';
+    ORDER_BUY_PRICE = 0.0;
+    ORDER_LOT = 0;
+    SCRIPT = '';
+    ACCOUNT_VALUE = 0;
+}
+
+const resetDayTrades = () => {
+    resetLastTrade();
+    PENDING_TRADE_PER_DAY = 0;
+}
 
 export const core = async (data: any) => {
 
@@ -33,10 +52,7 @@ export const core = async (data: any) => {
 
         // from aws
         // const data = await ddbClient.get();
-        const indiaSentiment = data?.indiaSentiment;
-        const signal = data?.signal
-        const volatility = data?.volatility;
-        const strength: string = data?.strength;
+        const { indiaSentiment, signal, volatility, strength } = data;
         log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility, strength: data.strength });
 
         // finvasia
@@ -86,39 +102,46 @@ export const core = async (data: any) => {
 
             ddbClient.insertTradeLog({ orderId: ORDER_ID, tradeId: TRADE_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT });
         }
-        else if (STATE === 'ORDERED' && SCRIPT && ORDER_ID) {
+        else if (STATE === 'ORDERED') {
             // special case - TODO: convert to event
             if (marketClosed) {
                 log.info('Market Closing Time ⌛, exiting the position');
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-                const changePercent = (((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100).toFixed(2);
-                ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: changePercent, exitReason: 'Market Closing' });
-                STATE = 'STOP';
-                PENDING_TRADE_PER_DAY = 0;
-                ORDERED_SENTIMENT = '';
-                ORDER_ID = '';
-                TRADE_ID = 0;
-                ORDERED_TOKEN = '';
+                const changePercent = toFixedNumber(((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
+                const absChangePercent = toFixedNumber(((sellPrice - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
+                ddbClient.exitTradeLog(
+                    {
+                        orderId: orderId,
+                        tradeId: TRADE_ID,
+                        sellPrice,
+                        pnl: changePercent,
+                        absolutePnl: absChangePercent,
+                        exitReason: 'Market Closing',
+                    });
+                resetDayTrades();
                 return;
             }
 
             // exit in case of loss
             const scriptQuote = await api.scriptQuote('NFO', ORDERED_TOKEN);
             const lp = +scriptQuote.lp;
-            const changePercent = (((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
-            const absChangePercent = changePercent.toFixed(2);
-            log.debug({ ORDER_BUY_PRICE, lp, changePercent, strength: data.strength });
+            const changePercent = toFixedNumber(((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
+            const absChangePercent = toFixedNumber(((lp - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength: data.strength });
 
             if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
                 log.info(`P&L reached ${absChangePercent} with market strength ${strength}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-                ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: `P&L reached ${changePercent}` });
-                STATE = 'STOP';
-                PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
-                ORDERED_SENTIMENT = '';
-                ORDER_ID = '';
-                TRADE_ID = 0;
-                ORDERED_TOKEN = '';
+                ddbClient.exitTradeLog(
+                    {
+                        orderId: orderId,
+                        tradeId: TRADE_ID,
+                        sellPrice,
+                        pnl: changePercent,
+                        absolutePnl: absChangePercent,
+                        exitReason: `P&L reached ${changePercent}`
+                    });
+                resetLastTrade();
                 return;
             }
 
@@ -130,12 +153,17 @@ export const core = async (data: any) => {
 
             log.info(`Indian Market is ${indiaSentiment} ❌, exiting the position`);
             const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
-            ddbClient.exitTradeLog({ orderId: orderId, tradeId: TRADE_ID, sellPrice, pnl: absChangePercent, exitReason: 'Sentiment Changed' });
-            STATE = 'STOP';
+            ddbClient.exitTradeLog(
+                {
+                    orderId: orderId,
+                    tradeId: TRADE_ID,
+                    sellPrice,
+                    pnl: changePercent,
+                    absolutePnl: absChangePercent,
+                    exitReason: 'Sentiment Changed',
+                });
+            resetLastTrade();
             --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
-            ORDERED_SENTIMENT = '';
-            ORDER_ID = '';
-            TRADE_ID = 0;
         }
     }
     catch (err: any) {
@@ -146,7 +174,9 @@ export const core = async (data: any) => {
 
 const placeBuyOrder = async (callOrPut: string) => {
     const limits = await api.accountLimit();
-    const margin = ((+(limits.cash || 0) + +(limits.payin || 0)) - +(limits.premium || 0)) * 95 / 100;
+    const accountMargin = ((+(limits.cash || 0) + +(limits.payin || 0)) - +(limits.premium || 0));
+    ACCOUNT_VALUE = accountMargin;
+    const tradeMargin = accountMargin * 95 / 100;
     const { expiryDate, daysLeft } = findNextExpiry();
     const quote = await api.scriptQuote('NSE', '26000');
     const niftyLastPrice = parseFloat(quote.lp);
@@ -158,11 +188,11 @@ const placeBuyOrder = async (callOrPut: string) => {
     const scriptLot = +scriptQuote.ls;
     const requiredMargin = Math.ceil(scriptLastPrice * scriptLot);
 
-    if (requiredMargin > margin) {
-        throw new Error(`Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${margin}`);
+    if (requiredMargin > tradeMargin) {
+        throw new Error(`Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${tradeMargin}`);
     }
 
-    const orderLot = Math.floor(margin / (scriptLot * scriptLastPrice)) * scriptLot;
+    const orderLot = Math.floor(tradeMargin / (scriptLot * scriptLastPrice)) * scriptLot;
     const order = await api.placeOrder('B', script.values[0].tsym, orderLot);
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
@@ -230,12 +260,5 @@ const canExitPosition = (
 
 export const resetTrades = () => {
     STATE = 'START';
-    ORDER_ID = '';
-    TRADE_ID = 0;
-    ORDER_BUY_PRICE = 0.0;
-    ORDER_LOT = 0;
-    SCRIPT = '';
-    ORDERED_SENTIMENT = '';
-    ORDERED_TOKEN = '';
     PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 }

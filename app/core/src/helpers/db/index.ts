@@ -64,14 +64,15 @@ export const ddbClient = (() => {
             const params: UpdateItemCommandInput = {
                 TableName: "algo_trade_log",
                 Key: { tradeId: { N: data.tradeId + '' } },
-                UpdateExpression: 'set exitTime = :a, sellPrice = :b, orderId =:c, pnl = :d, exitReason = :e, orderStatus = :f',
+                UpdateExpression: 'set exitTime = :a, sellPrice = :b, orderId =:c, pnl = :d, absolutePnl = :e, exitReason = :f, orderStatus = :g',
                 ExpressionAttributeValues: {
                     ':a': { S: new Date().toISOString() },
                     ':b': { N: data.sellPrice + '' },
                     ':c': { S: data.orderId },
                     ':d': { N: data.pnl },
-                    ':e': { S: data.exitReason },
-                    ':f': { S: 'closed' },
+                    ':e': { N: data.absolutePnl },
+                    ':f': { S: data.exitReason },
+                    ':g': { S: 'closed' },
                 },
             };
             try {
