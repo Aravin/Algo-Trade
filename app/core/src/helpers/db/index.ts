@@ -1,4 +1,5 @@
 import { DynamoDBClient, PutItemCommand, PutItemCommandInput, GetItemCommand, GetItemCommandInput, UpdateItemCommandInput, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { log } from '../log';
 
 export const ddbClient = (() => {
     let instance: DynamoDBClient;
@@ -35,7 +36,7 @@ export const ddbClient = (() => {
                     strength: item?.strength.S,
                 }
             } catch (err: any) {
-                console.log(err.message);
+                log.error(err.message);
             }
         },
         insertTradeLog: (data: any) => {
@@ -55,11 +56,10 @@ export const ddbClient = (() => {
             try {
                 return local.send(new PutItemCommand(params));
             } catch (err: unknown) {
-                console.log((err as Error).message);
+                log.error((err as Error).message);
             }
         },
         exitTradeLog: (data: any) => {
-            console.log(data);
             const local = createInstance();
             const params: UpdateItemCommandInput = {
                 TableName: "algo_trade_log",
@@ -78,7 +78,7 @@ export const ddbClient = (() => {
             try {
                 return local.send(new UpdateItemCommand(params));
             } catch (err: unknown) {
-                console.log((err as Error).message);
+                log.error((err as Error).message);
             }
         },
     }

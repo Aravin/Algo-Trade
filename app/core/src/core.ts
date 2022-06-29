@@ -5,15 +5,14 @@ import { appConfig } from "./config/app";
 import { ddbClient } from "./helpers/db";
 import { api } from "./helpers/http";
 import { Account } from "./models/account";
-import log4js from 'log4js';
 import { findNextExpiry } from "./shared/expirtyDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
+import { log } from "./helpers/log";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault("Asia/Kolkata");
-const log = log4js.getLogger()
-log.level = 'debug';
+
 
 let STATE = 'START';
 let ORDER_ID = '';
