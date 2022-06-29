@@ -13,7 +13,6 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault("Asia/Kolkata");
 
-
 let STATE = 'START';
 let ORDER_ID = '';
 let TRADE_ID = 0;
