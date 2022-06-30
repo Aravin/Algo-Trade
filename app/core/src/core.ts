@@ -106,7 +106,7 @@ export const core = async (data: any) => {
                 log.info('Market Closing Time ⌛, exiting the position');
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 const changePercent = toFixedNumber(((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
-                const absChangePercent = toFixedNumber(((((sellPrice * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
+                const absChangePercent = toFixedNumber((((sellPrice + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
                 ddbClient.exitTradeLog(
                     {
                         orderId: orderId,
@@ -124,7 +124,7 @@ export const core = async (data: any) => {
             const scriptQuote = await api.scriptQuote('NFO', ORDERED_TOKEN);
             const lp = +scriptQuote.lp;
             const changePercent = toFixedNumber(((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
-            const absChangePercent = toFixedNumber(((((lp * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
+            const absChangePercent = toFixedNumber((((lp + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength: data.strength });
 
             if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
