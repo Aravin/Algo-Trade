@@ -25,8 +25,8 @@ let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 let ACCOUNT_VALUE = 0;
 
 const resetLastTrade = () => {
-    STATE = 'STOP';
     PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
+    PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
     ORDERED_SENTIMENT = '';
     ORDER_ID = '';
     TRADE_ID = 0;
@@ -38,8 +38,8 @@ const resetLastTrade = () => {
 }
 
 const resetDayTrades = () => {
-    resetLastTrade();
     PENDING_TRADE_PER_DAY = 0;
+    resetLastTrade();
 }
 
 export const core = async (data: any) => {
@@ -161,7 +161,6 @@ export const core = async (data: any) => {
                     exitReason: 'Sentiment Changed',
                 });
             resetLastTrade();
-            --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
         }
     }
     catch (err: any) {
