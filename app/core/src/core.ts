@@ -8,6 +8,7 @@ import { Account } from "./models/account";
 import { findNextExpiry } from "./shared/expirtyDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
 import { log } from "./helpers/log";
+import { ssnClient } from "./helpers/notification";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -163,8 +164,15 @@ export const core = async (data: any) => {
             resetLastTrade();
         }
     }
-    catch (err: any) {
-        log.error(err?.message);
+    catch (err: unknown) {
+        if (process.env.NODE_ENV === 'development') {
+            log.error(JSON.stringify(err, null, 2));
+        }
+        else {
+            log.error((err as Error).message);
+        }
+
+        ssnClient.postMessage((err as Error).message);
         log.error('Error: Retry at next attempt. ');
     }
 }

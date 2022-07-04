@@ -21,4 +21,10 @@ export const appConfig = {
     apiKey: process.env.FINVASIA_API_KEY || '',
     imei: process.env.FINVASIA_IMEI || '',
     token: process.env.FINVASIA_TOKEN || '',
+    // aws services
+    aws: {
+        sns: {
+            topic: process.env.AWS_SNS_TOPIC,
+        }
+    }
 }
