@@ -3,6 +3,7 @@ import { appConfig } from './config';
 import { ddbClient } from './db';
 import { getGlobalMarket } from './globalMarket';
 import { getIndiaMarket } from './indianMarket';
+import { ssnClient } from './notification';
 
 export const run = async (event: any, context: any): Promise<void> => {
     try {
@@ -44,7 +45,9 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeEnd('cron');
     }
     catch (err: unknown) {
-        console.log((err as Error).message);
+        const errorMessage = (err as Error).message;
+        console.log(errorMessage);
+        ssnClient.postMessage(errorMessage);
     }
 };
 
@@ -54,7 +57,9 @@ export const reset = async (event: any, context: any): Promise<void> => {
         console.log(response.data);
     }
     catch (err: unknown) {
-        console.log((err as Error).message);
+        const errorMessage = (err as Error).message;
+        console.log(errorMessage);
+        ssnClient.postMessage(errorMessage);
     }
 };
 

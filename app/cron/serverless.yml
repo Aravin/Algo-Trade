@@ -19,6 +19,7 @@ provider:
             - dynamodb:PutItem
             - dynamodb:UpdateItem
             - dynamodb:DeleteItem
+            - sns:*
           Resource:
             - Fn::GetAtt: [ sentimentTable, Arn ]
             - Fn::GetAtt: [ sentimentLastTable, Arn ]
