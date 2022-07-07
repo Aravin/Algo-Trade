@@ -37,15 +37,28 @@ export const run = async (event: any, context: any): Promise<void> => {
             signal = 'Put';
         }
 
-        console.timeLog('cron', globalSentiment, indiaSentiment, trend.atr.action, marketStatus, signal, strength);
-        const data = { globalSentiment, indiaSentiment, volatility: trend.atr.action, dateTime, marketStatus, signal, strength };
+        const data = {
+            globalSentiment,
+            indiaSentiment,
+            volatility: trend?.atr?.action,
+            dateTime,
+            marketStatus,
+            signal,
+            strength,
+        };
+        console.timeLog('cron', data);
+
+        // post to webhook
         axios.post(appConfig.webhookURL, data);
-        ddbClient.insert(data);
+
+        // updated to db
         ddbClient.update(data);
+        ddbClient.insert(data);
+
         console.timeEnd('cron');
     }
     catch (err: unknown) {
-        const errorMessage = (err as Error).message;
+        const errorMessage = `CRON - ${(err as Error).message}`;
         console.log(errorMessage);
         ssnClient.postMessage(errorMessage);
     }
@@ -57,7 +70,7 @@ export const reset = async (event: any, context: any): Promise<void> => {
         console.log(response.data);
     }
     catch (err: unknown) {
-        const errorMessage = (err as Error).message;
+        const errorMessage = `CRON - ${(err as Error).message}`;
         console.log(errorMessage);
         ssnClient.postMessage(errorMessage);
     }

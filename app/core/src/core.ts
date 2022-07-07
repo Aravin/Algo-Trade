@@ -191,7 +191,7 @@ export const core = async (data: any) => {
             log.error((err as Error).message);
         }
 
-        ssnClient.postMessage((err as Error).message);
+        ssnClient.postMessage(`CORE - ${(err as Error).message}`);
         log.error('Error: Retry at next attempt. ');
     }
 }
