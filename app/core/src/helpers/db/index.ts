@@ -51,6 +51,7 @@ export const ddbClient = (() => {
                     lotSize: { N: data.lotSize + '' },
                     orderTime: { S: new Date().toISOString() },
                     buyPrice: { N: data.buyPrice + '' },
+                    sentiment: { S: data.sentiment },
                 },
             };
             try {

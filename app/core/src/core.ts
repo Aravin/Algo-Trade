@@ -5,7 +5,7 @@ import { appConfig } from "./config/app";
 import { ddbClient } from "./helpers/db";
 import { api } from "./helpers/http";
 import { Account } from "./models/account";
-import { findNextExpiry } from "./shared/expirtyDate";
+import { findNextExpiry } from "./shared/expiryDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
 import { log } from "./helpers/log";
 import { ssnClient } from "./helpers/notification";
@@ -52,7 +52,14 @@ export const core = async (data: any) => {
         // from aws
         // const data = await ddbClient.get();
         const { indiaSentiment, signal, volatility, strength } = data;
-        log.info({ orderSentiment: ORDERED_SENTIMENT, signal: data?.signal, volatility: data?.volatility, strength: data.strength });
+        log.info(
+            {
+                orderSentiment: ORDERED_SENTIMENT,
+                signal: signal,
+                volatility: volatility,
+                strength: strength,
+            },
+        );
 
         // finvasia
         const account = Account.getInstance();
@@ -99,7 +106,16 @@ export const core = async (data: any) => {
             ORDERED_TOKEN = order.scriptToken;
             STATE = 'ORDERED';
 
-            ddbClient.insertTradeLog({ orderId: ORDER_ID, tradeId: TRADE_ID, script: SCRIPT, buyPrice: ORDER_BUY_PRICE, lotSize: ORDER_LOT });
+            ddbClient.insertTradeLog(
+                {
+                    orderId: ORDER_ID,
+                    tradeId: TRADE_ID,
+                    script: SCRIPT,
+                    buyPrice: ORDER_BUY_PRICE,
+                    lotSize: ORDER_LOT,
+                    sentiment: ORDERED_SENTIMENT,
+                },
+            );
         }
         else if (STATE === 'ORDERED') {
             // special case - TODO: convert to event
@@ -116,7 +132,8 @@ export const core = async (data: any) => {
                         pnl: changePercent,
                         absolutePnl: absChangePercent,
                         exitReason: 'Market Closing',
-                    });
+                    },
+                );
                 resetDayTrades();
                 return;
             }
@@ -126,7 +143,7 @@ export const core = async (data: any) => {
             const lp = +scriptQuote.lp;
             const changePercent = toFixedNumber(((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
             const absChangePercent = toFixedNumber((((((lp - ORDER_BUY_PRICE) * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
-            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength: data.strength });
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength });
 
             if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
                 log.info(`P&L reached ${absChangePercent} with market strength ${strength}, exiting the position`);
@@ -139,7 +156,8 @@ export const core = async (data: any) => {
                         pnl: changePercent,
                         absolutePnl: absChangePercent,
                         exitReason: `P&L reached ${changePercent}`
-                    });
+                    },
+                );
                 resetLastTrade();
                 return;
             }
@@ -160,7 +178,8 @@ export const core = async (data: any) => {
                     pnl: changePercent,
                     absolutePnl: absChangePercent,
                     exitReason: 'Sentiment Changed',
-                });
+                },
+            );
             resetLastTrade();
         }
     }
