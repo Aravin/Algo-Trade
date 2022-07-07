@@ -16,7 +16,7 @@ export const placeOrder = async (transType: string, symbol: string, qty: number)
         trgprc: '',
         prd: 'M',
         trantype: transType,
-        prctyp: 'M',
+        prctyp: 'MKT',
         ret: 'DAY',
     };
 
