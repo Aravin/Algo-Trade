@@ -23,11 +23,12 @@ let SCRIPT = '';
 let ORDERED_SENTIMENT = '';
 let ORDERED_TOKEN = '';
 let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
+let PENDING_LOSS_TRADE_PER_DAY = appConfig.maxLossTradesPerDay;
 let ACCOUNT_VALUE = 0;
 
 const resetLastTrade = () => {
-    PENDING_TRADE_PER_DAY = PENDING_TRADE_PER_DAY - 1;
-    PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
+    --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
+    PENDING_LOSS_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
     ORDERED_SENTIMENT = '';
     ORDER_ID = '';
     TRADE_ID = 0;
@@ -275,7 +276,10 @@ const canExitPosition = (
 
     log.info({ maxProfitPerTrade, maxLossPerTrade });
 
-    if (changePercent > maxProfitPerTrade || changePercent < -maxLossPerTrade) {
+    if (changePercent > maxProfitPerTrade) {
+        return true;
+    } else if (changePercent < -maxLossPerTrade) {
+        PENDING_LOSS_TRADE_PER_DAY--;
         return true;
     }
 
