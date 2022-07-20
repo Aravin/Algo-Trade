@@ -56,7 +56,10 @@ export const core = async (data: any) => {
 
         // from aws
         // const data = await ddbClient.get();
-        const { indiaSentiment, signal, volatility, strength } = data;
+        const { indiaSentiment, volatility, strength } = data;
+        let globalSentiment = data.globalSentiment;
+        let signal = data.signal;
+    
         log.info(
             {
                 orderSentiment: ORDERED_SENTIMENT,
@@ -70,6 +73,11 @@ export const core = async (data: any) => {
         const account = Account.getInstance();
         account.token = await api.login();
 
+        if (appConfig.skipGlobalMarket) {
+            globalSentiment = indiaSentiment;
+            signal = skipGlobalMarketSignal(indiaSentiment)
+        }
+
         if (STATE === 'STOP') {
             log.info('Service Stopped, Trading over for the day');
         }
@@ -82,7 +90,7 @@ export const core = async (data: any) => {
                 return;
             }
 
-            if (!appConfig.skipGlobalMarket && !signal) {
+            if (!signal) {
                 log.info(`No signal in market! - Volatility ${volatility}`);
                 return;
             }
@@ -92,7 +100,12 @@ export const core = async (data: any) => {
                 return;
             }
 
-            if (appConfig.skipGlobalMarket && indiaSentiment === 'neutral') {
+            if (indiaSentiment !== globalSentiment) {
+                log.info(`Local & Global Sentiments are different!`);
+                return;
+            }
+
+            if (indiaSentiment === 'neutral') {
                 log.info(`No signal in Indian market!`);
                 return;
             }
@@ -150,8 +163,8 @@ export const core = async (data: any) => {
             const absChangePercent = toFixedNumber((((((lp - ORDER_BUY_PRICE) * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
             
             // set min and max loss
-            CURRENT_TRADE_LOW_PRICE = Math.min(ORDER_BUY_PRICE, lp, CURRENT_TRADE_LOW_PRICE);
-            CURRENT_TRADE_HIGH_PRICE = Math.max(ORDER_BUY_PRICE, lp, CURRENT_TRADE_HIGH_PRICE);
+            CURRENT_TRADE_LOW_PRICE = Math.min(ORDER_BUY_PRICE, lp, CURRENT_TRADE_LOW_PRICE ? CURRENT_TRADE_LOW_PRICE : lp);
+            CURRENT_TRADE_HIGH_PRICE = Math.max(ORDER_BUY_PRICE, lp, CURRENT_TRADE_HIGH_PRICE ? CURRENT_TRADE_HIGH_PRICE : lp);
 
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength });
 
@@ -297,6 +310,23 @@ const canExitPosition = (
     }
 
     return false;
+}
+
+const skipGlobalMarketSignal = (signal: string) => {
+    let result = '';
+
+    switch (signal) {
+        case 'negative':
+            result = 'Put';
+            break;
+        case 'positive':
+            result = 'Call';
+            break;
+        default:
+            result = '';
+    }
+
+    return result;
 }
 
 export const resetTrades = () => {
