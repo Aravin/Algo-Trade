@@ -110,6 +110,11 @@ export const core = async (data: any) => {
                 return;
             }
 
+            if (appConfig.buyStrength.toLowerCase() === 'strong' && strength.toLowerCase() !== 'strong') {
+                log.info(`Strength is ${signal}`);
+                return;
+            }
+
             const callOrPut = signal.includes('Call') ? 'CE' : 'PE';
 
             log.info(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);

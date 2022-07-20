@@ -14,6 +14,7 @@ export const appConfig = {
             ? +(process.env.SETTINGS_MAX_LOSS_TRADES_PER_DAY || 3) : +(process.env.SETTINGS_MAX_TRADES_PER_DAY || 5),
     skipGlobalMarket: process.env.SETTINGS_SKIP_GLOBAL_MARKET === 'true' ? true : false,
     otmPrice: +(process.env.SETTINGS_OTM_PRICE || 200),
+    buyStrength: process.env.SETTINGS_BUY_STRENGTH || '',
     // finvasia
     proxyApiPath: process.env.FINVASIA_PROXY_PATH || '',
     proxyApiKey: process.env.FINVASIA_PROXY_APIKEY || '',
