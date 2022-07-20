@@ -25,6 +25,8 @@ let ORDERED_TOKEN = '';
 let PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 let PENDING_LOSS_TRADE_PER_DAY = appConfig.maxLossTradesPerDay;
 let ACCOUNT_VALUE = 0;
+let CURRENT_TRADE_LOW_PRICE = 0;
+let CURRENT_TRADE_HIGH_PRICE = 0;
 
 const resetLastTrade = () => {
     --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
@@ -37,6 +39,8 @@ const resetLastTrade = () => {
     ORDER_LOT = 0;
     SCRIPT = '';
     ACCOUNT_VALUE = 0;
+    CURRENT_TRADE_LOW_PRICE = 0;
+    CURRENT_TRADE_HIGH_PRICE = 0;
 }
 
 const resetDayTrades = () => {
@@ -144,6 +148,11 @@ export const core = async (data: any) => {
             const lp = +scriptQuote.lp;
             const changePercent = toFixedNumber(((lp - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
             const absChangePercent = toFixedNumber((((((lp - ORDER_BUY_PRICE) * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
+            
+            // set min and max loss
+            CURRENT_TRADE_LOW_PRICE = Math.min(ORDER_BUY_PRICE, lp, CURRENT_TRADE_LOW_PRICE);
+            CURRENT_TRADE_HIGH_PRICE = Math.max(ORDER_BUY_PRICE, lp, CURRENT_TRADE_HIGH_PRICE);
+
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength });
 
             if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
@@ -156,7 +165,9 @@ export const core = async (data: any) => {
                         sellPrice,
                         pnl: changePercent,
                         absolutePnl: absChangePercent,
-                        exitReason: `P&L reached ${changePercent}`
+                        exitReason: `P&L reached ${changePercent}`,
+                        highPrice: CURRENT_TRADE_HIGH_PRICE,
+                        lowPrice: CURRENT_TRADE_LOW_PRICE,
                     },
                 );
                 resetLastTrade();
@@ -179,6 +190,8 @@ export const core = async (data: any) => {
                     pnl: changePercent,
                     absolutePnl: absChangePercent,
                     exitReason: 'Sentiment Changed',
+                    highPrice: CURRENT_TRADE_HIGH_PRICE,
+                    lowPrice: CURRENT_TRADE_LOW_PRICE,
                 },
             );
             resetLastTrade();
