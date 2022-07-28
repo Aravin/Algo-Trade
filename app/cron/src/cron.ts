@@ -13,9 +13,9 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
-        const { sentiment: indiaSentiment, trend, strength } = await getIndiaMarket();
+        const { sentiment: indiaSentiment, trend, signal } = await getIndiaMarket();
         let marketStatus = '';
-        let signal = '';
+        let buySellSignal = '';
 
         console.timeLog('cron', 'getGlobalMarket & getIndiaMarket completed');
 
@@ -30,11 +30,11 @@ export const run = async (event: any, context: any): Promise<void> => {
         }
         else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
             marketStatus = `Market is Positive`;
-            signal = 'Call';
+            buySellSignal = 'CE';
         }
         else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
             marketStatus = `Market is Negative`;
-            signal = 'Put';
+            buySellSignal = 'PE';
         }
 
         const data = {
@@ -44,7 +44,7 @@ export const run = async (event: any, context: any): Promise<void> => {
             dateTime,
             marketStatus,
             signal,
-            strength,
+            buySellSignal,
         };
         console.timeLog('cron', data);
 
