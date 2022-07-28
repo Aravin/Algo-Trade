@@ -13,33 +13,33 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
-        const { sentiment: indiaSentiment, trend, signal } = await getIndiaMarket();
+        const { sentiment: localSentiment, trend, signal } = await getIndiaMarket();
         let marketStatus = '';
         let buySellSignal = '';
 
         console.timeLog('cron', 'getGlobalMarket & getIndiaMarket completed');
 
-        if (globalSentiment !== indiaSentiment) {
+        if (globalSentiment !== localSentiment) {
             marketStatus = `Global & Indian Market Sentiment is different`;
         }
-        else if (new Set([globalSentiment, indiaSentiment, 'neutral']).size === 1) {
+        else if (new Set([globalSentiment, localSentiment, 'neutral']).size === 1) {
             marketStatus = `Market Sentiment is neutral`;
         }
         else if (trend.atr.action?.includes('less')) {
             marketStatus = `No volatility in market`;
         }
-        else if (new Set([globalSentiment, indiaSentiment, 'positive']).size === 1) {
+        else if (new Set([globalSentiment, localSentiment, 'positive']).size === 1) {
             marketStatus = `Market is Positive`;
             buySellSignal = 'CE';
         }
-        else if (new Set([globalSentiment, indiaSentiment, 'negative']).size === 1) {
+        else if (new Set([globalSentiment, localSentiment, 'negative']).size === 1) {
             marketStatus = `Market is Negative`;
             buySellSignal = 'PE';
         }
 
         const data = {
             globalSentiment,
-            indiaSentiment,
+            indiaSentiment: localSentiment,
             volatility: trend?.atr?.action,
             dateTime,
             marketStatus,
