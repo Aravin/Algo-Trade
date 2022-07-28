@@ -56,16 +56,16 @@ export const core = async (data: any) => {
 
         // from aws
         // const data = await ddbClient.get();
-        const { indiaSentiment, volatility, strength } = data;
+        const { indiaSentiment, volatility, signal } = data;
         let globalSentiment = data.globalSentiment;
-        let signal = data.signal;
+        let orderType = data.buySellSignal;
     
         log.info(
             {
                 orderSentiment: ORDERED_SENTIMENT,
-                signal: signal,
-                volatility: volatility,
-                strength: strength,
+                orderType,
+                volatility,
+                signal,
             },
         );
 
@@ -75,7 +75,7 @@ export const core = async (data: any) => {
 
         if (appConfig.skipGlobalMarket) {
             globalSentiment = indiaSentiment;
-            signal = skipGlobalMarketSignal(indiaSentiment)
+            orderType = skipGlobalMarketSignal(indiaSentiment)
         }
 
         if (STATE === 'STOP') {
@@ -87,11 +87,6 @@ export const core = async (data: any) => {
                 log.info('Market Closing Time ⌛, stopping the application');
                 STATE = 'STOP';
                 PENDING_TRADE_PER_DAY = 0;
-                return;
-            }
-
-            if (!signal) {
-                log.info(`No signal in market! - Volatility ${volatility}`);
                 return;
             }
 
@@ -110,15 +105,14 @@ export const core = async (data: any) => {
                 return;
             }
 
-            if (appConfig.buyStrength.toLowerCase() === 'strong' && strength.toLowerCase() !== 'strong') {
+            if (appConfig.buyStrength.toLowerCase() === 'strong' && signal.toLowerCase() !== 'strong') {
                 log.info(`Strength is ${signal}`);
                 return;
             }
 
-            const callOrPut = signal.includes('Call') ? 'CE' : 'PE';
-
-            log.info(`Market is ${indiaSentiment} ✅, placing ${callOrPut} Order`);
-            const order = await placeBuyOrder(callOrPut);
+            log.info(`Market is ${indiaSentiment} ✅, placing ${orderType} Order`);
+            log.info({indiaSentiment, globalSentiment, volatility, signal});
+            const order = await placeBuyOrder(orderType);
 
             ORDER_ID = order.orderId;
             TRADE_ID = Date.now();
@@ -171,10 +165,10 @@ export const core = async (data: any) => {
             CURRENT_TRADE_LOW_PRICE = Math.min(ORDER_BUY_PRICE, lp, CURRENT_TRADE_LOW_PRICE ? CURRENT_TRADE_LOW_PRICE : lp);
             CURRENT_TRADE_HIGH_PRICE = Math.max(ORDER_BUY_PRICE, lp, CURRENT_TRADE_HIGH_PRICE ? CURRENT_TRADE_HIGH_PRICE : lp);
 
-            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength });
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength: signal });
 
-            if (canExitPosition(changePercent, strength, ORDERED_SENTIMENT, indiaSentiment)) {
-                log.info(`P&L reached ${absChangePercent} with market strength ${strength}, exiting the position`);
+            if (canExitPosition(changePercent, signal, ORDERED_SENTIMENT, indiaSentiment)) {
+                log.info(`P&L reached ${absChangePercent} with market strength ${signal}, exiting the position`);
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog(
                     {
@@ -322,10 +316,10 @@ const skipGlobalMarketSignal = (signal: string) => {
 
     switch (signal) {
         case 'negative':
-            result = 'Put';
+            result = 'PE';
             break;
         case 'positive':
-            result = 'Call';
+            result = 'CE';
             break;
         default:
             result = '';
