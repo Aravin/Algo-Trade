@@ -49,7 +49,11 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', data);
 
         // post to webhook
-        axios.post(appConfig.webhookURL, data);
+        try {
+            axios.post(appConfig.webhookURL, data);
+        } catch (err: unknown) {
+            console.log((err as Error).message);
+        }
 
         // updated to db
         ddbClient.update(data);
