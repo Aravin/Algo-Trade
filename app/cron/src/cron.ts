@@ -80,4 +80,20 @@ export const reset = async (event: any, context: any): Promise<void> => {
     }
 };
 
+export const daysTradesLog = async (event: any, context: any): Promise<void> => {
+    try {
+        // get data from DB
+        const getDayTrades = await ddbClient.getDayTrades();
+        // update to db
+        ddbClient.updateDayTrades(getDayTrades); 
+
+    } catch (err: unknown) {
+        const errorMessage = `CRON - DAYS_TRADE - ${(err as Error).message}`;
+        console.log(errorMessage);
+        ssnClient.postMessage(errorMessage);
+    }
+}
+
+daysTradesLog(null, null);
+
 // https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/dynamodb-example-table-read-write.html

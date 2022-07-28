@@ -22,6 +22,7 @@ provider:
           Resource:
             - Fn::GetAtt: [ sentimentTable, Arn ]
             - Fn::GetAtt: [ sentimentLastTable, Arn ]
+            - Fn::GetAtt: [ tradeLogDayTable, Arn ]
         - Effect: Allow
           Action:
             - sns:Publish
@@ -53,6 +54,14 @@ functions:
           name: algo-trade-cron-reset-day-trades
           description: Cron Job every day after end of market
           rate: cron(0 12 ? * MON-FRI *)
+  dayTrades:
+      handler: dist/cron.daysTradesLog
+      name: ${sls:stage}-algo-trade-cron-update-day-trades
+      events:
+        - schedule:
+            name: algo-trade-cron-update-day-trades
+            description: Cron Job every day after end of market
+            rate: cron(0 12 ? * MON-FRI *)
 
 resources:
   Resources:
@@ -82,3 +91,16 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 5
           WriteCapacityUnits: 5  
+    tradeLogDayTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: algo_trade_log_day
+        KeySchema:
+          - AttributeName: tradeDate
+            KeyType: HASH
+        AttributeDefinitions:
+          - AttributeName: tradeDate
+            AttributeType: S
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5

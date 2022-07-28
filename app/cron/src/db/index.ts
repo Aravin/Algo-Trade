@@ -1,4 +1,6 @@
-import { DynamoDBClient, PutItemCommand, PutItemCommandInput, UpdateItemCommand, UpdateItemCommandInput } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, GetItemCommandInput, PutItemCommand, PutItemCommandInput, ScanCommand, ScanCommandInput, UpdateItemCommand, UpdateItemCommandInput } from '@aws-sdk/client-dynamodb';
+import dayjs from 'dayjs';
+import { toFixedNumber } from '../helpers/number/toFixed';
 
 export const ddbClient = (() => {
     let instance: DynamoDBClient;
@@ -29,37 +31,14 @@ export const ddbClient = (() => {
             };
             try {
                 return local.send(new PutItemCommand(params));
-            } catch (err: any) {
-                console.log(err.message);
+            } catch (err: unknown) {
+                console.log((err as Error).message);
             }
         },
         update: (data: any) => {
             const local = createInstance();
 
             try {
-                // delete
-                // const deleteInput: DeleteItemCommandInput = {
-                //     TableName: 'algo_trade_sentiment_latest',
-                //     Key: {
-                //         latest: { S: "latest" },
-                //     }
-                // }
-                // local.send(new DeleteItemCommand(deleteInput));
-
-                // // insert
-                // const params: PutItemCommandInput = {
-                //     TableName: "algo_trade_sentiment_latest",
-                //     Item: {
-                //         date_time: { S: data.dateTime },
-                //         global: { S: data.globalSentiment },
-                //         local: { S: data.indiaSentiment },
-                //         volatility: { S: data.volatility },
-                //         latest: { S: "latest" },
-                //     },
-                // };
-
-                // return local.send(new PutItemCommand(params));
-
                 const params: UpdateItemCommandInput = {
                     TableName: 'algo_trade_sentiment_latest',
                     Key: { latest: { S: "latest" } },
@@ -75,8 +54,71 @@ export const ddbClient = (() => {
                     }
                 }
                 local.send(new UpdateItemCommand(params));
-            } catch (err: any) {
-                console.log(err.message);
+            } catch (err: unknown) {
+                console.log((err as Error).message);
+            }
+        },
+        getDayTrades: async () => {
+            const local = createInstance();
+            const todayStartEpoch = dayjs(dayjs().format('YYYY-MM-DD')).valueOf();
+
+            const params: ScanCommandInput = {
+                TableName: "algo_trade_log", //TABLE_NAME
+                FilterExpression: 'tradeId > :tradeId',
+                ExpressionAttributeValues: { ':tradeId': { N: todayStartEpoch + '' }, },
+            };
+
+            try {
+                const data = await local.send(new ScanCommand(params));
+                const items = data.Items || [];
+
+                let absolutePnl =  0.00;
+                let pnl = 0.00;
+                let totalTrades = 0;
+                let positiveTrades = 0;
+                let negativeTrades = 0;
+
+                items.forEach(item => {
+                    absolutePnl += parseFloat(item.absolutePnl.N || '0'),
+                    pnl += parseFloat(item.pnl.N || '0'),
+                    totalTrades += 1
+                    positiveTrades = parseFloat(item.pnl.N || '0') >= 0 ? ++positiveTrades : positiveTrades,
+                    negativeTrades = parseFloat(item.pnl.N || '0') < 0 ? ++negativeTrades : negativeTrades
+                });
+ 
+                return {
+                    absolutePnl: toFixedNumber(absolutePnl),
+                    pnl: toFixedNumber(pnl),
+                    totalTrades,
+                    positiveTrades,
+                    negativeTrades
+                };
+
+            } catch (err: unknown) {
+                console.log((err as Error).message);
+            }
+        },
+        // insert / update works as same
+        updateDayTrades: async (data: any) => {
+            const local = createInstance();
+            const todayDate = dayjs().format('YYYY-MM-DD');
+
+            try {
+                const params: UpdateItemCommandInput = {
+                    TableName: 'algo_trade_log_day',
+                    Key: { tradeDate: { S: todayDate } },
+                    UpdateExpression: 'set absolutePnl = :a, pnl = :b, totalTrades = :c, positiveTrades = :d, negativeTrades = :e',
+                    ExpressionAttributeValues: {
+                        ':a': { N: data.absolutePnl + '' },
+                        ':b': { N: data.pnl + '' },
+                        ':c': { N: data.totalTrades + '' },
+                        ':d': { N: data.positiveTrades + '' },
+                        ':e': { N: data.negativeTrades + '' }
+                    }
+                }
+                local.send(new UpdateItemCommand(params));
+            } catch (err: unknown) {
+                console.log((err as Error).message);
             }
         }
     }
