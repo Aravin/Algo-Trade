@@ -89,6 +89,11 @@ export const core = async (data: any) => {
                 PENDING_TRADE_PER_DAY = 0;
                 return;
             }
+            
+            if (!orderType) {
+                log.info(`No signal in market! - Volatility ${volatility}`);
+                return;
+            }
 
             if (volatility?.toLowerCase().includes('less')) {
                 log.info('No volatility in market!');
