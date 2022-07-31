@@ -23,6 +23,7 @@ provider:
             - Fn::GetAtt: [ sentimentTable, Arn ]
             - Fn::GetAtt: [ sentimentLastTable, Arn ]
             - Fn::GetAtt: [ tradeLogDayTable, Arn ]
+            - arn:aws:dynamodb:ap-south-1:715637905274:table/algo_trade_log
         - Effect: Allow
           Action:
             - sns:Publish
