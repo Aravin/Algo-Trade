@@ -21,21 +21,10 @@ export async function scrapIndiaMarket(duration: number) {
         const $ = cheerio.load(niftyTrend.data, null, false);
 
         return {
-            summary: $('.summary > span').text().toLowerCase(),
-            ma: {
-                summary: $('#techStudiesInnerWrap > div:nth-child(2) > span:eq(1)').text().toLowerCase(),
-                buy: $('#maBuy').text().toLowerCase().replace(/[()]/g, ''),
-                sell: $('#maSell').text().toLowerCase().replace(/[()]/g, ''),
-            },
-            ti: {
-                summary: $('#techStudiesInnerWrap > div:nth-child(3) > span:eq(1)').text().toLowerCase(),
-                buy: $('#tiBuy').text().toLowerCase().replace(/[()]/g, ''),
-                sell: $('#tiSell').text().toLowerCase().replace(/[()]/g, ''),
-            },
             trend: {
                 rsi: {
                     value: $('#curr_table > tbody > tr:nth-child(1) > td.right').text().toLowerCase(),
-                    action: getTrend($('#curr_table > tbody > tr:nth-child(1) > td.left > span').text()),
+                    action: $('#curr_table > tbody > tr:nth-child(1) > td.left > span').text().toLowerCase(),
                 },
             },
             volatility: {

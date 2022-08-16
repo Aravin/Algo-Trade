@@ -62,10 +62,10 @@ export async function getGlobalMarket() {
         const activeMarketSentiment = activeMarket.reduce((acc, obj) => acc + obj.sentimentValue, 0)
 
         if (activeMarketSentiment > 0) {
-            return 'positive';
+            return 'buy';
         }
         else if (activeMarketSentiment < 0) {
-            return 'negative';
+            return 'sell';
         }
 
         return 'neutral';

@@ -1,10 +1,10 @@
-import { scrapIndiaMarket } from '../v1/scrape';
+import { scrapIndiaMarket } from '../v2/scrape';
 
 export async function getIndiaMarket() {
     const niftyTrend1Min = await scrapIndiaMarket(60);
 
     return {
-        volatility: niftyTrend1Min,
-        trend: niftyTrend1Min.trend.rsi,
+        volatility: niftyTrend1Min.volatility.atr.action,
+        trend: niftyTrend1Min.trend.rsi.action,
     };
 }

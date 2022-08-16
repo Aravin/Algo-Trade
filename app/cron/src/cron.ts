@@ -2,7 +2,7 @@ import axios from 'axios';
 import { appConfig } from './config';
 import { ddbClient } from './db';
 import { getGlobalMarket } from './globalMarket';
-import { getIndiaMarket } from './indianMarket/v1';
+import { getIndiaMarket } from './indianMarket/v2';
 import { ssnClient } from './notification';
 
 export const run = async (event: any, context: any): Promise<void> => {
@@ -13,7 +13,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
-        const { sentiment: localSentiment, trend, signal } = await getIndiaMarket();
+        const { trend: localSentiment, volatility } = await getIndiaMarket();
         let marketStatus = '';
         let buySellSignal = '';
 
@@ -25,7 +25,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         else if (new Set([globalSentiment, localSentiment, 'neutral']).size === 1) {
             marketStatus = `Market Sentiment is neutral`;
         }
-        else if (trend.atr.action?.includes('less')) {
+        else if (volatility.includes('less')) {
             marketStatus = `No volatility in market`;
         }
         else if (new Set([globalSentiment, localSentiment, 'positive']).size === 1) {
@@ -40,10 +40,10 @@ export const run = async (event: any, context: any): Promise<void> => {
         const data = {
             globalSentiment,
             indiaSentiment: localSentiment,
-            volatility: trend?.atr?.action,
+            volatility,
             dateTime,
             marketStatus,
-            signal,
+            signal: localSentiment, // remove in next release
             buySellSignal,
         };
         console.timeLog('cron', data);
