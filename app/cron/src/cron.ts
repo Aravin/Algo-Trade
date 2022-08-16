@@ -2,7 +2,7 @@ import axios from 'axios';
 import { appConfig } from './config';
 import { ddbClient } from './db';
 import { getGlobalMarket } from './globalMarket';
-import { getIndiaMarket } from './indianMarket';
+import { getIndiaMarket } from './indianMarket/v1';
 import { ssnClient } from './notification';
 
 export const run = async (event: any, context: any): Promise<void> => {

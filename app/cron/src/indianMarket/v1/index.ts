@@ -1,5 +1,5 @@
-import { scrapIndiaMarket } from './scrap';
-import { sentimentSignalMapping } from './sentimentSignalMapping';
+import { scrapIndiaMarket } from './scrape';
+import { sentimentSignalMapping } from '../sentimentSignalMapping';
 
 export async function getIndiaMarket() {
     const [niftyTrend1Min, niftyTrend5Min] = await Promise.all([scrapIndiaMarket(60), scrapIndiaMarket(300)]);
