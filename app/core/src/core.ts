@@ -56,7 +56,7 @@ export const core = async (data: any) => {
 
         // from aws
         // const data = await ddbClient.get();
-        const { indiaSentiment, volatility, signal } = data;
+        const { indiaSentiment, volatility } = data;
         let globalSentiment = data.globalSentiment;
         let orderType = data.buySellSignal;
     
@@ -65,7 +65,6 @@ export const core = async (data: any) => {
                 orderSentiment: ORDERED_SENTIMENT,
                 orderType,
                 volatility,
-                signal,
             },
         );
 
@@ -110,13 +109,7 @@ export const core = async (data: any) => {
                 return;
             }
 
-            if (appConfig.buyStrength.toLowerCase() === 'strong' && signal.toLowerCase() !== 'strong') {
-                log.info(`Strength is ${signal}`);
-                return;
-            }
-
             log.info(`Market is ${indiaSentiment} ✅, placing ${orderType} Order`);
-            log.info({indiaSentiment, globalSentiment, volatility, signal});
             const order = await placeBuyOrder(orderType);
 
             ORDER_ID = order.orderId;
@@ -170,10 +163,13 @@ export const core = async (data: any) => {
             CURRENT_TRADE_LOW_PRICE = Math.min(ORDER_BUY_PRICE, lp, CURRENT_TRADE_LOW_PRICE ? CURRENT_TRADE_LOW_PRICE : lp);
             CURRENT_TRADE_HIGH_PRICE = Math.max(ORDER_BUY_PRICE, lp, CURRENT_TRADE_HIGH_PRICE ? CURRENT_TRADE_HIGH_PRICE : lp);
 
-            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, strength: signal });
+            log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent, volatility });
 
-            if (canExitPosition(changePercent, signal, ORDERED_SENTIMENT, indiaSentiment)) {
-                log.info(`P&L reached ${absChangePercent} with market strength ${signal}, exiting the position`);
+            const canExit = canExitPosition(changePercent, volatility, ORDERED_SENTIMENT, indiaSentiment);
+
+            if (canExit) {
+                log.info(`${canExit ? 'Dynamic ': ''}P&L reached ${absChangePercent} with market strength ${volatility}, exiting the position`);
+
                 const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog(
                     {
@@ -264,44 +260,32 @@ const placeSellOrder = async (script: string, lot: number) => {
 }
 
 // move to new file
-const inverseStrength = {
-    strong: 'exit',
-    hold: 'risk',
-    risk: 'hold',
-    exit: 'strong'
+const inverseVolatility = {
+    high: 'low',
+    low: 'high',
 }
 
 const canExitPosition = (
     changePercent: number,
-    strength: string,
+    volatility: string,
     orderedSentiment: string,
     currentSentiment: string,
 ) => {
 
     if (orderedSentiment !== currentSentiment) {
-        strength = inverseStrength[strength.toLowerCase() as keyof typeof inverseStrength];
+        volatility = inverseVolatility[volatility.toLowerCase() as keyof typeof inverseVolatility];
     }
 
     let maxProfitPerTrade = appConfig.maxProfitPerTrade;
     let maxLossPerTrade = appConfig.maxLossPerTrade;
 
-    switch (strength.toLowerCase()) {
-        case 'strong':
-            maxProfitPerTrade = maxProfitPerTrade * 4;
-            maxLossPerTrade = maxLossPerTrade * 4;
-            break;
-        case 'hold':
-            maxProfitPerTrade = maxProfitPerTrade * 2;
-            maxLossPerTrade = maxLossPerTrade * 2;
-            break;
-        case 'risk':
-            maxProfitPerTrade = maxProfitPerTrade / 2;
-            maxLossPerTrade = maxLossPerTrade / 2;
-            break;
-        case 'exit':
-            maxProfitPerTrade = 0;
-            maxLossPerTrade = 0;
-            break;
+    if (volatility.toLowerCase().includes('high')) {
+        maxProfitPerTrade = maxProfitPerTrade * 2;
+        maxLossPerTrade = maxLossPerTrade * 2;
+    }
+    else if (volatility.toLowerCase().includes('low')) {
+        maxProfitPerTrade = maxProfitPerTrade / 2;
+        maxLossPerTrade = maxLossPerTrade / 2;
     }
 
     log.info({ maxProfitPerTrade, maxLossPerTrade });
