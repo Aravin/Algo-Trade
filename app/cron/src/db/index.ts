@@ -1,4 +1,4 @@
-import { DynamoDBClient, GetItemCommand, GetItemCommandInput, PutItemCommand, PutItemCommandInput, ScanCommand, ScanCommandInput, UpdateItemCommand, UpdateItemCommandInput } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, PutItemCommandInput, ScanCommand, ScanCommandInput, UpdateItemCommand, UpdateItemCommandInput } from '@aws-sdk/client-dynamodb';
 import dayjs from 'dayjs';
 import { toFixedNumber } from '../helpers/number/toFixed';
 
@@ -26,7 +26,6 @@ export const ddbClient = (() => {
                     volatility: { S: data.volatility },
                     market_status: { S: data.marketStatus },
                     order_type: { S: data.buySellSignal },
-                    order_signal: { S: data.signal }
                 },
             };
             try {
@@ -42,15 +41,14 @@ export const ddbClient = (() => {
                 const params: UpdateItemCommandInput = {
                     TableName: 'algo_trade_sentiment_latest',
                     Key: { latest: { S: "latest" } },
-                    UpdateExpression: 'set date_time = :a, global_sentiment = :b, local_sentiment = :c, volatility = :d, market_status = :e, order_signal = :f, order_type = :g',
+                    UpdateExpression: 'set date_time = :a, global_sentiment = :b, local_sentiment = :c, volatility = :d, market_status = :e, order_type = :f',
                     ExpressionAttributeValues: {
                         ':a': { S: data.dateTime },
                         ':b': { S: data.globalSentiment },
                         ':c': { S: data.indiaSentiment },
                         ':d': { S: data.volatility },
                         ':e': { S: data.marketStatus },
-                        ':f': { S: data.signal },
-                        ':g': { S: data.buySellSignal }
+                        ':f': { S: data.buySellSignal }
                     }
                 }
                 local.send(new UpdateItemCommand(params));

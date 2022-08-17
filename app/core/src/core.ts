@@ -59,14 +59,6 @@ export const core = async (data: any) => {
         const { indiaSentiment, volatility } = data;
         let globalSentiment = data.globalSentiment;
         let orderType = data.buySellSignal;
-    
-        log.info(
-            {
-                orderSentiment: ORDERED_SENTIMENT,
-                orderType,
-                volatility,
-            },
-        );
 
         // finvasia
         const account = Account.getInstance();
@@ -133,6 +125,14 @@ export const core = async (data: any) => {
             );
         }
         else if (STATE === 'ORDERED') {
+            log.info(
+                {
+                    orderSentiment: ORDERED_SENTIMENT,
+                    orderType,
+                    volatility,
+                },
+            );
+
             // special case - TODO: convert to event
             if (marketClosed) {
                 log.info('Market Closing Time ⌛, exiting the position');

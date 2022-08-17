@@ -43,7 +43,6 @@ export const run = async (event: any, context: any): Promise<void> => {
             volatility,
             dateTime,
             marketStatus,
-            signal: localSentiment, // remove in next release
             buySellSignal,
         };
         console.timeLog('cron', data);
