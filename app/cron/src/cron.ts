@@ -28,11 +28,11 @@ export const run = async (event: any, context: any): Promise<void> => {
         else if (volatility.includes('less')) {
             marketStatus = `No volatility in market`;
         }
-        else if (new Set([globalSentiment, localSentiment, 'positive']).size === 1) {
+        else if (new Set([globalSentiment, localSentiment, 'buy']).size === 1) {
             marketStatus = `Market is Positive`;
             buySellSignal = 'CE';
         }
-        else if (new Set([globalSentiment, localSentiment, 'negative']).size === 1) {
+        else if (new Set([globalSentiment, localSentiment, 'sell']).size === 1) {
             marketStatus = `Market is Negative`;
             buySellSignal = 'PE';
         }
