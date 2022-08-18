@@ -304,10 +304,10 @@ const skipGlobalMarketSignal = (signal: string) => {
     let result = '';
 
     switch (signal) {
-        case 'negative':
+        case 'sell':
             result = 'PE';
             break;
-        case 'positive':
+        case 'buy':
             result = 'CE';
             break;
         default:
