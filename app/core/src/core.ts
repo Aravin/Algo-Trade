@@ -82,7 +82,7 @@ export const core = async (data: any) => {
             }
             
             if (!orderType) {
-                log.info(`No signal in market! - Volatility ${volatility}`);
+                log.info(`No buy/sell signal in market! - Volatility ${volatility}`);
                 return;
             }
 
