@@ -13,7 +13,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         console.timeLog('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
-        const { trend: localSentiment, volatility } = await getIndiaMarket();
+        const { trend: localSentiment, volatility } = await getIndiaMarket(); // trend can be 'buy', 'sell' 'overbougnt',  'oversold'
         let marketStatus = '';
         let buySellSignal = '';
 

@@ -261,8 +261,8 @@ const placeSellOrder = async (script: string, lot: number) => {
 
 // move to new file
 const inverseVolatility = {
-    high: 'low',
-    low: 'high',
+    'high volatility': 'less volatility',
+    'less volatility': 'high volatility',
 }
 
 const canExitPosition = (
