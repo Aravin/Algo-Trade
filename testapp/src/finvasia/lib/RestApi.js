@@ -29,7 +29,7 @@ var NorenRestApi = function(params) {
     'singleorderhistory': '/SingleOrdHist',
     'searchscrip': '/SearchScrip',
     'TPSeries' : '/TPSeries',     
-    'optionchain' : '/GetOptionChain',     
+    'get_option_chain' : '/GetOptionChain',     
     'holdings' : '/Holdings',
     'limits' : '/Limits',
     'positions': '/PositionBook',
@@ -424,6 +424,27 @@ var NorenRestApi = function(params) {
       let reply = post_request("limits", values, self.__susertoken);
       return reply;
     };
+
+    /**
+         * Description
+         * @method get_option_chain
+         * @param no params
+         */
+         
+     self.get_option_chain = function () {
+
+      let values          = {};
+      values["uid"]       = self.__username ;
+      values["strprc"]  = '18000.00';
+      values["exch"]      = 'NSE';
+          values["tsym"]      = 'Nifty 50';
+          values["cnt"] = '4';
+          console.log(values);
+      
+      let reply = post_request("get_option_chain", values, self.__susertoken);
+      return reply;
+    };
+
     /**
          * Description
          * @method start_websocket

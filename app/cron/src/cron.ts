@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { appConfig } from './config';
 import { ddbClient } from './db';
-import { getGlobalMarket } from './globalMarket';
-import { getIndiaMarket } from './indianMarket/v2';
+import { getGlobalMarket } from './marketData/globalMarket';
+import { getIndiaMarket } from './marketData/indianMarket/v2';
 import { ssnClient } from './notification';
 
 export const run = async (event: any, context: any): Promise<void> => {

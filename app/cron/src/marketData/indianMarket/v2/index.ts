@@ -1,4 +1,4 @@
-import { scrapIndiaMarket } from '../v2/scrape';
+import { scrapIndiaMarket } from './scrape';
 
 export async function getIndiaMarket() {
     const niftyTrend1Min = await scrapIndiaMarket(60);

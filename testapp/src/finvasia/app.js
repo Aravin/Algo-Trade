@@ -7,7 +7,7 @@ const api = new Api({});
 api.login(authparams)
     .then((res) => {
 
-        api.get_limits()
+        api.get_option_chain(res)
             .then(data => console.log(data))
             .catch(err => console.log(err.message))
 

@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as cheerio from 'cheerio';
-import { getTrend } from "../../helpers/common/getTrend";
+import { getTrend } from "../../../helpers/common/getTrend";
 
 const INVESTING_NIFTY_TECH_API = 'https://in.investing.com/instruments/Service/GetTechincalData';
 // TODO: use new API https://in.investing.com/indices/s-p-cnx-nifty-technical?timeFrame=60
