@@ -259,22 +259,12 @@ const placeSellOrder = async (script: string, lot: number) => {
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }
 
-// move to new file
-const inverseVolatility = {
-    'high volatility': 'less volatility',
-    'less volatility': 'high volatility',
-}
-
 const canExitPosition = (
     changePercent: number,
     volatility: string,
     orderedSentiment: string,
     currentSentiment: string,
 ) => {
-
-    if (orderedSentiment !== currentSentiment) {
-        volatility = inverseVolatility[volatility.toLowerCase() as keyof typeof inverseVolatility];
-    }
 
     let maxProfitPerTrade = appConfig.maxProfitPerTrade;
     let maxLossPerTrade = appConfig.maxLossPerTrade;
