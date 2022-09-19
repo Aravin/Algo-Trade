@@ -9,6 +9,7 @@ import { findNextExpiry } from "./shared/expiryDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
 import { log } from "./helpers/log";
 import { ssnClient } from "./helpers/notification";
+import { buySellSignal } from "./shared/buySellSignal";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -56,18 +57,13 @@ export const core = async (data: any) => {
 
         // from aws
         // const data = await ddbClient.get();
-        const { indiaSentiment, volatility } = data;
-        let globalSentiment = data.globalSentiment;
-        let orderType = data.buySellSignal;
+        const { momentum, volatility, indiaSentiment, globalSentiment, orderType } = data;
+
+        const buySellCall = buySellSignal(momentum, indiaSentiment, volatility, STATE, orderType);
 
         // finvasia
         const account = Account.getInstance();
         account.token = await api.login();
-
-        if (appConfig.skipGlobalMarket) {
-            globalSentiment = indiaSentiment;
-            orderType = skipGlobalMarketSignal(indiaSentiment)
-        }
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, Trading over for the day');
@@ -80,8 +76,8 @@ export const core = async (data: any) => {
                 PENDING_TRADE_PER_DAY = 0;
                 return;
             }
-            
-            if (!orderType) {
+
+            if (buySellCall !== 'buy') {
                 log.info(`No buy/sell signal in market! - Volatility ${volatility}`);
                 return;
             }
@@ -188,7 +184,7 @@ export const core = async (data: any) => {
             }
 
             // holding the position
-            if (indiaSentiment === ORDERED_SENTIMENT) {
+            if (buySellCall === 'hold') {
                 log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
                 return;
             }
