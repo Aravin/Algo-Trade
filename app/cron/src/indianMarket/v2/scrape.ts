@@ -1,6 +1,5 @@
 import axios from "axios";
 import * as cheerio from 'cheerio';
-import { getTrend } from "../../helpers/common/getTrend";
 
 const INVESTING_NIFTY_TECH_API = 'https://in.investing.com/instruments/Service/GetTechincalData';
 // TODO: use new API https://in.investing.com/indices/s-p-cnx-nifty-technical?timeFrame=60
@@ -21,10 +20,16 @@ export async function scrapIndiaMarket(duration: number) {
         const $ = cheerio.load(niftyTrend.data, null, false);
 
         return {
-            trend: {
+            momentum: {
                 rsi: {
                     value: $('#curr_table > tbody > tr:nth-child(1) > td.right').text().toLowerCase(),
                     action: $('#curr_table > tbody > tr:nth-child(1) > td.left > span').text().toLowerCase(),
+                },
+            },
+            trend: {
+                macd: {
+                    value: $('#curr_table > tbody > tr:nth-child(5) > td.right').text().toLowerCase(),
+                    action: $('#curr_table > tbody > tr:nth-child(5) > td.left > span').text().toLowerCase(),
                 },
             },
             volatility: {
@@ -37,7 +42,7 @@ export async function scrapIndiaMarket(duration: number) {
         }
 
     }
-    catch (err: any) {
-        throw new Error(err.message);
+    catch (err: unknown) {
+        throw new Error((err as Error).message);
     }
 }
