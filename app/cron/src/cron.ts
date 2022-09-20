@@ -64,6 +64,7 @@ export const run = async (event: any, context: any): Promise<void> => {
     catch (err: unknown) {
         const errorMessage = `CRON - ${(err as Error).message}`;
         console.log(errorMessage);
+        console.log((err as Error).stack);
         ssnClient.postMessage(errorMessage);
     }
 };
