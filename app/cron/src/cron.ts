@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { appConfig } from './config';
 import { ddbClient } from './db';
-import { getGlobalMarket } from './globalMarket';
 import { getIndiaMarket } from './indianMarket/v2';
 import { ssnClient } from './notification';
 
@@ -12,33 +11,32 @@ export const run = async (event: any, context: any): Promise<void> => {
         const dateTime = new Date().toISOString();
         console.log('cron', 'cron called', dateTime);
 
-        const globalSentiment = await getGlobalMarket();
+        // const globalSentiment = await getGlobalMarket();
         const { momentum, trend: localSentiment, volatility } = await getIndiaMarket(); // trend can be 'buy', 'sell' 'overbougnt',  'oversold'
         let marketStatus = '';
         let buySellSignal = '';
 
         console.log('cron', 'getGlobalMarket & getIndiaMarket completed');
 
-        if (globalSentiment !== localSentiment) {
-            marketStatus = `Global & Indian Market Sentiment is different`;
-        }
-        else if (new Set([globalSentiment, localSentiment, 'neutral']).size === 1) {
-            marketStatus = `Market Sentiment is neutral`;
-        }
-        else if (volatility.includes('less')) {
+        // if (globalSentiment !== localSentiment) {
+        //     marketStatus = `Global & Indian Market Sentiment is different`;
+        // }
+        // else if (new Set([globalSentiment, localSentiment, 'neutral']).size === 1) {
+        //     marketStatus = `Market Sentiment is neutral`;
+        // }
+        if (volatility.includes('less')) {
             marketStatus = `No volatility in market`;
         }
-        else if (new Set([globalSentiment, localSentiment, 'buy']).size === 1) {
+        else if (new Set([localSentiment, 'buy']).size === 1) {
             marketStatus = `Market is Positive`;
             buySellSignal = 'CE';
         }
-        else if (new Set([globalSentiment, localSentiment, 'sell']).size === 1) {
+        else if (new Set([localSentiment, 'sell']).size === 1) {
             marketStatus = `Market is Negative`;
             buySellSignal = 'PE';
         }
 
         const data = {
-            globalSentiment,
             indiaSentiment: localSentiment,
             momentum,
             volatility,

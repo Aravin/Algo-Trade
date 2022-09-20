@@ -71,6 +71,9 @@ export async function getGlobalMarket() {
         return 'neutral';
     }
     catch (err: any) {
+        console.log(err.response);
         throw new Error(err.message);
     }
 }
+
+getGlobalMarket();
