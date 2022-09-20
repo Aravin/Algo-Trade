@@ -7,17 +7,17 @@ import { ssnClient } from './notification';
 
 export const run = async (event: any, context: any): Promise<void> => {
     try {
-        console.time('cron');
+        console.log('cron');
 
         const dateTime = new Date().toISOString();
-        console.timeLog('cron', 'cron called', dateTime);
+        console.log('cron', 'cron called', dateTime);
 
         const globalSentiment = await getGlobalMarket();
         const { momentum, trend: localSentiment, volatility } = await getIndiaMarket(); // trend can be 'buy', 'sell' 'overbougnt',  'oversold'
         let marketStatus = '';
         let buySellSignal = '';
 
-        console.timeLog('cron', 'getGlobalMarket & getIndiaMarket completed');
+        console.log('cron', 'getGlobalMarket & getIndiaMarket completed');
 
         if (globalSentiment !== localSentiment) {
             marketStatus = `Global & Indian Market Sentiment is different`;
@@ -46,7 +46,7 @@ export const run = async (event: any, context: any): Promise<void> => {
             marketStatus,
             buySellSignal,
         };
-        console.timeLog('cron', data);
+        console.log('cron', data);
 
         // post to webhook
         try {
@@ -59,7 +59,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         ddbClient.update(data);
         ddbClient.insert(data);
 
-        console.timeEnd('cron');
+        console.log('cron end');
     }
     catch (err: unknown) {
         const errorMessage = `CRON - ${(err as Error).message}`;
