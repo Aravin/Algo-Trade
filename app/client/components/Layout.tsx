@@ -2,6 +2,7 @@ import { RobotOutlined, ApiOutlined, DashboardOutlined } from '@ant-design/icons
 import type { MenuProps } from 'antd';
 import { Breadcrumb, Layout, Menu } from 'antd';
 import { Footer } from 'antd/lib/layout/layout';
+import { useRouter } from 'next/router';
 import React, { useState } from 'react';
 
 const { Header, Content, Sider } = Layout;
@@ -24,13 +25,13 @@ const items2: MenuProps['items'] = [
 
     children: [
       {
-        key: 'timeBased',
+        key: 'strategies',
         label: `Time Based`,
       }
     ],
   },
   {
-    key: `Brokers`,
+    key: `brokers`,
     icon: React.createElement(ApiOutlined),
     label: `Brokers`,
   },
@@ -39,10 +40,16 @@ const items2: MenuProps['items'] = [
 const AppLayout = ({ children }: any) => {
 
   const [collapsed, setCollapsed] = useState(false);
+  const router = useRouter();
 
   const toggleCollapsed = () => {
     setCollapsed(!collapsed);
   };
+
+  const menuOnClick = (event: any) => {
+    console.log('menu clicked', event);
+    router.push(event.key)
+  }
 
   return (
     <Layout className='min-h-screen'>
@@ -54,16 +61,16 @@ const AppLayout = ({ children }: any) => {
         <Sider breakpoint='lg' collapsedWidth="0" collapsible collapsed={collapsed} onCollapse={value => setCollapsed(value)} width={200} className="site-layout-background">
           <Menu
             mode="inline"
-            defaultSelectedKeys={['1']}
-            defaultOpenKeys={['sub1']}
+            defaultSelectedKeys={['dashboard']}
             style={{ height: '100%', borderRight: 0 }}
             items={items2}
+            onClick={menuOnClick}
+            onChange={menuOnClick}
           />
         </Sider>
         <Layout style={{ padding: '0 24px 24px' }}>
           <Breadcrumb style={{ margin: '16px 0' }}>
             <Breadcrumb.Item>Home</Breadcrumb.Item>
-            <Breadcrumb.Item>List</Breadcrumb.Item>
             <Breadcrumb.Item>App</Breadcrumb.Item>
           </Breadcrumb>
           <Content
@@ -74,7 +81,7 @@ const AppLayout = ({ children }: any) => {
               minHeight: 280,
             }}
           >
-            Content
+            {children}
           </Content>
         </Layout>
       </Layout>
