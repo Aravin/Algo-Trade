@@ -75,7 +75,7 @@ const Dashboard: React.FC = () => {
         </Button>
         
       </div>
-      <Table  dataSource={data}>
+      <Table  dataSource={data} scroll={{ x: 1300 }}>
         <Column title="Symbol" dataIndex="symbol" key="symbol" />
         <Column title="Broker" dataIndex="broker" key="broker" />
         <Column title="Lots" dataIndex="lots" key="lots" />
@@ -93,6 +93,8 @@ const Dashboard: React.FC = () => {
         <Column
           title="Action"
           key="action"
+          fixed='right'
+          width={100}
           render={(_: any, record: DataType) => (
             <Space size="middle">
               <a className='text-blue-500'> <EditOutlined/> </a>

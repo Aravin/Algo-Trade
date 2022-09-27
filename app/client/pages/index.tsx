@@ -97,7 +97,7 @@ const Dashboard: React.FC = () => {
           {hasSelected ? `Selected ${selectedRowKeys.length} items` : ''}
         </span>
       </div>
-      <Table rowSelection={rowSelection} dataSource={data}>
+      <Table rowSelection={rowSelection} dataSource={data} scroll={{ x: 1300 }}>
         <Column title="Symbol" dataIndex="symbol" key="symbol" />
         <Column title="Broker" dataIndex="broker" key="broker" />
         <Column title="Lots" dataIndex="lots" key="lots" />
@@ -114,6 +114,8 @@ const Dashboard: React.FC = () => {
         <Column
           title="Action"
           key="action"
+          fixed='right'
+          width={100}
           render={(_: any, record: DataType) => (
             <Space size="middle">
               <a className='text-red-500'> <CloseCircleOutlined/> </a>

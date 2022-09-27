@@ -45,7 +45,7 @@ const Dashboard: React.FC = () => {
         </Button>
         
       </div>
-      <Table  dataSource={data}>
+      <Table  dataSource={data} scroll={{ x: 1300 }}>
         <Column title="Broker" dataIndex="broker" key="broker" />
         <Column title="ClientId" dataIndex="clientId" key="clientId" />
         <Column title="Status" dataIndex="status" key="status" />
@@ -53,6 +53,8 @@ const Dashboard: React.FC = () => {
         <Column
           title="Action"
           key="action"
+          fixed='right'
+          width={100}
           render={(_: any, record: DataType) => (
             <Space size="middle">
               <a className='text-blue-500'> <ApiOutlined/> </a>
