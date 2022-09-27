@@ -47,7 +47,7 @@ const AppLayout = ({ children }: any) => {
   return (
     <Layout className='min-h-screen'>
       <Header className="header" >
-        <div className="logo"> <img src='https://via.placeholder.com/120x30'></img> </div>
+        <div className="logo"> <img src='/logo.png'></img> </div>
         <Menu className='flex-row-reverse' theme="dark" mode="horizontal" items={items1} />
       </Header>
       <Layout>
