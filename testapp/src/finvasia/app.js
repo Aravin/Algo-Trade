@@ -7,7 +7,15 @@ const api = new Api({});
 api.login(authparams)
     .then((res) => {
 
-        api.get_limits()
+        console.log(res?.data);
+
+        // limits
+        // api.get_limits()
+        //     .then(data => console.log(data))
+        //     .catch(err => console.log(err.message))
+
+        // history data
+        api.get_time_price_series('NFO', 'token', '1664202280', '1664288680', '5')
             .then(data => console.log(data))
             .catch(err => console.log(err.message))
 
