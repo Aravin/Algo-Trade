@@ -11,8 +11,6 @@ const main = async () => {
 
 const niftySentiment = (data) => {
     let sentiment = 'very bearish';
-
-    // const adv = parseInt(data.advances, 10);
     let adv = 5;
 
     if (adv > 40) {
