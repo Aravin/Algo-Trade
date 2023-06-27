@@ -12,14 +12,6 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 - If everything goes good, place order (via finvasia)
 - Exit the order if profit or loss hit (configurable %)
 
-## V1
-
-- Scrap Investing.com and get global indicies trend
-- Scrap Investing.com and get last 5 min trend & 1 min trend to get sentiment & direction
-- Use technical indicator ATR, RSI, HL
-- If everything goes good, place order (via finvasia)
-- Exit the order if profit or loss hit (configurable %)
-
 ## V2
 
 - Scrap Investing.com and get global indicies trend
