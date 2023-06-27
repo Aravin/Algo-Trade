@@ -24,6 +24,7 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 
 - Fetch global sentiment from moneycontrol.com
 - Fetch nifty50 sentiment from nseindia.com - AD Ratio
+- Fetch OI PCR from niftytrader.com
 - place order (via upstox)
 - exit if profit or loss hit
 

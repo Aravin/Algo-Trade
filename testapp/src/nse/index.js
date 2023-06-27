@@ -2,7 +2,6 @@ const axios = require("axios");
 
 const NSE_NIFTY50 = 'https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050';
 
-
 const main = async () => {
     const response = await axios.get(NSE_NIFTY50);
     const sentiment = niftySentiment(response.data.advance);
@@ -11,7 +10,7 @@ const main = async () => {
 
 const niftySentiment = (data) => {
     let sentiment = 'very bearish';
-    let adv = 5;
+    let adv = data.advances;
 
     if (adv > 40) {
         sentiment = 'very bullish' 
