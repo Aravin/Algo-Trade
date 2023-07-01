@@ -2,7 +2,7 @@ import { log } from '../log';
 import { SNSClient, PublishCommandInput, PublishCommand } from "@aws-sdk/client-sns";
 import { appConfig } from '../../config/app';
 
-export const ssnClient = (() => {
+const ssnClient = (() => {
     let instance: SNSClient;
 
     const createInstance = () => {

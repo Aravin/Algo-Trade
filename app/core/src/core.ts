@@ -8,8 +8,8 @@ import { Account } from "./models/account";
 import { findNextExpiry } from "./shared/expiryDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
 import { log } from "./helpers/log";
-import { ssnClient } from "./helpers/notification";
 import { buySellSignal } from "./shared/buySellSignal";
+import { sendNotification } from "./helpers/notification/telegram";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -67,6 +67,7 @@ export const core = async (data: any) => {
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, Trading over for the day');
+            sendNotification('Service Stopped, Trading over for the day');
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
@@ -214,7 +215,7 @@ export const core = async (data: any) => {
             log.error((err as Error).message);
         }
 
-        ssnClient.postMessage(`CORE - ${(err as Error).message}`);
+        sendNotification(`CORE - ${(err as Error).message}`);
         log.error('Error: Retry at next attempt. ');
     }
 }
@@ -244,6 +245,8 @@ const placeBuyOrder = async (callOrPut: string) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
+    sendNotification(`Buy Order placed on ${script.values[0].tsym} - ${orderLot} nos.`)
+
     return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
 
@@ -251,6 +254,8 @@ const placeSellOrder = async (script: string, lot: number) => {
     const order = await api.placeOrder('S', script, lot);
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
+
+    sendNotification(`Exit Order placed on ${script} - ${lot} nos.`)
 
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }

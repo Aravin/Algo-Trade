@@ -36,5 +36,9 @@ export const appConfig = {
         code: process.env.UPSTOX_CODE,
         apiKey: process.env.UPSTOX_API_KEY,
         secret: process.env.UPSTOX_SECRET
+    },
+    telegram: {
+        botId: process.env.TELEGRAM_BOT_ID,
+        chatId: process.env.TELEGRAM_CHAT_ID,
     }
 }
