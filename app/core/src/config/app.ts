@@ -30,5 +30,11 @@ export const appConfig = {
         sns: {
             topic: process.env.AWS_SNS_TOPIC,
         }
+    },
+    upstox: {
+        baseURL: process.env.UPSTOX_BASE_URL,
+        code: process.env.UPSTOX_CODE,
+        apiKey: process.env.UPSTOX_API_KEY,
+        secret: process.env.UPSTOX_SECRET
     }
 }
