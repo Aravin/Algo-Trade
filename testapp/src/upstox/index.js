@@ -19,11 +19,12 @@ app.get('/', (req, res) => {
 app.get('/redirect', async (req, res) => {
   console.log(req.body);
   console.log(req.query);
+  const code = req.query.code || 'xyz';
 
   if (!isLogged) {
     const response = await axios.post(
         `${BASE_URL}/login/authorization/token`,
-        `code=${req.query.code}&client_id=${process.env.UPSTOX_CLIENT_ID}&client_secret=${process.env.UPSTOX_CLIENT_SECRRET}&redirect_uri=http://localhost:3000/redirect&grant_type=authorization_code`,
+        `code=${code}&client_id=${process.env.UPSTOX_CLIENT_ID}&client_secret=${process.env.UPSTOX_CLIENT_SECRRET}&redirect_uri=http://localhost:3000/redirect&grant_type=authorization_code`,
         {
             headers: {
                 'Api-Version': '2.0'
