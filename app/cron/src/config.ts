@@ -8,5 +8,9 @@ export const appConfig = {
         sns: {
             topic: process.env.AWS_SNS_TOPIC,
         }
+    },
+    telegram: {
+        botId: process.env.TELEGRAM_BOT_ID,
+        chatId: process.env.TELEGRAM_CHAT_ID,
     }
 }

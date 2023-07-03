@@ -2,7 +2,7 @@ import axios from 'axios';
 import { appConfig } from './config';
 import { ddbClient } from './db';
 import { getIndiaMarket } from './indianMarket/v2';
-import { ssnClient } from './notification';
+import { sendNotification } from './notification/telegram';
 
 export const run = async (event: any, context: any): Promise<void> => {
     try {
@@ -63,7 +63,7 @@ export const run = async (event: any, context: any): Promise<void> => {
         const errorMessage = `CRON - ${(err as Error).message}`;
         console.log(errorMessage);
         console.log((err as Error).stack);
-        ssnClient.postMessage(errorMessage);
+        sendNotification(errorMessage);
     }
 };
 
@@ -75,7 +75,7 @@ export const reset = async (event: any, context: any): Promise<void> => {
     catch (err: unknown) {
         const errorMessage = `CRON - ${(err as Error).message}`;
         console.log(errorMessage);
-        ssnClient.postMessage(errorMessage);
+        sendNotification(errorMessage);
     }
 };
 
@@ -89,7 +89,7 @@ export const daysTradesLog = async (event: any, context: any): Promise<void> => 
     } catch (err: unknown) {
         const errorMessage = `CRON - DAYS_TRADE - ${(err as Error).message}`;
         console.log(errorMessage);
-        ssnClient.postMessage(errorMessage);
+        sendNotification(errorMessage);
     }
 }
 
