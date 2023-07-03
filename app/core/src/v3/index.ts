@@ -96,8 +96,7 @@ export const core = async (data: any) => {
 
         // finvasia
         const account = Account.getInstance();
-        // account.token = await api.login();
-        account.token = '83979ebcb7066b5e6bac2ca018ff7d86ec2f0344388e36799855a59b80c4032b';
+        account.token = await api.login();
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, Trading over for the day');
