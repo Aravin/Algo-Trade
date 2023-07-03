@@ -8,7 +8,7 @@ export const getMarketSentiment = (global: string, local: string, pcr: string): 
         const strategyMap = marketStrategyMapping.find(
             (v) => v.marketSentiment === local && v.putCallRatio == pcr);
 
-        return (strategyMap?.strategy || null);
+        return (strategyMap?.orderType || null);
     }
 
     return null;

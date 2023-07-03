@@ -43,6 +43,7 @@ export async function scrapIndiaMarket(duration: number) {
 
     }
     catch (err: unknown) {
-        throw new Error((err as Error).message);
+        const e = err as Error;
+        throw new Error(`${e.message} - ${e.stack}`);
     }
 }

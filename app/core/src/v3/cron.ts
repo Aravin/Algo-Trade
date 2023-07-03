@@ -27,10 +27,9 @@ export const cronMarketData = async () => {
     const pcr = analyzePCR(pcrResponse.data.resultData.oiPcrData.pcr);
 
     console.log({globalSentiment, niftySentiment, pcr});
+
+    return {globalSentiment, niftySentiment, pcr};
 }
-
-cronMarketData();
-
 
 const transformPriceApiData = (apiData: any) => {
     const header = apiData.header;
