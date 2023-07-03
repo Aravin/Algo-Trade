@@ -1,4 +1,6 @@
-export const getMarketSentiment = (global: string, local: string, pcr: string): string | null => {
+import { OrderTypes } from "../v3/types";
+
+export const getMarketSentiment = (global: string, local: string, pcr: string): OrderTypes => {
     const globalMap = globalNiftyMapping.find(
         (v) => v.globalSentiment === global && v.marketSentiment === local);
 
@@ -8,10 +10,10 @@ export const getMarketSentiment = (global: string, local: string, pcr: string): 
         const strategyMap = marketStrategyMapping.find(
             (v) => v.marketSentiment === local && v.putCallRatio == pcr);
 
-        return (strategyMap?.orderType || null);
+        return (strategyMap?.orderType as OrderTypes || 'hold');
     }
 
-    return null;
+    return 'hold';
 }
 
 const globalNiftyMapping = [

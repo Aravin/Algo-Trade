@@ -22,7 +22,7 @@ cron.schedule('35 * 10-14 * * 1-5', () => {
 const run = async () => {
     try {
         // from local
-        const data = await cronMarketData();
+        const data: cornData = await cronMarketData();
         await core(data);
     }
     catch (err: unknown) {
@@ -36,13 +36,11 @@ import { appConfig } from "./../config/app";
 import { Account } from "./../models/account";
 import { findNextExpiry } from "./../shared/expiryDate";
 import { toFixedNumber } from "./../helpers/number/toFixed";
-import { buySellSignal } from "./../shared/buySellSignal";
 import { cronMarketData } from './cron';
-import { appState } from './state';
-import { upstox } from '../services/upstox';
 import { getMarketSentiment } from '../shared/getMarketSentiment';
 import { api } from '../helpers/http';
 import { sendNotification } from '../helpers/notification/telegram';
+import { cornData } from './types';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -82,7 +80,7 @@ const resetDayTrades = () => {
     resetLastTrade();
 }
 
-export const core = async (data: any) => {
+export const core = async (data: cornData) => {
 
     try {
         const shortTime = +dayjs.tz(new Date()).format('HHmm');
@@ -99,19 +97,19 @@ export const core = async (data: any) => {
         account.token = await api.login();
 
         if (STATE === 'STOP') {
-            log.info('Service Stopped, Trading over for the day');
+            log.info('Service Stopped, trading over for the day');
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
             if (isMarketClosed) {
-                log.info('Market Closing Time ⌛, stopping the application');
+                log.info('Market closing time ⌛, stopping the application');
                 STATE = 'STOP';
                 PENDING_TRADE_PER_DAY = 0;
                 return;
             }
 
             if (!orderType || orderType == 'hold') {
-                log.info(`No buy/sell signal in market! - No Strategy`);
+                log.info(`No buy/sell signal in market! - No strategy`);
                 return;
             }
 
@@ -126,7 +124,7 @@ export const core = async (data: any) => {
             // }
 
             log.info(`Market is ${niftySentiment} ✅, placing ${orderType} Order`);
-            const order = await placeOrder(orderType as any);
+            const order = await placeOrder(orderType as 'buy' | 'sell');
 
             ORDER_ID = order.orderId;
             TRADE_ID = Date.now();
@@ -159,7 +157,7 @@ export const core = async (data: any) => {
             // special case - TODO: convert to event
             if (isMarketClosed) {
                 log.info('Market Closing Time ⌛, exiting the position');
-                const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+                const { orderId, sellPrice } = await placeExitOrder(SCRIPT, ORDER_LOT);
                 const changePercent = toFixedNumber(((sellPrice - ORDER_BUY_PRICE) / ORDER_BUY_PRICE) * 100);
                 const absChangePercent = toFixedNumber((((((sellPrice - ORDER_BUY_PRICE) * ORDER_LOT) + ACCOUNT_VALUE) - ACCOUNT_VALUE) / ACCOUNT_VALUE) * 100);
                 ddbClient.exitTradeLog(
@@ -193,7 +191,7 @@ export const core = async (data: any) => {
             if (canExit) {
                 log.info(`${canExit ? 'Dynamic ': ''}P&L reached ${absChangePercent} with market, exiting the position`);
 
-                const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+                const { orderId, sellPrice } = await placeExitOrder(SCRIPT, ORDER_LOT);
                 ddbClient.exitTradeLog(
                     {
                         orderId: orderId,
@@ -217,7 +215,7 @@ export const core = async (data: any) => {
             }
 
             log.info(`Indian Market is ${niftySentiment} ❌, exiting the position`);
-            const { orderId, sellPrice } = await placeSellOrder(SCRIPT, ORDER_LOT);
+            const { orderId, sellPrice } = await placeExitOrder(SCRIPT, ORDER_LOT);
             ddbClient.exitTradeLog(
                 {
                     orderId: orderId,
@@ -276,7 +274,7 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
 
-const placeSellOrder = async (script: string, lot: number) => {
+const placeExitOrder = async (script: string, lot: number) => {
     const order = await api.placeOrder('S', script, lot);
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);

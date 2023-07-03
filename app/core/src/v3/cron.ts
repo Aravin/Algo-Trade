@@ -1,12 +1,13 @@
 // TODO: move to cron project // IMPORTANT //
 
 import axios from "axios";
+import { cornData } from "./types";
 
 const MC_PRICEAPI = 'https://priceapi.moneycontrol.com/technicalCompanyData/globalMarket/getGlobalIndicesListingData?view=overview&deviceType=W';
 const NIFTYTRADER_NIFTY50 = 'https://webapi.niftytrader.in/webapi/symbol/nifty50-data';
 const NIFTYTRADER_PCR = 'https://webapi.niftytrader.in/webapi/option/oi-data?reqType=niftyoilist&reqDate=';
 
-export const cronMarketData = async () => {
+export const cronMarketData = async (): Promise<cornData> => {
     const marketData =
         await Promise.all(
             [
@@ -17,7 +18,7 @@ export const cronMarketData = async () => {
         );
 
     const globalSentimentResponse = marketData[0];
-    const globalSentimentData = transformPriceApiData(globalSentimentResponse.data)
+    const globalSentimentData = transformPriceApiData(globalSentimentResponse.data);
     const globalSentiment = evaluateMarketCondition(globalSentimentData);
 
     const niftySentimentResponse = marketData[1];
@@ -28,7 +29,7 @@ export const cronMarketData = async () => {
 
     console.log({globalSentiment, niftySentiment, pcr});
 
-    return {globalSentiment, niftySentiment, pcr};
+    return { globalSentiment, niftySentiment, pcr };
 }
 
 const transformPriceApiData = (apiData: any) => {
@@ -55,9 +56,7 @@ const transformPriceApiData = (apiData: any) => {
 }
 
 const evaluateMarketCondition = (marketData: any) => {
-    const marketCount = marketData.length;
     let marketCondition = 0;
-    let marketAverage = 'neutral';
 
     marketData.forEach((value: any) => {
         switch (value.technical_rating) {
@@ -79,35 +78,32 @@ const evaluateMarketCondition = (marketData: any) => {
     })
 
     if (marketCondition < 6) {
-        marketAverage = 'bullish'
+        return 'bullish'
     } else if (marketCondition > 10) {
-        marketAverage = 'bearish'
+        return 'bearish'
+    } else {
+        return 'neutral';
     }
-
-    return marketAverage;
 }
 
 const evaluateNiftySentiment = (data: unknown[]) => {
-    let sentiment = 'very bearish';
     const adv = data.filter((value) => (value as any).change_per > 0)?.length;
 
     if (adv > 40) {
-        sentiment = 'very bullish' 
+        return 'very bullish'
     } else if (adv > 30 && adv < 41) {
-        sentiment = 'bullish'
+        return 'bullish'
     } else if (adv > 20 && adv < 31) {
-        sentiment = 'neutral'
+        return 'neutral'
     } else if (adv > 10 && adv < 21) {
-        sentiment = 'bearish'
+        return 'bearish'
+    } else {
+        return 'very bearish';
     }
-
-    return sentiment;
 }
 
 const analyzePCR = (pcr: number) => {
-    if (pcr === 1) {
-        return 'neutral'
-    } else if (pcr > 1 && pcr < 1.6) {
+    if (pcr > 1 && pcr < 1.6) {
         return 'buy';
     } else if (pcr >= 1.6) {
         return 'overbought';
@@ -115,5 +111,7 @@ const analyzePCR = (pcr: number) => {
         return 'sell';
     } else if (pcr <= 0.6) {
         return 'oversold';
+    } else {
+        return 'neutral';
     }
 }
