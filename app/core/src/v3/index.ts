@@ -94,7 +94,7 @@ export const core = async (data: cornData) => {
 
         // finvasia
         const account = Account.getInstance();
-        account.token = 'a8519820cda25defc78cdaa4fcf2ca02e6f550f4950a4b045b50f242c55813bb'// await api.login();
+        account.token = await api.login();
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, trading over for the day');
