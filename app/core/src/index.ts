@@ -14,7 +14,6 @@ import { getMarketSentiment } from './shared/getMarketSentiment';
 import { isMarketClosed } from './shared/isMarketOpen';
 import { log } from './utils/log';
 import { sendNotification } from './utils/notification/telegram';
-import { tradeState } from './state';
 
 const TIMEZONE = "Asia/Kolkata";
 dayjs.extend(utc);
@@ -43,7 +42,6 @@ const run = async () => {
     }
 }
 
-const tradeStatus = tradeState();
 let STATE = 'START';
 let ORDER_ID = '';
 let TRADE_ID = 0;
@@ -276,7 +274,7 @@ const canExitPosition = (
     changePercent: number,
     orderedSentiment: string,
     currentSentiment: string,
-    ) => {
+) => {
 
     if (orderedSentiment !== currentSentiment) {
         return true;
