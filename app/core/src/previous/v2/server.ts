@@ -4,7 +4,7 @@ import timezone from 'dayjs/plugin/timezone';
 import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import { core, resetTrades } from './core';
-import { log } from '../../helpers/log';
+import { log } from '../../utils/log';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

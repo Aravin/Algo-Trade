@@ -6,10 +6,10 @@ import { ddbClient } from "../../utils/db";
 import { Account } from "../../models/account";
 import { findNextExpiry } from "../../shared/expiryDate";
 import { toFixedNumber } from "../../shared/number/toFixed";
-import { log } from "../../helpers/log";
 import { buySellSignal } from "../../shared/buySellSignal";
-import { sendNotification } from "../../helpers/notification/telegram";
 import { api } from "../../brokers/finvasia/apis";
+import { log } from "../../utils/log";
+import { sendNotification } from "../../utils/notification/telegram";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

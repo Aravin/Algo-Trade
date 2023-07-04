@@ -3,8 +3,8 @@ import utc from 'dayjs/plugin/utc';
 import timezone  from 'dayjs/plugin/timezone';
 import cron from 'node-cron';
 import { core } from './core';
-import { log } from '../../helpers/log';
 import { ddbClient } from '../../utils/db';
+import { log } from '../../utils/log';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
