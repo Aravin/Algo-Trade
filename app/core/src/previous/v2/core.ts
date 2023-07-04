@@ -1,15 +1,15 @@
 import dayjs from "dayjs";
 import utc from 'dayjs/plugin/utc';
 import timezone from "dayjs/plugin/timezone";
-import { appConfig } from "./config/app";
-import { ddbClient } from "./helpers/db";
-import { Account } from "./models/account";
-import { findNextExpiry } from "./shared/expiryDate";
-import { toFixedNumber } from "./helpers/number/toFixed";
-import { log } from "./helpers/log";
-import { buySellSignal } from "./shared/buySellSignal";
-import { sendNotification } from "./helpers/notification/telegram";
-import { api } from "./services/finvasia/apis";
+import { appConfig } from "../../config/app";
+import { ddbClient } from "../../utils/db";
+import { Account } from "../../models/account";
+import { findNextExpiry } from "../../shared/expiryDate";
+import { toFixedNumber } from "../../shared/number/toFixed";
+import { log } from "../../helpers/log";
+import { buySellSignal } from "../../shared/buySellSignal";
+import { sendNotification } from "../../helpers/notification/telegram";
+import { api } from "../../brokers/finvasia/apis";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);

@@ -1,4 +1,4 @@
-import { OrderTypes } from "../v3/types";
+import { OrderTypes } from "../types";
 
 export const getMarketSentiment = (global: string, local: string, pcr: string): OrderTypes => {
     const globalMap = globalNiftyMapping.find(
