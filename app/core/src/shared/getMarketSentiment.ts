@@ -8,7 +8,7 @@ export const getMarketSentiment = (global: string, local: string, pcr: string): 
 
     if (canTrade) {
         const strategyMap = marketStrategyMapping.find(
-            (v) => v.marketSentiment === local && v.putCallRatio == pcr);
+            (v) => v.marketSentiment === local && v.putCallRatio == pcr && v.strategy !== null);
 
         return (strategyMap?.orderType as OrderTypes || 'hold');
     }
@@ -246,3 +246,6 @@ const marketStrategyMapping = [
         "strategy": "Bull CALL Spread"
     }
 ];
+
+// const test = getMarketSentiment('bearish', 'bearish', 'buy');
+// console.log(test);

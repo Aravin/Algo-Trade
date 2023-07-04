@@ -3,13 +3,13 @@ import utc from 'dayjs/plugin/utc';
 import timezone from "dayjs/plugin/timezone";
 import { appConfig } from "./config/app";
 import { ddbClient } from "./helpers/db";
-import { api } from "./helpers/http";
 import { Account } from "./models/account";
 import { findNextExpiry } from "./shared/expiryDate";
 import { toFixedNumber } from "./helpers/number/toFixed";
 import { log } from "./helpers/log";
 import { buySellSignal } from "./shared/buySellSignal";
 import { sendNotification } from "./helpers/notification/telegram";
+import { api } from "./services/finvasia/apis";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -245,7 +245,7 @@ const placeBuyOrder = async (callOrPut: string) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
-    sendNotification(`Buy Order placed on ${script.values[0].tsym} - ${orderLot} nos.`)
+    sendNotification(`Buy Order placed on ${script.values[0].tsym} - ${orderLot} nos.`);
 
     return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
@@ -255,7 +255,7 @@ const placeSellOrder = async (script: string, lot: number) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
-    sendNotification(`Exit Order placed on ${script} - ${lot} nos.`)
+    sendNotification(`Exit Order placed on ${script} - ${lot} nos.`);
 
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }

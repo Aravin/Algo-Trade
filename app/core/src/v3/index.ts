@@ -38,7 +38,7 @@ import { findNextExpiry } from "./../shared/expiryDate";
 import { toFixedNumber } from "./../helpers/number/toFixed";
 import { cronMarketData } from './cron';
 import { getMarketSentiment } from '../shared/getMarketSentiment';
-import { api } from '../helpers/http';
+import { api } from '../services/finvasia/apis';
 import { sendNotification } from '../helpers/notification/telegram';
 import { cornData } from './types';
 
@@ -94,10 +94,11 @@ export const core = async (data: cornData) => {
 
         // finvasia
         const account = Account.getInstance();
-        account.token = await api.login();
+        account.token = 'a8519820cda25defc78cdaa4fcf2ca02e6f550f4950a4b045b50f242c55813bb'// await api.login();
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, trading over for the day');
+            sendNotification('Service Stopped, Trading over for the day');
         }
         else if (STATE === 'START') {
             // special case - TODO: convert to event
@@ -118,10 +119,10 @@ export const core = async (data: cornData) => {
             //     return;
             // }
 
-            // if (niftySentiment === 'neutral') {
-            //     log.info(`No signal in Indian market!`);
-            //     return;
-            // }
+            if (niftySentiment === 'neutral') {
+                log.info(`No signal in Indian market!`);
+                return;
+            }
 
             log.info(`Market is ${niftySentiment} ✅, placing ${orderType} Order`);
             const order = await placeOrder(orderType as 'buy' | 'sell');
@@ -209,12 +210,14 @@ export const core = async (data: cornData) => {
             }
 
             // holding the position
-            if (orderType === 'hold' || niftySentiment === 'neutral') {
-                log.info(`Indian Market is ${ORDERED_SENTIMENT} ✅, holding the position`);
+            if (orderType === 'hold'
+                || niftySentiment === 'neutral'
+                || ORDERED_SENTIMENT === niftySentiment) {
+                log.info(`Market is ${ORDERED_SENTIMENT}, holding the position`);
                 return;
             }
 
-            log.info(`Indian Market is ${niftySentiment} ❌, exiting the position`);
+            log.info(`Market sentiment changed to ${niftySentiment} ❌, exiting the position`);
             const { orderId, sellPrice } = await placeExitOrder(SCRIPT, ORDER_LOT);
             ddbClient.exitTradeLog(
                 {
@@ -271,6 +274,8 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
 
+    sendNotification(`Buy order placed on ${script.values[0].tsym} - ${orderLot} nos.`);
+
     return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
 
@@ -278,6 +283,8 @@ const placeExitOrder = async (script: string, lot: number) => {
     const order = await api.placeOrder('S', script, lot);
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === order);
+
+    sendNotification(`Exit order placed on ${script} - ${lot} nos.`);
 
     return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
 }
