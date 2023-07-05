@@ -3,7 +3,6 @@ import utc from 'dayjs/plugin/utc';
 import timezone from "dayjs/plugin/timezone";
 import { appConfig } from "../../config/app";
 import { ddbClient } from "../../utils/db";
-import { Account } from "../../models/account";
 import { findNextExpiry } from "../../shared/expiryDate";
 import { toFixedNumber } from "../../shared/number/toFixed";
 import { buySellSignal } from "../../shared/buySellSignal";
@@ -60,10 +59,6 @@ export const core = async (data: any) => {
         const { momentum, volatility, indiaSentiment, globalSentiment, orderType } = data;
 
         const buySellCall = buySellSignal(momentum, indiaSentiment, volatility, STATE, orderType);
-
-        // finvasia
-        const account = Account.getInstance();
-        account.token = await api.login();
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, Trading over for the day');
@@ -242,22 +237,24 @@ const placeBuyOrder = async (callOrPut: string) => {
 
     const orderLot = Math.floor(tradeMargin / (scriptLot * scriptLastPrice)) * scriptLot;
     const order = await api.placeOrder('B', script.values[0].tsym, orderLot);
+    const orderNumber = order.norenordno;
     const orders = await api.orderList();
-    const lastOrder = orders.find((d: any) => d.norenordno === order);
+    const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
     sendNotification(`Buy Order placed on ${script.values[0].tsym} - ${orderLot} nos.`);
 
-    return { orderId: order, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
+    return { orderId: orderNumber, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
 
 const placeSellOrder = async (script: string, lot: number) => {
     const order = await api.placeOrder('S', script, lot);
+    const orderNumber = order.norenordno;
     const orders = await api.orderList();
-    const lastOrder = orders.find((d: any) => d.norenordno === order);
+    const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
     sendNotification(`Exit Order placed on ${script} - ${lot} nos.`);
 
-    return { orderId: order, script: script, sellPrice: +lastOrder?.avgprc };
+    return { orderId: orderNumber, script: script, sellPrice: +lastOrder?.avgprc };
 }
 
 const canExitPosition = (

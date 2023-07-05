@@ -2,7 +2,6 @@
 import axios from 'axios';
 import { apiPath } from '../../config/apiPath';
 import { config } from '../../config/config';
-import { Account } from '../../../../models/account';
 import { appConfig } from '../../../../config/app';
 
 export const scriptSearch = async (scriptText: string) => {
@@ -14,8 +13,10 @@ export const scriptSearch = async (scriptText: string) => {
     };
 
     const jData = 'jData=' + JSON.stringify(request);
-    const jKey = '&jKey=' + Account.getInstance().token;
+    const jKey = '&jKey=' + appConfig.token;
 
     const response =  await axios.post(config.basePath + apiPath.searchScript, jData + jKey);
     return response.data;
 };
+
+// scriptSearch('NIFTY 06JUL23 19500 CE');

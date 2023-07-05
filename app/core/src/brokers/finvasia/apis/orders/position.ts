@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { apiPath } from '../../config/apiPath';
 import { config } from '../../config/config';
-import { Account } from '../../../../models/account';
+import { appConfig } from '../../../../config/app';
 
 export const orderPositions = async (body: Record<string, any>) => {
 
@@ -13,7 +13,7 @@ export const orderPositions = async (body: Record<string, any>) => {
     };
 
     const jData = 'jData=' + JSON.stringify(request);
-    const jKey = '&jKey=' + Account.getInstance().token;
+    const jKey = '&jKey=' + appConfig.token;
 
     const response =  await axios.post(config.basePath + apiPath.ordersPosition, jData + jKey);
     return response.data;
