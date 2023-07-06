@@ -58,24 +58,37 @@ const transformPriceApiData = (apiData: any) => {
 const evaluateMarketCondition = (marketData: any) => {
     let marketCondition = 0;
 
-    marketData.forEach((value: any) => {
+    for (const value of marketData) {
+        let MULTIPLIER = 1;
+
+        if (['CCMP:IND', 'SPX:IND', 'sg;STII', 'tw;IXTA', 'th;SETI', 'id;JSC']
+            .includes(value.symbol)
+        ) {
+            continue;
+        }
+
+        if (value.symbol === 'in;gsx') {
+            MULTIPLIER = 2;
+            continue;
+        }
+
         switch (value.technical_rating) {
             case 'Very Bullish':
-                marketCondition += 2;
+                marketCondition += (2 * MULTIPLIER);
                 break;
             case 'Bullish':
-                marketCondition += 1;
+                marketCondition += (1 * MULTIPLIER);
                 break;
             case 'Very Bearish':
-                marketCondition -= 2;
+                marketCondition -= (2 * MULTIPLIER);
                 break;
             case 'Bearish':
-                marketCondition -= 1;
+                marketCondition -= (1 * MULTIPLIER);
                 break;
             default:
                 marketCondition += 0;
         }
-    })
+    }
 
     if (marketCondition < 6) {
         return 'bullish'
