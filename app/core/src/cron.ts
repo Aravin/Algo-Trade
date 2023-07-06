@@ -102,13 +102,17 @@ const evaluateMarketCondition = (marketData: any) => {
 const evaluateNiftySentiment = (data: unknown[]) => {
     const adv = data.filter((value) => (value as any).change_per > 0)?.length;
 
-    if (adv > 40) {
-        return 'very bullish'
-    } else if (adv > 30 && adv < 41) {
-        return 'bullish'
-    } else if (adv > 20 && adv < 31) {
+    if (isNaN(adv)) {
         return 'neutral'
-    } else if (adv > 10 && adv < 21) {
+    }
+
+    if (adv >= 39) {
+        return 'very bullish'
+    } else if (adv >= 29) {
+        return 'bullish'
+    } else if (adv >= 23) {
+        return 'neutral'
+    } else if (adv >= 13) {
         return 'bearish'
     } else {
         return 'very bearish';
