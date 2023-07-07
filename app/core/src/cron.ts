@@ -6,6 +6,7 @@ import { cornData } from "./types";
 const MC_PRICEAPI = 'https://priceapi.moneycontrol.com/technicalCompanyData/globalMarket/getGlobalIndicesListingData?view=overview&deviceType=W';
 const NIFTYTRADER_NIFTY50 = 'https://webapi.niftytrader.in/webapi/symbol/nifty50-data';
 const NIFTYTRADER_PCR = 'https://webapi.niftytrader.in/webapi/option/oi-data?reqType=niftyoilist&reqDate=';
+const NIFTYTRADER_MAXPAIN = 'https://webapi.niftytrader.in/webapi/symbol/today-spot-data?symbol=NIFTY+50';
 
 export const cronMarketData = async (): Promise<cornData> => {
     const marketData =
@@ -14,6 +15,7 @@ export const cronMarketData = async (): Promise<cornData> => {
                 axios.get(MC_PRICEAPI),
                 axios.get(NIFTYTRADER_NIFTY50),
                 axios.get(NIFTYTRADER_PCR),
+                axios.get(NIFTYTRADER_MAXPAIN),
             ],
         );
 
@@ -27,9 +29,12 @@ export const cronMarketData = async (): Promise<cornData> => {
     const pcrResponse = marketData[2];
     const pcr = analyzePCR(pcrResponse.data.resultData.oiPcrData.pcr);
 
-    console.log({globalSentiment, niftySentiment, pcr});
+    const maxPainResponse = marketData[3];
+    const maxPain = maxPainResponse.data.resultData.max_pain;
 
-    return { globalSentiment, niftySentiment, pcr };
+    console.log({g: globalSentiment, n: niftySentiment, pcr, mp: maxPain});
+
+    return { globalSentiment, niftySentiment, pcr, maxPain };
 }
 
 const transformPriceApiData = (apiData: any) => {
@@ -69,7 +74,6 @@ const evaluateMarketCondition = (marketData: any) => {
 
         if (value.symbol === 'in;gsx') {
             MULTIPLIER = 2;
-            continue;
         }
 
         switch (value.technical_rating) {
@@ -90,9 +94,9 @@ const evaluateMarketCondition = (marketData: any) => {
         }
     }
 
-    if (marketCondition < 6) {
+    if (marketCondition <= -8) {
         return 'bullish'
-    } else if (marketCondition > 10) {
+    } else if (marketCondition >= 8) {
         return 'bearish'
     } else {
         return 'neutral';

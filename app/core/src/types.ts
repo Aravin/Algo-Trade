@@ -10,4 +10,5 @@ export interface cornData {
     globalSentiment: MarketSentiments,
     niftySentiment: MarketSentimentFull,
     pcr: MarketIndications,
+    maxPain: number,
 }

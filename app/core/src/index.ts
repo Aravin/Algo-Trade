@@ -3,7 +3,7 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import cron from 'node-cron';
 import { cronMarketData } from './cron';
-import { cornData } from './types';
+import { MarketSentimentFull, cornData } from './types';
 import { appConfig } from './config/app';
 import { ddbClient } from './utils/db';
 import { toFixedNumber } from './shared/number/toFixed';
@@ -113,7 +113,7 @@ export const core = async (data: cornData) => {
             SCRIPT = order.script;
             ORDER_BUY_PRICE = +order.orderPrice;
             ORDER_LOT = +order.orderLot;
-            ORDERED_SENTIMENT = niftySentiment + '';
+            ORDERED_SENTIMENT = niftySentiment;
             ORDERED_TOKEN = order.scriptToken;
             STATE = 'ORDERED';
 
@@ -150,8 +150,11 @@ export const core = async (data: cornData) => {
                         pnl: changePercent,
                         absolutePnl: absChangePercent,
                         exitReason: 'Market Closing',
+                        highPrice: CURRENT_TRADE_HIGH_PRICE,
+                        lowPrice: CURRENT_TRADE_LOW_PRICE,
                     },
                 );
+                sendNotification(`Exit order placed - ${SCRIPT} - qty: ${ORDER_LOT} - pnl: ${changePercent}`);
                 resetDayTrades();
                 return;
             }
@@ -212,6 +215,7 @@ export const core = async (data: cornData) => {
                     lowPrice: CURRENT_TRADE_LOW_PRICE,
                 },
             );
+            sendNotification(`Exit order placed - ${SCRIPT} - qty: ${ORDER_LOT} - pnl: ${changePercent}`);
             resetLastTrade();
         }
     }
@@ -250,7 +254,7 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
-    sendNotification(`Buy order placed on ${script.values[0].tsym} - ${orderLot} nos.`);
+    sendNotification(`Buy order placed on ${script.values[0].tsym} - qty: ${orderLot}`);
 
     return { orderId: orderNumber, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
 }
@@ -261,27 +265,31 @@ const placeExitOrder = async (script: string, lot: number) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
-    sendNotification(`Exit order placed on ${script} - ${lot} nos.`);
-
-    return { orderId: orderNumber, script: script, sellPrice: +lastOrder?.avgprc };
+    return { orderId: orderNumber, sellPrice: +lastOrder?.avgprc };
 }
 
 const canExitPosition = (
     changePercent: number,
     orderedSentiment: string,
-    currentSentiment: string,
+    currentSentiment: MarketSentimentFull,
 ) => {
 
-    if (orderedSentiment !== currentSentiment) {
-        return true;
+    if (currentSentiment === 'neutral') {
+        return false;
+    } else if (orderedSentiment.includes('bullish') && currentSentiment.includes('bullish')) {
+        return false;
+    } else if (orderedSentiment.includes('bearish') && currentSentiment.includes('bearish')) {
+        return false;
     }
 
     const maxProfitPerTrade = appConfig.maxProfitPerTrade;
     const maxLossPerTrade = appConfig.maxLossPerTrade;
 
     if (changePercent > maxProfitPerTrade) {
+        console.log('1', changePercent, maxProfitPerTrade);
         return true;
     } else if (changePercent < -maxLossPerTrade) {
+        console.log('2', changePercent, -maxLossPerTrade);
         PENDING_LOSS_TRADE_PER_DAY--;
         return true;
     }
