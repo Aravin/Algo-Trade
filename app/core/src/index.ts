@@ -19,15 +19,12 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault(TIMEZONE);
 
-const schedule = (expression: string) => {
+export const scheduleCron = (expression: string) => {
     return cron.schedule(expression, () => {
         log.info(`Service Running... - ${dayjs().format('hh:mm:ss')}`);
         run();
     }, { timezone: TIMEZONE });
 };
-
-schedule('35 30-59/1 9 * * 1-5');
-schedule('35 * 10-14 * * 1-5');
 
 const run = async () => {
     try {
@@ -36,7 +33,7 @@ const run = async () => {
         await core(data);
     }
     catch (err: unknown) {
-        log.error(JSON.stringify(err, null, 2));
+        log.error(JSON.stringify((err as Error).stack, null, 2));
         log.error('Error: Retry at next attempt.');
     }
 }
@@ -220,9 +217,10 @@ export const core = async (data: cornData) => {
         }
     }
     catch (err: unknown) {
-        log.error(JSON.stringify(err, null, 2));
+        log.error(JSON.stringify((err as Error).stack, null, 2));
         log.error('Error: Retry at next attempt.');
         sendNotification(`CORE - ${(err as Error).message} - ${JSON.stringify((err as Error).stack)}`);
+        throw new Error((err as Error).message);
     }
 }
 
@@ -273,15 +271,6 @@ const canExitPosition = (
     orderedSentiment: string,
     currentSentiment: MarketSentimentFull,
 ) => {
-
-    if (currentSentiment === 'neutral') {
-        return false;
-    } else if (orderedSentiment.includes('bullish') && currentSentiment.includes('bullish')) {
-        return false;
-    } else if (orderedSentiment.includes('bearish') && currentSentiment.includes('bearish')) {
-        return false;
-    }
-
     const maxProfitPerTrade = appConfig.maxProfitPerTrade;
     const maxLossPerTrade = appConfig.maxLossPerTrade;
 
@@ -294,6 +283,14 @@ const canExitPosition = (
         return true;
     }
 
+    if (currentSentiment === 'neutral') {
+        return false;
+    } else if (orderedSentiment.includes('bullish') && currentSentiment.includes('bullish')) {
+        return false;
+    } else if (orderedSentiment.includes('bearish') && currentSentiment.includes('bearish')) {
+        return false;
+    }
+
     return false;
 }
 
@@ -301,3 +298,9 @@ export const resetTrades = () => {
     STATE = 'START';
     PENDING_TRADE_PER_DAY = appConfig.maxTradesPerDay;
 }
+
+export const setToken = (token: string) => {
+    appConfig.token = token;
+}
+
+export const exitTrade = () => placeExitOrder(SCRIPT, ORDER_LOT); 

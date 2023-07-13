@@ -1,11 +1,11 @@
 // official doc: https://www.finvasia.com/api-documentation#api-login
-import axios from 'axios';
 import { createHash } from 'crypto';
 import { apiPath } from '../config/apiPath';
 import { config } from '../config/config';
 import { appConfig } from '../../../config/app';
+import { axiosRequest } from '../../../utils/http/axios';
 
-export const login = async () => {
+export const login = async (authCode: string) => {
 
     const pwdHash = createHash('sha256').update(appConfig.pwd as string).digest('hex');
     const appKeyHash = createHash('sha256').update(`${appConfig.userId}|${appConfig.apiKey}`).digest('hex');
@@ -14,7 +14,7 @@ export const login = async () => {
         apkversion: config.apkVersion,
         uid: appConfig.userId,
         pwd: pwdHash,
-        factor2: appConfig.login2fa,
+        factor2: authCode,
         vc: appConfig.vc,
         imei: appConfig.imei,
         source: config.source,
@@ -23,6 +23,6 @@ export const login = async () => {
 
     const jData = 'jData=' + JSON.stringify(loginRequest);
 
-    const response =  await axios.post(config.basePath + apiPath.login, jData);
-    return response.data.susertoken;
+    const response =  await axiosRequest.post(config.basePath + apiPath.login, jData);
+    return response.data;
 };
