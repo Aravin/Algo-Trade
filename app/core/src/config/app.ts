@@ -15,6 +15,7 @@ export const appConfig = {
     skipGlobalMarket: process.env.SETTINGS_SKIP_GLOBAL_MARKET === 'true' ? true : false,
     otmPrice: +(process.env.SETTINGS_OTM_PRICE || 200),
     buyStrength: process.env.SETTINGS_BUY_STRENGTH || '',
+    tradesMissedDueToInsufficientFund: +(process.env.SETTINGS_TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND || 10),
     // finvasia
     proxyApiPath: process.env.FINVASIA_PROXY_PATH || '',
     proxyApiKey: process.env.FINVASIA_PROXY_APIKEY || '',

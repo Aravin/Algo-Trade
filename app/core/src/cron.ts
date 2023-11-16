@@ -3,19 +3,19 @@
 import axios from "axios";
 import { cornData } from "./types";
 
-const MC_PRICEAPI = 'https://priceapi.moneycontrol.com/technicalCompanyData/globalMarket/getGlobalIndicesListingData?view=overview&deviceType=W';
-const NIFTYTRADER_NIFTY50 = 'https://webapi.niftytrader.in/webapi/symbol/nifty50-data';
-const NIFTYTRADER_PCR = 'https://webapi.niftytrader.in/webapi/option/oi-data?reqType=niftyoilist&reqDate=';
-const NIFTYTRADER_MAXPAIN = 'https://webapi.niftytrader.in/webapi/symbol/today-spot-data?symbol=NIFTY+50';
+const MC_PRICEAPI_URL = 'https://priceapi.moneycontrol.com/technicalCompanyData/globalMarket/getGlobalIndicesListingData?view=overview&deviceType=W';
+const NIFTYTRADER_NIFTY50_URL = 'https://webapi.niftytrader.in/webapi/symbol/nifty50-data';
+const NIFTYTRADER_PCR_URL = 'https://webapi.niftytrader.in/webapi/option/oi-data?reqType=niftyoilist&reqDate=';
+const NIFTYTRADER_MAXPAIN_URL = 'https://webapi.niftytrader.in/webapi/symbol/today-spot-data?symbol=NIFTY+50';
 
 export const cronMarketData = async (): Promise<cornData> => {
     const marketData =
         await Promise.all(
             [
-                axios.get(MC_PRICEAPI),
-                axios.get(NIFTYTRADER_NIFTY50),
-                axios.get(NIFTYTRADER_PCR),
-                axios.get(NIFTYTRADER_MAXPAIN),
+                axios.get(MC_PRICEAPI_URL),
+                axios.get(NIFTYTRADER_NIFTY50_URL),
+                axios.get(NIFTYTRADER_PCR_URL),
+                axios.get(NIFTYTRADER_MAXPAIN_URL),
             ],
         );
 

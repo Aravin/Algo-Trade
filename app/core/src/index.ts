@@ -51,6 +51,7 @@ let PENDING_LOSS_TRADE_PER_DAY = appConfig.maxLossTradesPerDay;
 let ACCOUNT_VALUE = 0;
 let CURRENT_TRADE_LOW_PRICE = 0;
 let CURRENT_TRADE_HIGH_PRICE = 0;
+let TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND = appConfig.tradesMissedDueToInsufficientFund;
 
 const resetLastTrade = () => {
     --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
@@ -65,6 +66,7 @@ const resetLastTrade = () => {
     ACCOUNT_VALUE = 0;
     CURRENT_TRADE_LOW_PRICE = 0;
     CURRENT_TRADE_HIGH_PRICE = 0;
+    TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND = appConfig.tradesMissedDueToInsufficientFund;
 }
 
 const resetDayTrades = () => {
@@ -219,7 +221,6 @@ export const core = async (data: cornData) => {
     catch (err: unknown) {
         log.error(JSON.stringify((err as Error).stack, null, 2));
         log.error('Error: Retry at next attempt.');
-        sendNotification(`CORE - ${(err as Error).message} - ${JSON.stringify((err as Error).stack)}`);
         throw new Error((err as Error).message);
     }
 }
@@ -242,7 +243,11 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     const scriptLot = +scriptQuote.ls;
     const requiredMargin = Math.ceil(scriptLastPrice * scriptLot);
 
-    if (requiredMargin > tradeMargin) {
+    if (requiredMargin > tradeMargin) { 
+        if (TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND-- <= 0) {
+            STATE = 'STOPPED'
+        }
+
         throw new Error(`Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${tradeMargin}`);
     }
 

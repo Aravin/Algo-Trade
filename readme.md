@@ -2,17 +2,31 @@
 
 NIFTY50 Option Trading based on Global sentiment and well-known technical indicators.
 
-![Basic Flow Diagram](https://github.com/Aravin/Algo-Trade/raw/main/assets/images/basic-flow-diagram.png)
+![Basic Flow Diagram](/assets/images/basic-flow-diagram.png)
 
-## V1
+## Local Setup
 
-- Scrap Investing.com and get global indicies trend
-- Scrap Investing.com and get last 5 min trend & 1 min trend to get sentiment & direction
-- Use technical indicator ATR, RSI, HL
-- If everything goes good, place order (via finvasia)
-- Exit the order if profit or loss hit (configurable %)
+1. Open the folder `app/core`
+2. Run the command `yarn install` or `npm install`
+3. Create the `.env` file and update the broker details & other configurations. Refer `.env.sample` for more details.
+4. Compile the project `tsc`
+5. Run the job `yarn run start` or `npm run start`.
 
-## V2
+![App Starting Log](/assets/images/app-start.png)
+
+![Trade Notification Log](/assets/images/telegram-notify.jpg)
+
+## Releases
+
+### V3 (latest)
+
+- Fetch global sentiment from moneycontrol.com
+- Fetch nifty50 sentiment from nseindia.com - AD Ratio
+- Fetch OI PCR from niftytrader.com
+- place order (via upstox)
+- exit if profit or loss hit
+
+### V2
 
 - Scrap Investing.com and get global indicies trend
 - Scrap Investing.com and get last 1 min trend to get sentiment & direction
@@ -20,13 +34,13 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 - If everything goes good, place order (via finvasia)
 - Exit the order if profit or loss hit (configurable %)
 
-## V3
+### V1
 
-- Fetch global sentiment from moneycontrol.com
-- Fetch nifty50 sentiment from nseindia.com - AD Ratio
-- Fetch OI PCR from niftytrader.com
-- place order (via upstox)
-- exit if profit or loss hit
+- Scrap Investing.com and get global indicies trend
+- Scrap Investing.com and get last 5 min trend & 1 min trend to get sentiment & direction
+- Use technical indicator ATR, RSI, HL
+- If everything goes good, place order (via finvasia)
+- Exit the order if profit or loss hit (configurable %)
 
 ## Global Sentiments
 
@@ -49,13 +63,13 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 3. RSI
 4. MACD
 
-## No. of Trades
+## Configurations
 
-- Configurable
-
-## Profit Percentage
-
-- Configurable
+- Max trades per day
+- Max profit % per day
+- Max profit % per trade
+- Max loss % per day
+- Max loss % per trade
 
 ## How to Access?
 
@@ -65,7 +79,7 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 ## Supported Brokers
 
 - Finvasia
-- Upstox
+- Upstox (in progress)
 
 ## Important Links
 
@@ -79,5 +93,4 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 
 ## Trade Logs (store in AWS)
 
-![Basic Flow Diagram](https://github.com/Aravin/Algo-Trade/raw/main/assets/images/trade-log.png)
-
+![Basic Flow Diagram](assets/images/trade-log.png)
