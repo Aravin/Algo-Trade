@@ -52,6 +52,7 @@ let ACCOUNT_VALUE = 0;
 let CURRENT_TRADE_LOW_PRICE = 0;
 let CURRENT_TRADE_HIGH_PRICE = 0;
 let TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND = appConfig.tradesMissedDueToInsufficientFund;
+let TRADING_OVER_NOTIFICATION_SENT = false;
 
 const resetLastTrade = () => {
     --PENDING_TRADE_PER_DAY ? STATE = 'START' : STATE = 'STOP';
@@ -84,7 +85,11 @@ export const core = async (data: cornData) => {
 
         if (STATE === 'STOP') {
             log.info('Service Stopped, trading over for the day');
-            sendNotification('Service Stopped, Trading over for the day');
+
+            if (!TRADING_OVER_NOTIFICATION_SENT) {
+                sendNotification('Service Stopped, trading over for the day');
+                TRADING_OVER_NOTIFICATION_SENT = true;
+            }
         }
         else if (STATE === 'START') {
             if (isMarketClosed()) {
@@ -170,7 +175,7 @@ export const core = async (data: cornData) => {
 
             log.debug({ ORDER_BUY_PRICE, lp, changePercent, absChangePercent });
 
-            const canExit = canExitPosition(changePercent, ORDERED_SENTIMENT, niftySentiment);
+            const canExit = canExitPosition(changePercent, ORDERED_SENTIMENT as MarketSentimentFull, niftySentiment);
 
             if (canExit) {
                 log.info(`${canExit ? 'Dynamic ' : ''}P&L reached ${absChangePercent} with market, exiting the position`);
@@ -243,7 +248,7 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     const scriptLot = +scriptQuote.ls;
     const requiredMargin = Math.ceil(scriptLastPrice * scriptLot);
 
-    if (requiredMargin > tradeMargin) { 
+    if (requiredMargin > tradeMargin) {
         if (TRADES_MISSED_DUE_TO_INSUFFICIENT_FUND-- <= 0) {
             STATE = 'STOPPED'
         }
@@ -257,6 +262,7 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
+    // bad code: violate SRP
     sendNotification(`Buy order placed on ${script.values[0].tsym} - qty: ${orderLot}`);
 
     return { orderId: orderNumber, script: script.values[0].tsym, orderLot: orderLot, orderPrice: lastOrder?.avgprc, scriptToken: script.values[0].token };
@@ -268,26 +274,45 @@ const placeExitOrder = async (script: string, lot: number) => {
     const orders = await api.orderList();
     const lastOrder = orders.find((d: any) => d.norenordno === orderNumber);
 
+    // bad code: violate SRP
+    sendNotification(`Sell order placed on ${script} - qty: ${lot}`);
     return { orderId: orderNumber, sellPrice: +lastOrder?.avgprc };
 }
 
 const canExitPosition = (
     changePercent: number,
-    orderedSentiment: string,
+    orderedSentiment: MarketSentimentFull,
     currentSentiment: MarketSentimentFull,
 ) => {
+
     const maxProfitPerTrade = appConfig.maxProfitPerTrade;
     const maxLossPerTrade = appConfig.maxLossPerTrade;
 
+    // if ordered is bullish & current is very bullish then hold
+    // same order is bearish & current is very bearish then hold
+    if (orderedSentiment.includes('bullish') && currentSentiment === 'very bullish') {
+        return false;
+    } else if (orderedSentiment.includes('bearish') && currentSentiment === 'very bearish') {
+        return false;
+    }
+
+    // if ordered sentiment is very bullish or bearish
+    // current current sentiment is neutral, then exit
+    if (orderedSentiment.includes('very') && currentSentiment === 'neutral') {
+        return true;
+    }
+
+    // profit / loss reached
     if (changePercent > maxProfitPerTrade) {
-        console.log('1', changePercent, maxProfitPerTrade);
+        console.log('profit', changePercent, maxProfitPerTrade);
         return true;
     } else if (changePercent < -maxLossPerTrade) {
-        console.log('2', changePercent, -maxLossPerTrade);
+        console.log('loss', changePercent, -maxLossPerTrade);
         PENDING_LOSS_TRADE_PER_DAY--;
         return true;
     }
 
+    // sentiment changed
     if (currentSentiment === 'neutral') {
         return false;
     } else if (orderedSentiment.includes('bullish') && currentSentiment.includes('bullish')) {
