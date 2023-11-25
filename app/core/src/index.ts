@@ -226,7 +226,7 @@ export const core = async (data: cornData) => {
     catch (err: unknown) {
         log.error(JSON.stringify((err as Error).stack, null, 2));
         log.error('Error: Retry at next attempt.');
-        throw new Error((err as Error).message);
+        throw ((err as Error).message);
     }
 }
 
@@ -253,7 +253,7 @@ const placeOrder = async (orderType: 'buy' | 'sell') => {
             STATE = 'STOPPED'
         }
 
-        throw new Error(`Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${tradeMargin}`);
+        throw `Insufficient fund to place order ${script.values[0].tsym}. Required Rs.${requiredMargin} - Available Rs. ${tradeMargin}`;
     }
 
     const orderLot = Math.floor(tradeMargin / (scriptLot * scriptLastPrice)) * scriptLot;
