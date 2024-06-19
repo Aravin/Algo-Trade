@@ -7,4 +7,6 @@ export const appConfig = {
     clientId: process.env.UPSTOX_CLIENT_ID + '',
     clientSecret: process.env.UPSTOX_CLIENT_SECRRET + '',
     callbackUrl: process.env.UPSTOX_CALLBACK_URL + '',
+    authCode: process.env.UPSTOX_AUTH_CODE + '',
+    accessToken: process.env.UPSTOX_ACCESS_TOKEN + '',
 }

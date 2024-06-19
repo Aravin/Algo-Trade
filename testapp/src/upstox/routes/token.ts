@@ -12,7 +12,7 @@ export const token = async (req: Request, res: Response) => {
             method: 'POST',
             url: `${appConfig.baseUrl}/login/authorization/token`,
             data: qs.stringify({
-                code: req.app.locals.token, // 9CsW-6
+                code: req.app.locals.code, // 9CsW-6
                 client_id: appConfig.clientId,
                 client_secret: appConfig.clientSecret,
                 redirect_uri: appConfig.callbackUrl,
@@ -21,8 +21,12 @@ export const token = async (req: Request, res: Response) => {
         };
 
         const response = await axios(config);
+        const responseData = response.data;
 
-        return res.send(response.data());
+        res.locals.access_token = responseData.access_token;
+        res.locals.extended_token = responseData.extended_token;
+
+        return res.send(responseData);
     } catch (error: unknown) {
         res.send((error as any).response.data);
     }
