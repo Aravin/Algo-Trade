@@ -2,27 +2,23 @@ import axios, { AxiosRequestConfig } from "axios";
 import { Request, Response } from 'express';
 import { appConfig } from "../config";
 
-export const socketAuth = async (req: Request, res: Response) => {
+export const socketAuth = async (apiType: string, accessToken: string) => {
 
     try {
         let path = '';
-        const apiType = req.query.api;
         if (apiType === 'market') {
             path = 'market-data';
         } else if (apiType === 'portfolio') {
             path = 'portfolio-stream';
         } else {
-            return res.status(400).send({
-                status: 'error',
-                message: 'Invalid api type',
-            });
+            return null;
         }
 
         const config: AxiosRequestConfig = {
             method: 'GET',
             url: `${appConfig.baseUrl}/feed/${path}-feed/authorize`,
             headers: {
-                Authorization: `Bearer ${req.app.locals.access_token}`,
+                Authorization: `Bearer ${accessToken}`,
                 Accept: `application/json`,
             }
         };
@@ -30,10 +26,12 @@ export const socketAuth = async (req: Request, res: Response) => {
         const response = await axios(config);
         const responseData = response.data;
 
-        return res.send(responseData);
+        // return res.send(responseData);
+        return responseData; // not exposed
     } catch (error: unknown) {
         console.log(error);
-        res.send((error as any).response.data);
+        // res.send((error as any).response.data);
+        return (error as any).response.data || (error as any).message;
     }
 }
 

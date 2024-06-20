@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
-import { WebSocket } from 'ws';
+import { createServer } from 'http';
+import { WebSocket, WebSocketServer } from 'ws';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -7,7 +8,7 @@ import dotenv from 'dotenv';
 import * as routes from './routes';
 import * as middlewares from './middlewares';
 import { appConfig } from './config';
-import axios, { AxiosRequestConfig } from 'axios';
+import { decodeMarketFeed, initMarketProtoBuf } from './utils/protobuff-decode';
 
 dotenv.config();
 
@@ -19,7 +20,17 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(middlewares.errorHandler);
 
-app.listen(3000, async () => {
+const httpServer = createServer(app);
+
+const wsServer = new WebSocketServer({ noServer: true });
+
+httpServer.on('upgrade', (req, socket, head) => {
+    wsServer.handleUpgrade(req, socket, head, (ws) => {
+        wsServer.emit('connection', ws, req);
+    });
+});
+
+httpServer.listen(3000, async () => {
     console.log('Server is running on port 3000');
 
     // on app start -> call the auth API
@@ -39,7 +50,7 @@ app.get('/callback', async (req: Request, res: Response) => {
         console.log('Auth Failed!');
     }
 
-    res.json({ message: 'Success' });
+    res.json({ status: 'Success', message: `call token api` });
 });
 
 // 2. Token
@@ -67,26 +78,47 @@ app.get('/option-chain', async (req: Request, res: Response) => {
     await routes.optionChain(req, res);
 });
 
-// websocket auth
-app.get('/websocket/auth', async (req: Request, res: Response) => {
-    await routes.socketAuth(req, res);
-});
-app.get('/websocket', async (req, res) => {
-    const websocketUrl = 'wss://api.upstox.com/v2/feed/market-data-feed/authorize';
-    console.log(`using token: ${req.app.locals.access_token}`)
+app.get('/websocket/market', async (req, res) => {
+
+    const wsAuthUrl = await routes.socketAuth('market', req.app.locals.access_token);
+
+    const websocketUrl = wsAuthUrl.data.authorizedRedirectUri;
+
+    if (!websocketUrl) {
+        return res.status(401).send('Market Feed Auth Request Failure');
+    }
+
     const ws = new WebSocket(websocketUrl, {
         headers: {
             Authorization: `Bearer ${req.app.locals.access_token}`,
             Accept: `application/json`,
-        }
-    })
-
-    ws.on('open', () => {
-        console.log(`Connected to ${websocketUrl}`);
+        },
+        followRedirects: true,
     });
 
-    ws.on('message', (data) => {
-        console.log(`Received message: ${data.toString()}`);
+    let marketProtoBuf = await initMarketProtoBuf();
+
+    ws.on('open', async () => {
+        console.log(`Connected to ${websocketUrl}`);
+
+
+        setTimeout(() => {
+            const data = {
+                guid: Date.now().toString(36),
+                method: "sub",
+                data: {
+                    mode: "full",
+                    instrumentKeys: [/*"NSE_INDEX|Nifty Bank", */ "NSE_INDEX|Nifty 50"],
+                },
+            };
+            ws.send(Buffer.from(JSON.stringify(data)));
+        }, 1000);
+    });
+
+    ws.on('message', async (data) => {
+        console.log('message received.');
+
+        console.log(JSON.stringify(await decodeMarketFeed(marketProtoBuf, data), null, 2));
     });
 
     ws.on('close', (code, reason) => {
@@ -96,4 +128,46 @@ app.get('/websocket', async (req, res) => {
     ws.on('error', (error) => {
         console.error(`WebSocket error: ${error}`);
     });
-})
+
+    res.send('Connected to Socket data will be logged in console')
+});
+
+app.get('/websocket/portfolio', async (req, res) => {
+
+    const wsAuthUrl = await routes.socketAuth('portfolio', req.app.locals.access_token);
+
+    const websocketUrl = wsAuthUrl.data.authorizedRedirectUri;
+
+    if (!websocketUrl) {
+        return res.status(401).send('Market Feed Auth Request Failure');
+    }
+
+    const ws = new WebSocket(websocketUrl, {
+        headers: {
+            Authorization: `Bearer ${req.app.locals.access_token}`,
+            Accept: `application/json`,
+        },
+        followRedirects: true,
+    });
+
+
+    ws.on('open', async () => {
+        console.log(`Connected to ${websocketUrl}, data will be logged on order/position modified`);
+    });
+
+    ws.on('message', async (data) => {
+        console.log('message received.');
+
+        console.log(JSON.stringify(JSON.parse(data.toString()), null, 2));
+    });
+
+    ws.on('close', (code, reason) => {
+        console.log(`Connection closed: code ${code}, reason: ${reason}`);
+    });
+
+    ws.on('error', (error) => {
+        console.error(`WebSocket error: ${error}`);
+    });
+
+    res.send('Connected to Socket data will be logged in console')
+});
