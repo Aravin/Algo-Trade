@@ -1,4 +1,4 @@
-import { Candle } from "./candle-types";
+import { Candle } from "./types/candle.types";
 
 // Function to calculate Bollinger Bands
 export const calculateBollingerBands = (candles: Candle[], period: number = 20, stdDevMultiplier: number = 2): { middle: number[], upper: number[], lower: number[] } => {

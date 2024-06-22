@@ -16,7 +16,31 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 
 ![Trade Notification Log](/assets/images/telegram-notify.jpg)
 
+## Let's Collaborate! 
+
+Interested in contributing to this project? I'd love to connect! Reach out to me on LinkedIn: <https://www.linkedin.com/in/itaravin/>
+
 ## Releases
+
+### V4 (latest) (in development)
+
+Code: testapp/src/upstox/index.ts
+Broker: UpStox
+
+| Type       | Indicators                   | Comments                                  | Status   |
+| ---------- | ---------------------------- | ----------------------------------------- | -------- |
+| Trend      | Moving average               | 5 mins charts - EMA(10), EMA(20), EMA(42) | done     |
+| Trend      | Advance Decline Ratio        | NIFTY green/red                           | skip     |
+| Trend      | MACD or ADX                  | To know trend & reversal                  | ADX done |
+| Trend      | OI Put Call Radio (PCR)      | To know buy sell strength                 | done     |
+| Momentum   | RSI                          |                                           | done     |
+| Momentum   | Stochastic Oscillator        |                                           | done     |
+| Volatility | Bollinger Bands              |                                           | done     |
+| Volatility | ATR                          |                                           | done     |
+| Volatility | VIX                          |                                           | skip     |
+| Volulme    | On-Balance Volume            |                                           | skip     |
+| Stop Loss  | Fibonacci Retracement Levels |                                           | skip     |
+
 
 ### V3 (latest)
 

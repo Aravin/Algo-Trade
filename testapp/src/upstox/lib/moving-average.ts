@@ -1,6 +1,7 @@
 // upstox - https://upstox.com/developer/api-documentation/get-intra-day-candle-data
 
-import { Candle } from "./candle-types";
+import { Candle } from "./types/candle.types";
+
 
 export const ema = (period: number, data: number[]): number[] => {
     if (period <= 0 || period > data.length) {
