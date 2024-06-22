@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig } from "axios";
 import { Request, Response, NextFunction } from 'express';
 import { appConfig } from "../config";
 
+// return same data as https://www.nseindia.com/option-chain
 export const optionChain = async (req: Request, res: Response) => {
 
     try {
