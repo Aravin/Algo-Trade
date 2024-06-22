@@ -31,7 +31,7 @@ export const currentAtr = (period: number, candles: Candle[]) => {
 };
 
 // Function to calculate True Range (TR) for a single candle
-const trueRange = (candle) => {
+const trueRange = (candle: Candle) => {
     const highLow = candle[2] - candle[3]; // High - Low
     const closePrev = Math.abs(candle[4] - candle[1]); // Close - Open (previous candle)
     return Math.max(highLow, closePrev);
