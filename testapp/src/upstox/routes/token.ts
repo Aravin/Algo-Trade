@@ -2,6 +2,7 @@ import axios, { AxiosRequestConfig } from "axios";
 import { Request, Response, NextFunction } from 'express';
 import qs from 'qs';
 import { appConfig } from "../config";
+import { eventEmitter } from "../event";
 
 export const token = async (req: Request, res: Response) => {
 
@@ -25,6 +26,7 @@ export const token = async (req: Request, res: Response) => {
 
         res.locals.access_token = responseData.access_token;
         res.locals.extended_token = responseData.extended_token;
+        eventEmitter.emit('token_success', responseData.access_token);
 
         return res.send(responseData);
     } catch (error: unknown) {

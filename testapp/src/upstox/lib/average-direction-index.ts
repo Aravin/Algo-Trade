@@ -1,7 +1,8 @@
 import { ema } from "./moving-average";
+import { Candle } from "./types/candle.types";
 
 // Function to calculate Average Directional Index (ADX) for current time (period 14)
-export const currentAdx14 = (candles: any[]): number => {
+export const adx14 = (candles: Candle[]): number => {
     const period = 14;
 
     if (period <= 0 || period > candles.length) {

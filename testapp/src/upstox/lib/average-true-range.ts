@@ -1,5 +1,7 @@
+import { Candle } from "./types/candle.types";
+
 // Function to calculate Average True Range (ATR) for a given period
-export const currentAtr = (period: number, candles: any[]) => {
+export const currentAtr = (period: number, candles: Candle[]) => {
     // Check for valid period
     if (period <= 0 || period > candles.length) {
         throw new Error("Invalid period. Please enter a positive number less than or equal to the data length.");

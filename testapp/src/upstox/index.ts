@@ -9,6 +9,7 @@ import * as routes from './routes';
 import * as middlewares from './middlewares';
 import { appConfig } from './config';
 import { decodeMarketFeed, initMarketProtoBuf } from './utils/protobuff-decode';
+import { eventEmitter } from './event';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ httpServer.listen(3000, async () => {
     // on app start -> call the auth API
     await routes.authorize();
 });
+
 
 // apis
 // 1. Auth
@@ -78,6 +80,7 @@ app.get('/option-chain', async (req: Request, res: Response) => {
     await routes.optionChain(req, res);
 });
 
+// use sockets later
 app.get('/websocket/market', async (req, res) => {
 
     const wsAuthUrl = await routes.socketAuth('market', req.app.locals.access_token);

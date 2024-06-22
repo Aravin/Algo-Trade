@@ -1,4 +1,4 @@
-import { Candle } from "./candle-types";
+import { Candle } from "./types/candle.types";
 
 export const calculateRSI = (candles: Candle[], period: number = 14): number => {
     if (candles.length < period) {

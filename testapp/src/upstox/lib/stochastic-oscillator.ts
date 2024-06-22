@@ -1,5 +1,5 @@
-import { Candle } from "./candle-types";
 import { ema } from "./moving-average";
+import { Candle } from "./types/candle.types";
 
 export const calculateStochasticOscillator = (candles: Candle[], period: number = 14, smoothing: number = 3): { k: number, d: number } => {
   if (candles.length < period) {
