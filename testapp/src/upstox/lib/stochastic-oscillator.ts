@@ -1,7 +1,7 @@
 import { ema } from "./moving-average";
 import { Candle } from "./types/candle.types";
 
-export const calculateStochasticOscillator = (candles: Candle[], period: number = 14, smoothing: number = 3): { k: number, d: number } => {
+const calculateStochasticOscillator = (candles: Candle[], period: number = 14, smoothing: number = 3): { k: number, d: number } => {
   if (candles.length < period) {
     throw new Error("Not enough candle data to calculate Stochastic Oscillator.");
   }
@@ -28,7 +28,7 @@ export const calculateStochasticOscillator = (candles: Candle[], period: number 
 };
 
 // Function to generate buy/sell signals from the Stochastic Oscillator
-const getStochasticSignal = (candles: Candle[], period: number = 14, smoothing: number = 3): string => {
+export const stochasticSignal = (candles: Candle[], period: number = 14, smoothing: number = 3): string => {
   const kValues: number[] = [];
   const dValues: number[] = [];
 

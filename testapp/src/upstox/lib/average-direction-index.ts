@@ -1,8 +1,9 @@
+import { Signal } from "./enums/signal.enum";
 import { ema } from "./moving-average";
 import { Candle } from "./types/candle.types";
 
 // Function to calculate Average Directional Index (ADX) for current time (period 14)
-export const adx14 = (candles: Candle[]): number => {
+export const adx14Signal = (candles: Candle[]): Signal => {
     const period = 14;
 
     if (period <= 0 || period > candles.length) {
@@ -36,13 +37,13 @@ export const adx14 = (candles: Candle[]): number => {
     // *** Improved Signal Logic (Example) ***
     // This is a basic example; refine based on your strategy
     const trendStrengthThreshold = 25; // Adjust as needed
-    let signal = 0; // 0: Neutral, 1: Buy, -1: Sell
+    let signal = Signal.Hold; // 0: Neutral, 1: Buy, -1: Sell
 
     if (adx > trendStrengthThreshold) {
         if (plusDi[plusDi.length - 1] > minusDi[minusDi.length - 1]) {
-            signal = 1; // Strong uptrend
+            signal = Signal.Sell; // Strong uptrend
         } else {
-            signal = -1; // Strong downtrend
+            signal = Signal.Buy; // Strong downtrend
         }
     }
 

@@ -38,7 +38,10 @@ const trueRange = (candle: Candle) => {
 };
 
 // Function to assess market volatility based on ATR
-export const AtrVolatility = (atr: number, thresholdHigh: number, thresholdLow: number = 0): string => {
+export const atrVolatility = (candles: Candle[], period: number, thresholdHigh: number, thresholdLow: number = 0): string => {
+
+    const atr = currentAtr(period, candles);
+
     if (atr >= thresholdHigh) {
         return "Volatile";
     } else if (atr <= thresholdLow) {

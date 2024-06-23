@@ -60,6 +60,12 @@ app.get('/token', async (req: Request, res: Response) => {
     await routes.token(req, res);
 });
 
+// dummmy
+app.get('/dummy', async (req: Request, res: Response) => {
+    eventEmitter.emit('token_success', app.locals.access_token);
+    await res.send('ok');
+});
+
 // 3. History
 app.get('/history', async (req: Request, res: Response) => {
     await routes.history(req, res);

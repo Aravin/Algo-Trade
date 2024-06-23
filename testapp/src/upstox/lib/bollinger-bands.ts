@@ -1,7 +1,7 @@
 import { Candle } from "./types/candle.types";
 
 // Function to calculate Bollinger Bands
-export const calculateBollingerBands = (candles: Candle[], period: number = 20, stdDevMultiplier: number = 2): { middle: number[], upper: number[], lower: number[] } => {
+const calculateBollingerBands = (candles: Candle[], period: number = 20, stdDevMultiplier: number = 2): { middle: number[], upper: number[], lower: number[] } => {
   if (candles.length < period) {
     throw new Error("Not enough candle data to calculate Bollinger Bands.");
   }
@@ -31,10 +31,10 @@ export const calculateBollingerBands = (candles: Candle[], period: number = 20, 
 };
 
 // Function to calculate Bollinger Bands and generate signals
-export const calculateBollingerBandsSignals = (
+export const bollingerBandsSignals = (
   candles: Candle[],
   period: number = 20,
-): { middle: number[], upper: number[], lower: number[], signal: string, trend: string } => {
+) => {
   const { middle, upper, lower } = calculateBollingerBands(candles, period);
 
   // *** Signal and Trend Assessment ***
@@ -58,7 +58,8 @@ export const calculateBollingerBandsSignals = (
     trend = "Downtrend";
   }
 
-  return { middle, upper, lower, signal, trend };
+  // return { middle, upper, lower, signal, trend };
+  return { signal, trend };
 };
 
 // Function to calculate Bollinger Bands and generate signals (enhanced with order status)
@@ -127,16 +128,16 @@ export const calculateBollingerBandsSignalsEnhanced = (
   return { middle, upper, lower, signal, trend };
 };
 
-const calculateBollingerBandWidth = (candles: Candle[], period: number = 20): number[] => {
-  const { upper, lower } = calculateBollingerBandsSignals(candles, period);
-  const bandWidth: number[] = [];
+// export const bollingerBandWidth = (candles: Candle[], period: number = 20): number[] => {
+//   const { upper, lower } = bollingerBandsSignals(candles, period);
+//   const bandWidth: number[] = [];
 
-  for (let i = 0; i < upper.length; i++) {
-      bandWidth.push(upper[i] - lower[i]); 
-  }
+//   for (let i = 0; i < upper.length; i++) {
+//       bandWidth.push(upper[i] - lower[i]); 
+//   }
 
-  return bandWidth;
-};
+//   return bandWidth;
+// };
 
 
 // console.log("Bollinger Bands:");
