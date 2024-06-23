@@ -1,46 +1,29 @@
 import { EventEmitter } from 'node:events';
-import { appConfig } from './config';
-import axios, { AxiosRequestConfig } from 'axios';
-import { currentEmaCrossoverSignal, ema } from './lib/moving-average';
+import { currentEmaCrossoverSignal } from './lib/moving-average';
 import { adx14Signal } from './lib/average-direction-index';
 import { oiPcrSignal } from './lib/put-call-ratio';
 import { stochasticSignal } from './lib/stochastic-oscillator';
 import { bollingerBandsSignals } from './lib/bollinger-bands';
-import { atrVolatility } from './lib/average-true-range';
-import { optionsChainMockResponse } from './mocks/option-chain.mock';
-import { intradayMockResponse } from './mocks/intraday.mock';
-import { Candle } from './lib/types/candle.types';
+import { currentAtr } from './lib/average-true-range';
 import { rsiSignal } from './lib/rsi';
+import { optionChainController } from './controllers/option-chain';
+import { intraDayController } from './controllers/intraday-data';
+import { getOtmDetails } from './lib/calculations/get-otm-details';
+import { placeBuyOrder } from './controllers/order';
 
 export const eventEmitter = new EventEmitter();
 
 let intraDayDataJob: NodeJS.Timeout;
 
-eventEmitter.on('token_success', (token: string) => {
+eventEmitter.on('service_start', (token: string) => {
   console.log(`Token generated successfully, starting algo-trade service...`);
 
   intraDayDataJob = setInterval(async () => {
     try {
-      const intraDayConfig: AxiosRequestConfig = {
-        method: 'GET',
-        url: `${appConfig.baseUrl}/historical-candle/intraday/NSE_INDEX|Nifty%2050/1minute`,
-      };
+      const candles = await intraDayController(); // intraDayResponse.data?.candles;
+      const optionChainData = await optionChainController(); // optionChainResponse.data;
 
-      const intraDayResponse = await axios(intraDayConfig);
-      const candles = intradayMockResponse.data.candles as Candle[]; // intraDayResponse.data?.candles;
-      // console.log(candles);
-
-      const optionChainConfig: AxiosRequestConfig = {
-        method: 'GET',
-        url: `${appConfig.baseUrl}/option/chain?instrument_key=NSE_INDEX|Nifty%2050&expiry_date=2024-06-20`,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: `application/json`,
-        }
-      };
-
-      const optionChainResponse = await axios(optionChainConfig);
-      const optionChainData = optionsChainMockResponse.data; // optionChainResponse.data;
+      // const dataPromises = await Promise.all([axios(intraDayConfig), await axios(optionChainConfig)]);
 
       // 1. calculate ema
       const emaSignal = currentEmaCrossoverSignal(candles, 42, 10);
@@ -61,15 +44,24 @@ eventEmitter.on('token_success', (token: string) => {
       const bb20 = bollingerBandsSignals(candles, 20);
 
       // 7. calculate ATR 
-      const atr14 = atrVolatility(candles, 14, 0.35, 0.65);
+      const atr14 = currentAtr(candles, 14);
 
-      console.log({ emaSignal, adxSignal, pcrSignal, rsi14, stoc14, bb20, atr14 });
+      // get details for placing order instrument key, price, etc
+      const otm = getOtmDetails(optionChainData);
+
+      // const buyOrderResponse = placeBuyOrder(token, otm.call_options.instrument_key);
+
+      console.log({ timestamp: new Date(), emaSignal, adxSignal, pcrSignal, rsi14, stoc14, bb20, atr14 });
 
     } catch (error: unknown) {
       console.log((error as Error).message);
       console.log((error as Error).stack);
     }
-  }, 900);
+  }, 4900);
+});
+
+eventEmitter.on('service_in_progress', (token: string) => {
+
 });
 
 eventEmitter.on('service_stop', () => {

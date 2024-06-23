@@ -1,33 +1,26 @@
 import { Candle } from "./types/candle.types";
+import { Volatility } from "./enums/volatility.enum";
 
 // Function to calculate Average True Range (ATR) for a given period
-export const currentAtr = (period: number, candles: Candle[]) => {
+export const currentAtr = (candles: Candle[], period: number) => {
     // Check for valid period
     if (period <= 0 || period > candles.length) {
         throw new Error("Invalid period. Please enter a positive number less than or equal to the data length.");
     }
 
-    // Variables for ATR calculation
-    let prevTr = 0; // Stores previous True Range (TR)
-    let prevAtr = 0; // Stores previous ATR
+    // Calculate True Range (TR) for the initial period
+    let trueRanges = candles.slice(candles.length - period).map(trueRange);
+
+    // Initial ATR is the average of the first 'period' TR values
+    let atr = trueRanges.reduce((sum, tr) => sum + tr, 0) / period;
 
     // Loop through candles, calculating TR and updating ATR
     for (let i = Math.max(candles.length - period, 0); i < candles.length; i++) {
-        const currentCandle = candles[i];
-        const currentTr = trueRange(currentCandle); // Current True Range
-
-        // Calculate ATR using Wilder's smoothing
-        if (i < period) {
-            // Use simple average for the first 'period' candles
-            prevAtr = (prevAtr * i + currentTr) / (i + 1);
-        } else {
-            prevAtr = prevTr + (currentTr - prevTr) * (1 / period);
-        }
-
-        prevTr = currentTr; // Update previous TR for next iteration
+        const currentTr = trueRange(candles[i]);
+        atr = (atr * (period - 1) + currentTr) / period;
     }
 
-    return prevAtr;
+    return atr;
 };
 
 // Function to calculate True Range (TR) for a single candle
@@ -40,13 +33,13 @@ const trueRange = (candle: Candle) => {
 // Function to assess market volatility based on ATR
 export const atrVolatility = (candles: Candle[], period: number, thresholdHigh: number, thresholdLow: number = 0): string => {
 
-    const atr = currentAtr(period, candles);
+    const atr = currentAtr(candles, period);
 
     if (atr >= thresholdHigh) {
-        return "Volatile";
+        return Volatility.High;
     } else if (atr <= thresholdLow) {
-        return "Non-volatile";
+        return Volatility.Low;
     } else {
-        return "Neutral";
+        return Volatility.Neutral;
     }
 };
