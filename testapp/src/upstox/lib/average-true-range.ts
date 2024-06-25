@@ -8,6 +8,8 @@ export const currentAtr = (candles: Candle[], period: number) => {
         throw new Error("Invalid period. Please enter a positive number less than or equal to the data length.");
     }
 
+    candles = candles.slice(0, period);
+
     // Calculate True Range (TR) for the initial period
     let trueRanges = candles.slice(candles.length - period).map(trueRange);
 

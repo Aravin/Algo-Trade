@@ -26,7 +26,7 @@ export const token = async (req: Request, res: Response) => {
 
         res.locals.access_token = responseData.access_token;
         res.locals.extended_token = responseData.extended_token;
-        eventEmitter.emit('token_success', responseData.access_token);
+        eventEmitter.emit('service_start', responseData.access_token);
 
         return res.send(responseData);
     } catch (error: unknown) {

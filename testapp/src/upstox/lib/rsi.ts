@@ -1,6 +1,10 @@
 import { Candle } from "./types/candle.types";
 
 export const calculateRsi = (candles: Candle[], period: number = 14): number => {
+
+  // Slice the candles array to use only the last 'period' candles
+  candles = candles.slice(0, period);
+
   if (candles.length < period) {
     throw new Error("Not enough data to calculate RSI. Candle array length must be greater than or equal to the period.");
   }
@@ -9,7 +13,7 @@ export const calculateRsi = (candles: Candle[], period: number = 14): number => 
   let losses = 0;
 
   // Calculate initial gains and losses
-  for (let i = 1; i <= period; i++) {
+  for (let i = 1; i < candles.length; i++) {
     const priceChange = candles[i][4] - candles[i - 1][4]; // Change in closing prices
     if (priceChange >= 0) {
       gains += priceChange;

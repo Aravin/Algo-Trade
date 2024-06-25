@@ -13,4 +13,4 @@ export const getOtmDetails = (optionChainData: OptionData[]) => {
     return otmCallOptions[3]; // skip 2 legs for better price
 }
 
-console.debug(getOtmDetails(optionsChainMockResponse.data));
+// console.debug(getOtmDetails(optionsChainMockResponse.data));

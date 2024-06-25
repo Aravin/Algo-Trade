@@ -1,3 +1,4 @@
+import { Signal } from "./enums/signal.enum";
 import { Candle } from "./types/candle.types";
 
 // Function to calculate Bollinger Bands
@@ -5,6 +6,8 @@ const calculateBollingerBands = (candles: Candle[], period: number = 20, stdDevM
   if (candles.length < period) {
     throw new Error("Not enough candle data to calculate Bollinger Bands.");
   }
+
+  candles = candles.slice(0, period);
 
   const closingPrices = candles.map(candle => candle[4]); // Extract closing prices
 
@@ -38,7 +41,7 @@ export const bollingerBandsSignals = (
   const { middle, upper, lower } = calculateBollingerBands(candles, period);
 
   // *** Signal and Trend Assessment ***
-  let signal = "Hold"; // Buy/Sell Signal
+  let signal = Signal.Hold; // Buy/Sell Signal
   let trend = "Neutral"; // Trend Assessment
 
   const closingPrices = candles.map(candle => candle[4]); // Extract closing prices
@@ -46,9 +49,9 @@ export const bollingerBandsSignals = (
 
   // 1. Buy/Sell Signals (based on breakouts):
   if (currentPrice > upper[upper.length - 1]) {
-    signal = "Buy";
+    signal = Signal.Buy;
   } else if (currentPrice < lower[lower.length - 1]) {
-    signal = "Sell";
+    signal = Signal.Sell;
   }
 
   // 2. Trend Assessment (based on price relative to middle band):

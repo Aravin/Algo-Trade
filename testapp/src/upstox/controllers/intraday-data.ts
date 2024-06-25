@@ -5,7 +5,7 @@ import { intradayMockResponse } from "../mocks/intraday.mock";
 
 export const intraDayController = async () => {
 
-  return intradayMockResponse.data.candles as Candle[];
+  // return intradayMockResponse.data.candles as Candle[];
 
   const intraDayConfig: AxiosRequestConfig = {
     method: 'GET',
@@ -13,7 +13,6 @@ export const intraDayController = async () => {
   };
 
   const intraDayResponse = await axios(intraDayConfig);
-  const candles = intraDayResponse.data?.candles;
-  // console.log(candles);
+  const candles = intraDayResponse.data?.data?.candles;
   return candles;
 }

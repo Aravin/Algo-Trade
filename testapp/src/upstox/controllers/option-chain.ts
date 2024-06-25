@@ -1,15 +1,14 @@
 import axios, { AxiosRequestConfig } from "axios";
 import { appConfig } from "../config";
 import { optionsChainMockResponse } from "../mocks/option-chain.mock";
-import { token } from "../routes";
 
-export const optionChainController = async () => {
+export const optionChainController = async (token: string) => {
 
-  return optionsChainMockResponse.data;
+  // return optionsChainMockResponse.data;
 
   const optionChainConfig: AxiosRequestConfig = {
     method: 'GET',
-    url: `${appConfig.baseUrl}/option/chain?instrument_key=NSE_INDEX|Nifty%2050&expiry_date=2024-06-20`,
+    url: `${appConfig.baseUrl}/option/chain?instrument_key=NSE_INDEX|Nifty%2050&expiry_date=2024-06-27`,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: `application/json`,
@@ -17,7 +16,7 @@ export const optionChainController = async () => {
   };
 
   const optionChainResponse = await axios(optionChainConfig);
-  const optionChainData = optionChainResponse.data;
+  const optionChainData = optionChainResponse.data?.data;
 
   return optionChainData;
 }

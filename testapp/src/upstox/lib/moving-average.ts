@@ -9,6 +9,9 @@ export const ema = (period: number, data: number[]): number[] => {
     throw new Error(`Invalid period ${period}. Please enter a positive number less than or equal to the data length ${data.length}.`);
   }
 
+  // Use only the top 'period' number of data points
+  data = data.slice(0, period);
+
   const emaValues: number[] = [data[0]]; // Initialize with the first data point
   const k = 2 / (period + 1); // Weighting factor
 
@@ -40,7 +43,7 @@ export const emalast = (period: number, candles: Candle[]) => {
 
 // Function to generate a buy/sell signal for the last candle based on EMA crossover
 export const currentEmaCrossoverSignal = (candles: Candle[], fastPeriod: number, slowPeriod: number): Signal => {
-  if (candles.length < slowPeriod) {
+  if (candles?.length < slowPeriod) {
     throw new Error("Not enough data for EMA calculation.");
   }
 

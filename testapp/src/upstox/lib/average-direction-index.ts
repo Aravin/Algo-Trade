@@ -5,6 +5,7 @@ import { Candle } from "./types/candle.types";
 // Function to calculate Average Directional Index (ADX) for current time (period 14)
 export const adx14Signal = (candles: Candle[]): Signal => {
     const period = 14;
+    candles = candles.slice(0, period);
 
     if (period <= 0 || period > candles.length) {
         throw new Error("Invalid period. Please enter a positive number less than or equal to the data length.");
@@ -14,14 +15,17 @@ export const adx14Signal = (candles: Candle[]): Signal => {
     const ndms: number[] = new Array(candles.length).fill(0);
 
     for (let i = 1; i < candles.length; i++) {
-        const currentClose = candles[i][4];
+        const currentHigh = candles[i][2];   // Corrected: Accessing the high
+        const currentLow = candles[i][3];    // Corrected: Accessing the low
         const prevClose = candles[i - 1][4];
-        pdms[i] = Math.max(0, currentClose - prevClose) - Math.max(0, prevClose - candles[i - 1][3]);
-        ndms[i] = Math.max(0, prevClose - currentClose) - Math.max(0, currentClose - candles[i - 1][2]);
+
+        // Calculate +DM and -DM for each candle
+        pdms[i] = Math.max(0, currentHigh - prevClose) - Math.max(0, prevClose - candles[i - 1][2]);
+        ndms[i] = Math.max(0, prevClose - currentLow) - Math.max(0, currentLow - candles[i - 1][3]);
     }
 
-    const plusDi = ema(period, pdms); 
-    const minusDi = ema(period, ndms); 
+    const plusDi = ema(period, pdms);
+    const minusDi = ema(period, ndms);
 
     // Calculate the Directional Movement Index (DX)
     const dxs = plusDi.map((plusDiValue, i) => {

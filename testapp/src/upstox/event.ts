@@ -10,6 +10,8 @@ import { optionChainController } from './controllers/option-chain';
 import { intraDayController } from './controllers/intraday-data';
 import { getOtmDetails } from './lib/calculations/get-otm-details';
 import { placeBuyOrder } from './controllers/order';
+import { Candle } from './lib/types/candle.types';
+import { OptionData } from './lib/types/option.types';
 
 export const eventEmitter = new EventEmitter();
 
@@ -20,8 +22,10 @@ eventEmitter.on('service_start', (token: string) => {
 
   intraDayDataJob = setInterval(async () => {
     try {
-      const candles = await intraDayController(); // intraDayResponse.data?.candles;
-      const optionChainData = await optionChainController(); // optionChainResponse.data;
+      const candles: Candle[] = await intraDayController(); // intraDayResponse.data?.candles;
+      const optionChainData: OptionData[] = await optionChainController(token); // optionChainResponse.data;
+
+      // console.log({ candles, optionChainData});
 
       // const dataPromises = await Promise.all([axios(intraDayConfig), await axios(optionChainConfig)]);
 
@@ -57,7 +61,7 @@ eventEmitter.on('service_start', (token: string) => {
       console.log((error as Error).message);
       console.log((error as Error).stack);
     }
-  }, 4900);
+  }, 1 * 1000 * 60);
 });
 
 eventEmitter.on('service_in_progress', (token: string) => {
