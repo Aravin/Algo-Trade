@@ -34,8 +34,11 @@ httpServer.on('upgrade', (req, socket, head) => {
 httpServer.listen(3000, async () => {
     console.log('Server is running on port 3000');
 
-    // on app start -> call the auth API
-    await routes.authorize();
+    const authUrl = `${appConfig.baseUrl}/login/authorization/dialog?response_type=code&client_id=${appConfig.clientId}&redirect_uri=${appConfig.callbackUrl}`;
+
+    console.log(authUrl);
+
+    require('out-url').open(authUrl);
 });
 
 
@@ -52,7 +55,8 @@ app.get('/callback', async (req: Request, res: Response) => {
         console.log('Auth Failed!');
     }
 
-    res.json({ status: 'Success', message: `call token api` });
+    // res.json({ status: 'Success', message: `call token api` });
+    res.redirect('/token');
 });
 
 // 2. Token

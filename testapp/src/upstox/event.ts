@@ -101,13 +101,14 @@ const executeTradeLogic = async (token: string, signals: MarketSignals, optionCh
 const handleData = async (token: string) => {
   try {
     log("Fetching market data...");
-    const [candles, optionChainData] = await Promise.all([
+    const [candles, optionChainData]: [Candle[], OptionData[]] = await Promise.all([
       intraDayController(),
       optionChainController(token),
     ]);
 
     log("Market data fetched successfully.", { candles, optionChainData });
     const signals = calculateSignals(candles, optionChainData);
+
     await executeTradeLogic(token, signals, optionChainData);
 
   } catch (error: unknown) {
