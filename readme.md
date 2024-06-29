@@ -4,7 +4,14 @@ NIFTY50 Option Trading based on Global sentiment and well-known technical indica
 
 ![Basic Flow Diagram](/assets/images/basic-flow-diagram.png)
 
-## Local Setup
+## Note:
+
+1. This is console application still in testing phases. Website and Mobile application launching soon.
+2. It can work on one account at a time.
+3. You can run in your local or any cloud service with VM.
+
+
+## Local Setup (console application)
 
 1. Open the folder `app/core`
 2. Run the command `yarn install` or `npm install`

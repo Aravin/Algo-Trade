@@ -117,7 +117,7 @@ const handleData = async (token: string) => {
 
 eventEmitter.on('service_start', (token: string) => {
   log(`Token generated: ${token}, starting algo-trade service...`);
-  intraDayDataJob = setInterval(() => handleData(token), 60 * 1000);
+  intraDayDataJob = setInterval(() => handleData(token), 1 * 60 * 1000);
 });
 
 eventEmitter.on('service_entered', (token: string, instrumentKey: string, signal: Signal, trend: Trend) => {
@@ -148,7 +148,7 @@ eventEmitter.on('service_entered', (token: string, instrumentKey: string, signal
     } catch (error: unknown) {
       log("Error in service_entered handler:", error);
     }
-  }, 60 * 1000);
+  }, 1 * 60 * 1000);
 });
 
 eventEmitter.on('service_exit', () => {
