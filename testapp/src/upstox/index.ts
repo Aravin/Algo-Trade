@@ -62,7 +62,7 @@ app.get('/token', async (req: Request, res: Response) => {
 
 // dummmy
 app.get('/test', async (req: Request, res: Response) => {
-    eventEmitter.emit('service_start', app.locals.access_token);
+    eventEmitter.emit('service_start', req.app.locals.access_token);
     await res.send('ok');
 });
 

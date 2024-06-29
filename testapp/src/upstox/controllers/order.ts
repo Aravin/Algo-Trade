@@ -4,7 +4,7 @@ import { appConfig } from "../config";
 import { getOtmDetails } from "../lib/calculations/get-otm-details";
 import { optionsChainMockResponse } from "../mocks/option-chain.mock";
 
-export const placeBuyOrder = async (token: string, instrument_token: string) => {
+export const placeOrder = async (token: string, instrument_token: string, order_type: 'BUY' | 'SELL' = 'BUY'): Promise<string> => {
 
     try {
         const config: AxiosRequestConfig = {
@@ -23,7 +23,7 @@ export const placeBuyOrder = async (token: string, instrument_token: string) => 
                 tag: 'algo',
                 instrument_token,
                 order_type: 'MARKET',
-                transaction_type: 'BUY',
+                transaction_type: order_type,
                 disclosed_quantity: 0,
                 trigger_price: 0,
                 is_amo: false,
@@ -31,14 +31,15 @@ export const placeBuyOrder = async (token: string, instrument_token: string) => 
         };
 
         const orderResponse = await axios(config);
-        // const orderResponseData = orderResponse.data;
+        const orderResponseData = orderResponse.data;
 
-        // return orderResponseData
+        return orderResponseData?.data?.order_id as string;
 
     } catch (err: unknown) {
         console.error((err as AxiosError)?.response?.data);
+        throw err;
     }
 }
 
 // console.debug(getOtmDetails(optionsChainMockResponse.data));
-placeBuyOrder(appConfig.accessToken, getOtmDetails(optionsChainMockResponse.data).call_options.instrument_key);
+// placeBuyOrder(appConfig.accessToken, getOtmDetails(optionsChainMockResponse.data).call_options.instrument_key);
