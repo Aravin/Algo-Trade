@@ -1,3 +1,4 @@
+import { Signal } from "./enums/signal.enum";
 import { ema } from "./moving-average";
 import { Candle } from "./types/candle.types";
 
@@ -32,7 +33,7 @@ const calculateStochasticOscillator = (candles: Candle[], period: number = 14, s
 };
 
 // Function to generate buy/sell signals from the Stochastic Oscillator
-export const stochasticSignal = (candles: Candle[], period: number = 14, smoothing: number = 3): string => {
+export const stochasticSignal = (candles: Candle[], period: number = 14, smoothing: number = 3): Signal => {
 
   if (candles.length < period) {
     throw new Error("Not enough candle data to calculate Stochastic Oscillator.");
@@ -44,14 +45,14 @@ export const stochasticSignal = (candles: Candle[], period: number = 14, smoothi
   const oversoldThreshold = 20;
 
   if (k > d && k < oversoldThreshold) { // Simplified buy condition
-    return "Buy";
+    return Signal.Buy;
   }
 
   if (k < d && k > overboughtThreshold) { // Simplified sell condition
-    return "Sell";
+    return Signal.Sell;
   }
 
-  return "Hold";
+  return Signal.Hold;
 };
 
 const getStochasticSignalWithPosition = (candles: Candle[],

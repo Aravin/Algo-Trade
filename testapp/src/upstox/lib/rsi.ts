@@ -1,3 +1,4 @@
+import { Momentum } from "./enums/momentum.enum";
 import { Candle } from "./types/candle.types";
 
 export const calculateRsi = (candles: Candle[], period: number = 14): number => {
@@ -48,16 +49,16 @@ export const calculateRsi = (candles: Candle[], period: number = 14): number => 
 };
 
 // Function to determine overbought, oversold, or hold signal based on RSI
-export const rsiSignal = (candles: Candle[], period: number = 14, overboughtThreshold: number = 70, oversoldThreshold: number = 30): string => {
+export const rsiSignal = (candles: Candle[], period: number = 14, overboughtThreshold: number = 70, oversoldThreshold: number = 30): Momentum => {
 
   const rsi = calculateRsi(candles, period);
 
   if (rsi >= overboughtThreshold) {
-    return "Overbought";
+    return Momentum.Overbought;
   } else if (rsi <= oversoldThreshold) {
-    return "Oversold";
+    return Momentum.Oversold;
   } else {
-    return "Hold";
+    return Momentum.Hold;
   }
 };
 

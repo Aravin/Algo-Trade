@@ -1,4 +1,5 @@
 import { Signal } from "./enums/signal.enum";
+import { Trend } from "./enums/trend.enum";
 import { Candle } from "./types/candle.types";
 
 // Function to calculate Bollinger Bands
@@ -37,12 +38,12 @@ const calculateBollingerBands = (candles: Candle[], period: number = 20, stdDevM
 export const bollingerBandsSignals = (
   candles: Candle[],
   period: number = 20,
-) => {
+): { signal: Signal, trend: Trend } => {
   const { middle, upper, lower } = calculateBollingerBands(candles, period);
 
   // *** Signal and Trend Assessment ***
   let signal = Signal.Hold; // Buy/Sell Signal
-  let trend = "Neutral"; // Trend Assessment
+  let trend = Trend.Neutral; // Trend Assessment
 
   const closingPrices = candles.map(candle => candle[4]); // Extract closing prices
   const currentPrice = closingPrices[closingPrices.length - 1];
@@ -56,9 +57,9 @@ export const bollingerBandsSignals = (
 
   // 2. Trend Assessment (based on price relative to middle band):
   if (currentPrice > middle[middle.length - 1]) {
-    trend = "Uptrend";
+    trend = Trend.Up;
   } else if (currentPrice < middle[middle.length - 1]) {
-    trend = "Downtrend";
+    trend = Trend.Down;
   }
 
   // return { middle, upper, lower, signal, trend };
