@@ -23,40 +23,41 @@ export const ema = (period: number, data: number[]): number[] => {
   return emaValues;
 };
 
-export const emalast = (period: number, candles: Candle[]) => {
-  // Check for valid period
-  if (period <= 0 || period > candles.length) {
-    throw new Error("Invalid period. Please enter a positive number less than or equal to the data length.");
-  }
+const calculateCurrentEMA = (previousEMA: number, currentPrice: number, k: number): number => {
+  return (currentPrice * k) + (previousEMA * (1 - k));
+};
 
-  // Initialize variables
-  const lastCandle = candles[candles.length - 1]; // Access the most recent candle
-  const closingPrice = lastCandle[4]; // Access closing price at index 4
-  let prevEma = closingPrice; // Initial EMA (use closing price for first candle)
-  const k = 2 / (period + 1); // Weighting factor
-
-  // Calculate EMA only for the most recent candle
-  const emaValue = k * closingPrice + (1 - k) * prevEma;
-
-  return emaValue;
-}
-
-// Function to generate a buy/sell signal for the last candle based on EMA crossover
 export const currentEmaCrossoverSignal = (candles: Candle[], fastPeriod: number, slowPeriod: number): Signal => {
   if (candles?.length < slowPeriod) {
     throw new Error("Not enough data for EMA calculation.");
   }
 
-  const closingPrices = candles.map(candle => candle[4]); // Extract closing prices
-  const fastEMA = ema(fastPeriod, closingPrices);
-  const slowEMA = ema(slowPeriod, closingPrices);
+  const closingPrices = candles.map(candle => candle[4]);
   const lastIndex = candles.length - 1;
 
-  if (fastEMA[lastIndex] > slowEMA[lastIndex] && fastEMA[lastIndex - 1] <= slowEMA[lastIndex - 1]) {
-    return Signal.Buy; // Buy signal 
-  } else if (fastEMA[lastIndex] < slowEMA[lastIndex] && fastEMA[lastIndex - 1] >= slowEMA[lastIndex - 1]) {
-    return Signal.Sell; // Sell signal
+  // Calculate the weighting factors
+  const fastK = 2 / (fastPeriod + 1);
+  const slowK = 2 / (slowPeriod + 1);
+
+  // Initialize EMAs with the first closing price
+  let fastEMA = closingPrices[0];
+  let slowEMA = closingPrices[0];
+
+  // Calculate EMAs iteratively, only keeping track of the previous values
+  for (let i = 1; i <= lastIndex; i++) {
+    fastEMA = calculateCurrentEMA(fastEMA, closingPrices[i], fastK);
+    slowEMA = calculateCurrentEMA(slowEMA, closingPrices[i], slowK);
+  }
+
+  // Store the previous EMA values before updating
+  const prevFastEMA = calculateCurrentEMA(fastEMA, closingPrices[lastIndex - 1], fastK);
+  const prevSlowEMA = calculateCurrentEMA(slowEMA, closingPrices[lastIndex - 1], slowK);
+
+  if (fastEMA > slowEMA && prevFastEMA <= prevSlowEMA) {
+    return Signal.Buy;
+  } else if (fastEMA < slowEMA && prevFastEMA >= prevSlowEMA) {
+    return Signal.Sell;
   } else {
-    return Signal.Hold; // No signal
+    return Signal.Hold;
   }
 };

@@ -35,18 +35,22 @@ export const calculateOiPcr = (optionsChain: OptionData[]): number => {
     return totalPutOI / totalCallOI;
 };
 
-export const oiPcrSignal = (optionsChain: OptionData[],
-    buyThreshold = 0.80,
-    sellThreshold = 1.20): Signal => {
-
+// open interest - put call ratio - signal
+export const oiPcrSignal = (optionsChain: OptionData[]): Signal => {
     const overallPCR = calculateOiPcr(optionsChain);
+    let threshold = 1;
+    let highThreshold = 1.5;
+    let lowThreshold = 0.5;
 
-    if (overallPCR < buyThreshold) {
-        return Signal.Buy; // Buy signal
-    } else if (overallPCR > sellThreshold) {
-        return Signal.Sell; // Sell signal
+    // Check for Exit signal first
+    if (overallPCR > highThreshold || overallPCR < lowThreshold) {
+        return Signal.Exit;
+    } else if (overallPCR < threshold) {
+        return Signal.Buy;
+    } else if (overallPCR > threshold) {
+        return Signal.Sell;
     } else {
-        return Signal.Hold; // Neutral (no signal)
+        return Signal.Hold;
     }
 };
 

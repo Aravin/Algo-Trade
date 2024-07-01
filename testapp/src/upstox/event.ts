@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import fs from 'fs';
+
 import { currentEmaCrossoverSignal } from './lib/moving-average';
 import { adx14Signal } from './lib/average-direction-index';
 import { oiPcrSignal } from './lib/put-call-ratio';
@@ -17,12 +19,45 @@ import { Trend } from './lib/enums/trend.enum';
 import { MarketSignals } from './lib/types/market-signal.types';
 import { Momentum } from './lib/enums/momentum.enum';
 
+import { getISTTime } from './lib/calculations/ist-datetime';
+
+// Helper function to convert signal data to CSV format
+function formatSignalForCSV(signalData: any): string {
+  if (typeof signalData === 'object') {
+    if ('signal' in signalData && 'trend' in signalData) {
+      const { signal, trend } = signalData as { signal: Signal, trend: Trend };
+      return `${signal},${trend}`;
+    } else {
+      return Object.entries(signalData)
+        .map(([key, value]) => `${key}:${value}`)
+        .join(';');
+    }
+  } else {
+    return String(signalData);
+  }
+}
+
 // For demonstration, let's use a basic logging function:
 // In a real application, consider using a dedicated logging library 
 // like Winston or Pino for more robust logging.
-const log = (message: string, data?: any) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${message}`, data ? JSON.stringify(data) : '');
+
+// Define color functions for different log levels (using IST time)
+const logInfo = (message: string, data?: any) => {
+  console.log((`[${getISTTime()}] INFO: ${message}`), data ? JSON.stringify(data) : '');
+};
+
+const log = logInfo;
+
+const logError = (message: string, error?: any) => {
+  console.error((`[${getISTTime()}] ERROR: ${message}`), error ? error : '');
+};
+
+const logSuccess = (message: string, data?: any) => {
+  console.log((`[${getISTTime()}] SUCCESS: ${message}`), data ? JSON.stringify(data) : '');
+};
+
+const logWarning = (message: string, data?: any) => {
+  console.warn((`[${getISTTime()}] WARN: ${message}`), data ? JSON.stringify(data) : '');
 };
 
 export const eventEmitter = new EventEmitter();
@@ -43,11 +78,26 @@ const calculateSignals = (candles: Candle[], optionChainData: OptionData[]): Mar
       emaSignal, adxSignal, pcrSignal, rsi14, stoc14, bb20, atr14
     };
 
+    // --- CSV Logging (write header only once) ---
+    const csvHeaders = Object.keys(signals).join(',');
+    const csvValues = Object.values(signals).map(formatSignalForCSV).join(',');
+
+    const csvFilePath = 'signals_log.csv';
+    const headerExists = fs.existsSync(csvFilePath) && fs.statSync(csvFilePath).size > 0;
+
+    fs.appendFileSync(
+      csvFilePath,
+      `${headerExists ? '' : csvHeaders + '\n'}${csvValues}\n`
+    );
+
+    // --- JSON Logging (stringify the entire object once) ---
+    fs.appendFileSync('signals_log.json', JSON.stringify(signals) + '\n');
+
     log('Calculated Signals:', signals); // Log the calculated signals
     return signals;
 
   } catch (error: unknown) {
-    log('Error calculating signals:', error);
+    logError('Error calculating signals:', error);
     // Re-throw to be handled at a higher level if needed
     throw error;
   }
@@ -57,7 +107,7 @@ const executeTradeLogic = async (token: string, signals: MarketSignals, optionCh
   try {
     const { emaSignal, adxSignal, pcrSignal, bb20, rsi14 } = signals;
 
-    log('Evaluating Trade Logic:', signals); // Log the signals being evaluated
+    log('Evaluating Trade Logic'); // Log the signals being evaluated
 
     if (
       (emaSignal === adxSignal && adxSignal === pcrSignal && pcrSignal === bb20.signal && rsi14 === Momentum.Hold) ||
@@ -69,7 +119,7 @@ const executeTradeLogic = async (token: string, signals: MarketSignals, optionCh
         case "Buy": {
           log("Executing Buy logic");
           const strike = getOtmDetails(optionChainData);
-          log("Placing Buy order for:", { token, instrumentKey: strike.call_options.instrument_key });
+          logSuccess("Placing Buy order for:", { token, instrumentKey: strike.call_options.instrument_key });
           await placeOrder(token, strike.call_options.instrument_key);
           eventEmitter.emit('service_entered', token, strike.call_options.instrument_key, emaSignal, bb20);
           break;
@@ -77,7 +127,7 @@ const executeTradeLogic = async (token: string, signals: MarketSignals, optionCh
         case "Sell": {
           log("Executing Sell logic");
           const strike = getOtmDetails(optionChainData);
-          log("Placing Sell order for:", { token, instrumentKey: strike.put_options.instrument_key });
+          logSuccess("Placing Sell order for:", { token, instrumentKey: strike.put_options.instrument_key });
           await placeOrder(token, strike.put_options.instrument_key);
           eventEmitter.emit('service_entered', token, strike.put_options.instrument_key, emaSignal);
           break;
@@ -89,10 +139,10 @@ const executeTradeLogic = async (token: string, signals: MarketSignals, optionCh
           log("Unknown signal:", emaSignal);
       }
     } else {
-      log("Signals do not align. No trade will be executed.");
+      logWarning("Signals do not align. No trade will be executed.");
     }
   } catch (error: unknown) {
-    log("Error executing trade logic:", error);
+    logError("Error executing trade logic:", error);
     throw error; // Re-throw for higher-level handling 
   }
 };
@@ -106,13 +156,13 @@ const handleData = async (token: string) => {
       optionChainController(token),
     ]);
 
-    log("Market data fetched successfully.", { candles, optionChainData });
+    log("Market data fetched successfully." /*, { candles, optionChainData }*/);
     const signals = calculateSignals(candles, optionChainData);
 
     await executeTradeLogic(token, signals, optionChainData);
 
   } catch (error: unknown) {
-    log("Error in handleData:", error);
+    logError("Error in handleData:", error);
   }
 };
 
@@ -147,7 +197,7 @@ eventEmitter.on('service_entered', (token: string, instrumentKey: string, signal
         log("Signals do not indicate exit. Continuing to monitor...");
       }
     } catch (error: unknown) {
-      log("Error in service_entered handler:", error);
+      logError("Error in service_entered handler:", error);
     }
   }, 1 * 60 * 1000);
 });

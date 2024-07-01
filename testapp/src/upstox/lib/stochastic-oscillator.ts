@@ -44,11 +44,11 @@ export const stochasticSignal = (candles: Candle[], period: number = 14, smoothi
   const overboughtThreshold = 80;
   const oversoldThreshold = 20;
 
-  if (k > d && k < oversoldThreshold) { // Simplified buy condition
+  if (k < d && k < oversoldThreshold) {
     return Signal.Buy;
   }
 
-  if (k < d && k > overboughtThreshold) { // Simplified sell condition
+  if (k > d && k > overboughtThreshold) {
     return Signal.Sell;
   }
 
