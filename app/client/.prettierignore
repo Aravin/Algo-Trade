@@ -1,0 +1,6 @@
+dist
+node_modules
+.wrangler
+coverage
+yarn.lock
+worker-configuration.d.ts

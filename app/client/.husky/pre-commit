@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+cd app/client || exit 1
+yarn lint-staged
