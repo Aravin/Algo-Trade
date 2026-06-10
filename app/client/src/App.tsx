@@ -77,8 +77,6 @@ function App() {
         return <StrategiesPage />
       case 'history':
         return <HistoryPage />
-      case 'journal':
-        return <Placeholder title="Journal" />
       case 'settings':
         return <Placeholder title="Settings" />
       default:

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  BookOpen,
   Clock,
   Home,
   LineChart,
@@ -61,7 +60,6 @@ const navItems: NavItem[] = [
   },
   { icon: <LineChart size={16} />, label: 'Strategies', id: 'strategies' },
   { icon: <Clock size={16} />, label: 'Trade History', id: 'history' },
-  { icon: <BookOpen size={16} />, label: 'Journal', id: 'journal' },
 ]
 
 const bottomItems: NavItem[] = [
