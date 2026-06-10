@@ -1001,7 +1001,7 @@ async function handleOrderList(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token' }, { status: 400 })
   let upstream: Response
   try {
-    upstream = await fetch('https://api.upstox.com/v2/order/details', {
+    upstream = await fetch('https://api.upstox.com/v2/order/retrieve-all', {
       headers: {
         Authorization: `Bearer ${body.token}`,
         Accept: 'application/json',
@@ -1466,16 +1466,15 @@ async function handleNseFii(): Promise<Response> {
         { error: `NSE returned ${res.status}` },
         { status: 502 },
       )
-    const rows =
-      await res.json<
-        {
-          category?: string
-          buyValue?: number
-          sellValue?: number
-          netValue?: number
-          date?: string
-        }[]
-      >()
+    const rows = await res.json<
+      {
+        category?: string
+        buyValue?: number
+        sellValue?: number
+        netValue?: number
+        date?: string
+      }[]
+    >()
     // Return last 5 trading days of FII data
     const fii = rows
       .filter((r) => r.category === 'FII/FPI' || r.category === 'FII')

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
   Clock,
-  Home,
   LineChart,
   Link2,
   Settings,
@@ -51,7 +50,6 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { icon: <Home size={16} />, label: 'Overview', id: 'overview' },
   {
     icon: <TrendingUp size={16} />,
     label: 'Live Trades',
