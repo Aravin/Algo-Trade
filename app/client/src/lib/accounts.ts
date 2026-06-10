@@ -1,0 +1,98 @@
+export type BrokerPurpose = 'analytics' | 'market-data' | 'orders'
+
+export interface BrokerAccount {
+  id: string
+  label: string
+  broker: 'upstox'
+  /** client_id — stored for re-auth, NOT the secret */
+  apiKey?: string
+  /** Standard OAuth access token (daily re-auth) — market data + orders */
+  accessToken?: string
+  /** Long-lived read-only analytics token (1 year) — portfolio + account */
+  analyticsToken?: string
+  purpose: BrokerPurpose[]
+  status: 'connected' | 'disconnected'
+  connectedAt?: string
+}
+
+const STORAGE_KEY = 'algo-trade:broker-accounts'
+const REMOTE_STATE_KEY = 'brokerAccounts'
+
+import { loadRemoteState, saveRemoteState } from '@/lib/clientState'
+
+function readStoredAccounts(): BrokerAccount[] {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  return raw ? (JSON.parse(raw) as BrokerAccount[]) : []
+}
+
+function saveAccounts(accounts: BrokerAccount[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts))
+}
+
+function syncAccounts(accounts: BrokerAccount[]): void {
+  void saveRemoteState(REMOTE_STATE_KEY, accounts).catch(() => {
+    // Keep local state as the source of truth when the worker is unavailable.
+  })
+}
+
+export function getAccounts(): BrokerAccount[] {
+  try {
+    return readStoredAccounts()
+  } catch {
+    return []
+  }
+}
+
+export async function hydrateAccounts(): Promise<void> {
+  try {
+    const remoteAccounts =
+      await loadRemoteState<BrokerAccount[]>(REMOTE_STATE_KEY)
+    if (remoteAccounts) {
+      saveAccounts(remoteAccounts)
+      notify()
+      return
+    }
+  } catch {
+    return
+  }
+
+  const localAccounts = getAccounts()
+  if (localAccounts.length > 0) {
+    syncAccounts(localAccounts)
+  }
+}
+
+export const ACCOUNTS_CHANGED_EVENT = 'algo-trade:accounts-changed'
+
+function notify() {
+  window.dispatchEvent(new CustomEvent(ACCOUNTS_CHANGED_EVENT))
+}
+
+export function addAccount(account: BrokerAccount): void {
+  const accounts = getAccounts()
+  accounts.push(account)
+  saveAccounts(accounts)
+  syncAccounts(accounts)
+  notify()
+}
+
+export function updateAccount(
+  id: string,
+  update: Partial<BrokerAccount>,
+): void {
+  const accounts = getAccounts()
+  const idx = accounts.findIndex((a) => a.id === id)
+  if (idx !== -1) {
+    accounts[idx] = { ...accounts[idx], ...update }
+    saveAccounts(accounts)
+    syncAccounts(accounts)
+    notify()
+  }
+}
+
+export function removeAccount(id: string): void {
+  const accounts = getAccounts().filter((a) => a.id !== id)
+  saveAccounts(accounts)
+  syncAccounts(accounts)
+  notify()
+}

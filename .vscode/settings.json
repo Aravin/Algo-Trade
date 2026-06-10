@@ -1,0 +1,10 @@
+{
+    "mcp": {
+        "inputs": [],
+        "servers": {
+            "Upstox MCP": {
+                "url": "https://mcp.upstox.com/mcp"
+            }
+        }
+    }
+}

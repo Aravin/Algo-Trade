@@ -28,6 +28,7 @@ dist-ssr
 .dev.vars*
 !.dev.vars.example
 .env*
+!.env.sample
 !.env.example
 
 /node_modules

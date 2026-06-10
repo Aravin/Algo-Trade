@@ -1,0 +1,16 @@
+# Cloudflare Worker local dev secrets — copy to .dev.vars and fill in values.
+# .dev.vars is gitignored; this file is safe to commit.
+#
+# For production, set these via:
+#   wrangler secret put UPSTOX_API_KEY
+#   wrangler secret put UPSTOX_API_SECRET
+#
+# ─── Upstox OAuth ───────────────────────────────────────────────
+# Obtained from https://account.upstox.com/developer/apps
+UPSTOX_API_KEY=
+UPSTOX_API_SECRET=
+
+# Redirect URI registered in your Upstox developer app.
+# Local dev  → http://localhost:5173/broker/callback
+# Production → https://<your-domain>/broker/callback
+UPSTOX_REDIRECT_URI=http://localhost:5173/broker/callback

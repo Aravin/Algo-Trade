@@ -1,165 +1,99 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import cloudflareLogo from './assets/cloudflare.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useState } from 'react'
+import { Sidebar } from '@/components/dashboard/sidebar'
+import { Header } from '@/components/dashboard/header'
+import { OverviewPage } from '@/pages/overview'
+import { BrokerAccountsPage } from '@/pages/broker-accounts'
+import { BrokerCallbackPage } from '@/pages/broker-callback'
+import { ProfilePage } from '@/pages/profile'
+import { HistoryPage } from '@/pages/history'
+import { StrategiesPage } from '@/pages/strategies'
+import { hydrateAccounts } from '@/lib/accounts'
+import { hydrateStrategyConfig } from '@/lib/strategyConfig'
 import './App.css'
 
+function Placeholder({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center flex-1 text-muted-foreground text-sm p-6">
+      {title} — coming soon
+    </div>
+  )
+}
+
 function App() {
-  const [count, setCount] = useState(0)
-  const [name, setName] = useState('unknown')
+  const isBrokerCallback = window.location.pathname === '/broker/callback'
+  const urlParams = new URLSearchParams(window.location.search)
+  const initialPage = !isBrokerCallback
+    ? (urlParams.get('page') ?? 'overview')
+    : 'overview'
 
-  const loadName = async () => {
-    const response = await fetch('/api/')
-    const data: unknown = await response.json()
+  const [activeItem, setActiveItem] = useState(initialPage)
+  const [isHydrated, setIsHydrated] = useState(isBrokerCallback)
 
-    if (
-      typeof data === 'object' &&
-      data !== null &&
-      'name' in data &&
-      typeof data.name === 'string'
-    ) {
-      setName(data.name)
+  useEffect(() => {
+    if (!isBrokerCallback && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [isBrokerCallback])
+
+  useEffect(() => {
+    if (isBrokerCallback) return
+
+    let cancelled = false
+    void Promise.allSettled([
+      hydrateAccounts(),
+      hydrateStrategyConfig(),
+    ]).finally(() => {
+      if (!cancelled) setIsHydrated(true)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isBrokerCallback])
+
+  if (isBrokerCallback) {
+    return <BrokerCallbackPage />
+  }
+
+  if (!isHydrated) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        Restoring saved setup…
+      </div>
+    )
+  }
+
+  const renderPage = () => {
+    switch (activeItem) {
+      case 'overview':
+        return <OverviewPage />
+      case 'broker-accounts':
+        return <BrokerAccountsPage />
+      case 'profile':
+        return <ProfilePage />
+      case 'live-trades':
+        return <Placeholder title="Live Trades" />
+      case 'strategies':
+        return <StrategiesPage />
+      case 'history':
+        return <HistoryPage />
+      case 'journal':
+        return <Placeholder title="Journal" />
+      case 'settings':
+        return <Placeholder title="Settings" />
+      default:
+        return <OverviewPage />
     }
   }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started with Cloudflare</h1>
-          <p>
-            Edit <code>src/App.tsx</code> or <code>worker/index.ts</code> and
-            save to test <code>HMR</code>
-          </p>
-        </div>
-        <ul
-          style={{
-            display: 'flex',
-            gap: '1rem',
-            listStyle: 'none',
-            padding: 0,
-          }}
-        >
-          <li>
-            <button
-              className="counter"
-              onClick={() => setCount((count) => count + 1)}
-            >
-              Count is {count}
-            </button>
-          </li>
-          <li>
-            <button
-              className="counter"
-              onClick={() => {
-                void loadName()
-              }}
-              aria-label="get name"
-            >
-              Name from API is: {name}
-            </button>
-          </li>
-        </ul>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-            <li>
-              <a href="https://workers.cloudflare.com/" target="_blank">
-                <img className="button-icon" src={cloudflareLogo} alt="" />
-                Workers Docs
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <div className="flex min-h-dvh bg-background">
+      <Sidebar activeItem={activeItem} onSelect={setActiveItem} />
+      <div className="flex flex-col flex-1 min-w-0">
+        <Header />
+        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
+      </div>
+    </div>
   )
 }
 

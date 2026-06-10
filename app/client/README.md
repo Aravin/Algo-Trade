@@ -1,73 +1,70 @@
-# React + TypeScript + Vite
+# Algo Trade Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript dashboard for the V5 browser-based trading workflow.
 
-Currently, two official plugins are available:
+## First-Time Setup Checklist
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+From `app/client`:
 
-## React Compiler
+- [ ] Install dependencies: `yarn install`
+- [ ] Apply local D1 migrations: `yarn wrangler d1 migrations apply algo-trade-paper --local`
+- [ ] Start the app in dev: `yarn dev`
+- [ ] Deploy the Worker: `yarn deploy`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+If you need the hosted D1 database updated too, run `yarn wrangler d1 migrations apply algo-trade-paper --remote` before deploying.
 
-## Expanding the ESLint configuration
+## Scripts
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `yarn dev` starts the Vite client locally
+- `yarn build` runs TypeScript build and Vite production build
+- `yarn deploy` builds and deploys the Worker
+- `yarn validate` runs typecheck, eslint, and prettier checks
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Persistence
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Broker accounts and saved strategy configuration now persist through the client Worker and D1, so they can survive browser restarts and local dev session resets.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Worker endpoint: `/api/client-state`
+- D1 table: `client_state`
+- Local cache: `localStorage`
+- Detailed notes: `../../docs/client-persistence.md`
+
+The app still uses browser-local storage for transient bot/runtime data and `sessionStorage` for the short-lived Upstox OAuth redirect handoff.
+
+## D1 Migrations And Deploy
+
+Apply pending D1 migrations before expecting restart-safe persistence to work outside the current browser profile.
+
+From `app/client`:
+
+```sh
+yarn wrangler d1 migrations apply algo-trade-paper --local
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Apply the same migration to the remote Cloudflare database:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+yarn wrangler d1 migrations apply algo-trade-paper --remote
 ```
+
+Deploy the Worker after schema and code changes:
+
+```sh
+yarn deploy
+```
+
+The persistence change for broker accounts and strategy config depends on `migrations/0002_client_state.sql` being applied.
+
+## Relevant Files
+
+- `src/lib/accounts.ts`
+- `src/lib/strategyConfig.ts`
+- `src/lib/clientState.ts`
+- `src/App.tsx`
+- `worker/index.ts`
+- `migrations/0002_client_state.sql`
+
+## Notes
+
+- The client uses Yarn v1 in this folder.
+- Full repo typecheck is currently blocked by unrelated pre-existing errors in other client files.
