@@ -159,7 +159,7 @@ export function scoreFiiPositioning(
   consecutiveShortDays: number | null,
 ): VrdScore {
   if (netPosition === null)
-    return { score: 0, max: 2, label: 'FII positioning unavailable' }
+    return { score: 0, max: 1, label: 'FII positioning unavailable' }
   const formatted = Math.abs(netPosition).toLocaleString('en-IN')
   const direction = netPosition < 0 ? '-' : '+'
   const label =
@@ -168,7 +168,7 @@ export function scoreFiiPositioning(
       : `FII net ${direction}${formatted}`
   const score =
     consecutiveShortDays !== null && consecutiveShortDays >= 15 ? 1 : 0
-  return { score, max: 2, label }
+  return { score, max: 1, label }
 }
 
 // ─── Nifty PE ────────────────────────────────────────────────────────────────
@@ -234,7 +234,7 @@ export function scoreStraddleIV(
   percentAboveAvg: number | null,
 ): VrdScore & { preferBuy: boolean } {
   if (percentAboveAvg === null)
-    return { score: 0, max: 1, label: 'IV unavailable', preferBuy: true }
+    return { score: 0, max: 1, label: 'IV unavailable', preferBuy: false }
   if (percentAboveAvg > 30)
     return {
       score: -1,

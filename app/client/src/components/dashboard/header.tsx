@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, RefreshCw } from 'lucide-react'
+import { Bell, RefreshCw, CheckCheck, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getAccounts } from '@/lib/accounts'
+import {
+  useNotifications,
+  requestNotificationPermission,
+} from '@/lib/notifications'
 
 interface IndexData {
   name: string
@@ -149,6 +153,26 @@ function useMarketStatus() {
 export function Header() {
   const { isOpen: isMarketOpen, hint: marketHint } = useMarketStatus()
   const { indices, isLive, refresh } = useIndices(isMarketOpen)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const { notifications, markAllAsRead, clearNotifications, markAsRead } =
+    useNotifications()
+  const unreadCount = notifications.filter((n) => !n.read).length
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    requestNotificationPermission()
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        popupRef.current &&
+        !popupRef.current.contains(event.target as Node)
+      ) {
+        setShowNotifications(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
   const now = new Date()
   const timeStr = now.toLocaleTimeString('en-IN', {
     hour: '2-digit',
@@ -230,15 +254,83 @@ export function Header() {
           >
             <RefreshCw size={15} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            title="Notifications"
-            className="relative"
-          >
-            <Bell size={15} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary" />
-          </Button>
+
+          <div className="relative" ref={popupRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Notifications"
+              onClick={() => setShowNotifications(!showNotifications)}
+            >
+              <Bell size={15} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary" />
+              )}
+            </Button>
+
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-80 bg-popover text-popover-foreground border border-border rounded-md shadow-md z-50 overflow-hidden flex flex-col">
+                <div className="p-3 font-semibold border-b border-border flex justify-between items-center text-sm">
+                  <span>Notifications</span>
+                  <div className="flex gap-2">
+                    {unreadCount > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={markAllAsRead}
+                        title="Mark all as read"
+                      >
+                        <CheckCheck size={14} />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={clearNotifications}
+                      title="Clear notifications"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+                <div className="max-h-96 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground text-sm">
+                      No notifications
+                    </div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`p-3 border-b border-border last:border-b-0 text-sm hover:bg-accent cursor-pointer transition-colors ${!n.read ? 'bg-accent/50 font-medium' : ''}`}
+                        onClick={() => markAsRead(n.id)}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <span
+                            className={`font-semibold ${n.type === 'error' ? 'text-destructive' : n.type === 'success' ? 'text-success' : 'text-foreground'}`}
+                          >
+                            {n.title}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {new Date(n.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground mt-1 text-xs">
+                          {n.message}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 ml-2">
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
               AA

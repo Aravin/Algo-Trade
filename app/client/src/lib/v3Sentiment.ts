@@ -66,8 +66,8 @@ export function evaluateGlobalSentiment(
         break
     }
   }
-  if (score <= -8) return 'bullish'
-  if (score >= 8) return 'bearish'
+  if (score <= -8) return 'bearish'
+  if (score >= 8) return 'bullish'
   return 'neutral'
 }
 
@@ -84,10 +84,10 @@ export function evaluateNiftySentiment(
 }
 
 export function evaluatePCR(pcr: number): PcrZone {
-  if (pcr > 1 && pcr < 1.6) return 'buy'
   if (pcr >= 1.6) return 'overbought'
-  if (pcr < 1 && pcr > 0.6) return 'sell'
+  if (pcr > 1) return 'buy'
   if (pcr <= 0.6) return 'oversold'
+  if (pcr < 1) return 'sell'
   return 'neutral'
 }
 

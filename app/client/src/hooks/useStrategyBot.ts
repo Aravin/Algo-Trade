@@ -20,6 +20,7 @@ import {
   getV3Signal,
   type V3OrderType,
 } from '@/lib/v3Sentiment'
+import { notify } from '@/lib/notifications'
 import {
   runHardStopChecks,
   getFinalSignal,
@@ -76,7 +77,7 @@ const KEYS = {
   proxyHistory: 'algo-trade:proxy-history',
 }
 const MAX_LOGS = 200
-const VRD_CACHE_MAX_MS = 6 * 60 * 60 * 1000 // 6 hours
+const VRD_CACHE_MAX_MS = 30 * 60 * 1000 // 30 minutes
 
 type BotSnapshot = Pick<
   BotStatus,
@@ -277,12 +278,12 @@ function loadPersisted(): Partial<BotStatus> {
     const sourceStatus =
       state === 'RUNNING' || state === 'ORDERED'
         ? (snapshot.sourceStatus ?? {})
-        : Object.fromEntries(
+        : (Object.fromEntries(
             Object.keys(snapshot.sourceStatus ?? {}).map((key) => [
               key,
               'unknown' satisfies SourceStatus,
             ]),
-          )
+          ) as Record<string, SourceStatus>)
     return {
       state,
       position,
@@ -504,7 +505,7 @@ function computeProxyFlow(optionChain: OptionData[], niftyLtp: number) {
 }
 
 function computeProxyValuation(
-  niftyLtp: number,
+  _niftyLtp: number,
   indicators: IndicatorsResult,
   vix: number | null,
   adRatio: number | null,
@@ -521,15 +522,13 @@ function computeProxyValuation(
     adRatio === null ? 0 : adRatio > 1.4 ? -0.75 : adRatio < 0.8 ? 1 : 0
   const premiumStretch =
     indicators.pcrValue > 1.1 ? -0.75 : indicators.pcrValue < 0.8 ? 1.25 : 0
-  const normalizedPrice = niftyLtp > 0 ? (niftyLtp % 1000) / 1000 : 0.5
   const base =
     21 +
     rsiStretch +
     trendStretch +
     volStretch +
     breadthStretch +
-    premiumStretch +
-    (normalizedPrice - 0.5)
+    premiumStretch
   const pe = parseFloat(clamp(base, 16, 30).toFixed(1))
   const label =
     pe < 18
@@ -708,7 +707,12 @@ async function fetchMarketSentiment(
         ? vrdAdRes.value[0]
         : null
     sourceUpdate('vrd/ad', vrdAd ? 'ok' : 'error')
-    if (vrdAd?.advances !== null && vrdAd?.declines !== null) {
+    if (
+      vrdAd?.advances !== null &&
+      vrdAd?.advances !== undefined &&
+      vrdAd?.declines !== null &&
+      vrdAd?.declines !== undefined
+    ) {
       advances = vrdAd.advances
       declines = vrdAd.declines
       adRatio =
@@ -766,7 +770,10 @@ async function fetchMarketSentiment(
       : null
 
   const fiiLongShort =
-    vrdFiiRatio?.longPct !== null && vrdFiiRatio?.shortPct !== null
+    vrdFiiRatio?.longPct !== null &&
+    vrdFiiRatio?.longPct !== undefined &&
+    vrdFiiRatio?.shortPct !== null &&
+    vrdFiiRatio?.shortPct !== undefined
       ? { longPct: vrdFiiRatio.longPct, shortPct: vrdFiiRatio.shortPct }
       : proxyFlow.longPct !== null && proxyFlow.shortPct !== null
         ? { longPct: proxyFlow.longPct, shortPct: proxyFlow.shortPct }
@@ -780,7 +787,7 @@ async function fetchMarketSentiment(
             }
           : null
   const fiiPositioning =
-    vrdFiiPosition?.netPosition !== null
+    vrdFiiPosition && vrdFiiPosition.netPosition !== null
       ? {
           netPosition: vrdFiiPosition.netPosition,
           consecutiveShortDays: vrdFiiPosition.consecutiveShortDays,
@@ -833,7 +840,12 @@ async function fetchMarketSentiment(
       : 'error',
   )
 
-  if (vrdFiiRatio?.longPct !== null && vrdFiiRatio?.shortPct !== null) {
+  if (
+    vrdFiiRatio?.longPct !== null &&
+    vrdFiiRatio?.longPct !== undefined &&
+    vrdFiiRatio?.shortPct !== null &&
+    vrdFiiRatio?.shortPct !== undefined
+  ) {
     addLog(
       mkLog(
         'info',
@@ -853,7 +865,7 @@ async function fetchMarketSentiment(
     )
   }
 
-  if (vrdFiiPosition?.netPosition !== null) {
+  if (vrdFiiPosition && vrdFiiPosition.netPosition !== null) {
     addLog(
       mkLog(
         'info',
@@ -1212,6 +1224,9 @@ async function fetchMarket(
   let globalSentiment: ReturnType<typeof evaluateGlobalSentiment> = 'neutral'
   let niftySentiment: ReturnType<typeof evaluateNiftySentiment> = 'neutral'
   let pcrZone: ReturnType<typeof evaluatePCR> = 'neutral'
+  let globalSentimentFetched = false
+  let niftySentimentFetched = false
+  let pcrZoneFetched = false
 
   if (globalOk) {
     try {
@@ -1219,6 +1234,7 @@ async function fetchMarket(
         globalRes.value[0] as Parameters<typeof transformGlobalData>[0],
       )
       globalSentiment = evaluateGlobalSentiment(gData)
+      globalSentimentFetched = true
       sourceUpdate('global-sentiment', 'ok')
     } catch (e) {
       addLog(
@@ -1236,6 +1252,7 @@ async function fetchMarket(
       ...(vrdDashboard.us ?? []),
       ...(vrdDashboard.commodities ?? []),
     ])
+    globalSentimentFetched = true
     addLog(
       mkLog(
         'warn',
@@ -1262,9 +1279,11 @@ async function fetchMarket(
       (niftyRes.value[0] as { resultData?: { change_per?: number }[] })
         ?.resultData ?? [],
     )
+    niftySentimentFetched = true
     sourceUpdate('nifty-sentiment', 'ok')
   } else if (vrdAd?.advances !== null && vrdAd?.advances !== undefined) {
     niftySentiment = evaluateNiftySentimentFromAdvanceCount(vrdAd.advances)
+    niftySentimentFetched = true
     addLog(
       mkLog(
         'warn',
@@ -1296,8 +1315,10 @@ async function fetchMarket(
   )
   if (totalCall > 0) {
     pcrZone = evaluatePCR(totalPut / totalCall)
+    pcrZoneFetched = true
   } else if (upstoxPcr?.value != null) {
     pcrZone = evaluatePCR(upstoxPcr.value)
+    pcrZoneFetched = true
     addLog(
       mkLog(
         'warn',
@@ -1307,6 +1328,7 @@ async function fetchMarket(
     )
   } else if (vrdPcr?.value != null) {
     pcrZone = evaluatePCR(vrdPcr.value)
+    pcrZoneFetched = true
     addLog(
       mkLog(
         'warn',
@@ -1316,6 +1338,7 @@ async function fetchMarket(
     )
   } else if (vrdDashboard?.pcr != null) {
     pcrZone = evaluatePCR(vrdDashboard.pcr)
+    pcrZoneFetched = true
     addLog(
       mkLog(
         'warn',
@@ -1326,7 +1349,7 @@ async function fetchMarket(
   }
 
   try {
-    if (globalSentiment || niftySentiment || pcrZone) {
+    if (globalSentimentFetched || niftySentimentFetched || pcrZoneFetched) {
       v3 = getV3Signal(globalSentiment, niftySentiment, pcrZone)
       addLog(
         mkLog(
@@ -1432,8 +1455,6 @@ export function useStrategyBot(token: string | null) {
     }
 
     // Wraps addLog so tick-level logs use the local buffer
-    const liveLog = (entry: BotLog) => tickLogs.push(entry)
-    void liveLog // suppress unused warning — it's captured in closures below
 
     log('info', 'tick', `state=${cur.state} trades=${cur.tradesCount}`)
 
@@ -1536,9 +1557,13 @@ export function useStrategyBot(token: string | null) {
 
       // Entry cutoff check
       const [lh, lm] = config.lastEntryTime.split(':').map(Number)
-      const now = new Date()
+      // Use IST explicitly so the cutoff fires at the correct local market time
+      const nowIST = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
+      )
       const afterCutoff =
-        now.getHours() > lh || (now.getHours() === lh && now.getMinutes() >= lm)
+        nowIST.getHours() > lh ||
+        (nowIST.getHours() === lh && nowIST.getMinutes() >= lm)
 
       if (cur.state === 'RUNNING') {
         if (afterCutoff) {
@@ -1583,7 +1608,10 @@ export function useStrategyBot(token: string | null) {
               ? strike.call_options.market_data.ltp
               : strike.put_options.market_data.ltp
           const executionMode: ExecutionMode = config.executionMode
-          let qty = finalSignal.positionSize === 'full' ? LOT_SIZE : LOT_SIZE
+          let qty =
+            finalSignal.positionSize === 'full'
+              ? LOT_SIZE
+              : Math.floor(LOT_SIZE / 2)
           let paperTrade: PaperTrade | null = null
           if (executionMode === 'paper') {
             let paperBalance: number | null = null
@@ -1675,6 +1703,11 @@ export function useStrategyBot(token: string | null) {
                 `Paper BUY created tradeId=${paperTrade.id}`,
               ),
             )
+            notify(
+              'Paper Trade Executed',
+              `Paper BUY ${dir} ${qty}qty (${instrumentKey}) placed`,
+              'success',
+            )
           } else {
             const [orderData, orderErr] = await safeFetch<{
               status?: string
@@ -1720,6 +1753,11 @@ export function useStrategyBot(token: string | null) {
                 `BUY placed orderId=${orderData?.data?.order_id ?? '—'}`,
               ),
             )
+            notify(
+              'Trade Executed',
+              `BUY ${dir} ${qty}qty (${instrumentKey}) placed successfully`,
+              'success',
+            )
           }
           const position: ActivePosition = {
             instrumentKey,
@@ -1762,12 +1800,16 @@ export function useStrategyBot(token: string | null) {
             ),
           )
 
-        const { exit, reason } = shouldExit(
+        const { exit: signalExit, reason: signalReason } = shouldExit(
           cur.position,
           allSignalData,
           currentPrice,
           config,
         )
+        const exit = signalExit || afterCutoff
+        const reason = afterCutoff
+          ? `EOD forced exit — after ${config.lastEntryTime}`
+          : signalReason
         if (exit) {
           if (isPaperPosition(cur.position)) {
             addLog(
@@ -1790,9 +1832,19 @@ export function useStrategyBot(token: string | null) {
               addLog(
                 mkLog('error', 'paper', `Paper SELL failed: ${paperExitErr}`),
               )
+              notify(
+                'Paper Trade Error',
+                `Paper SELL failed: ${paperExitErr}`,
+                'error',
+              )
               return
             }
             addLog(mkLog('info', 'paper', 'Paper SELL settled successfully'))
+            notify(
+              'Paper Trade Exited',
+              `Paper SELL settled. Reason: ${reason}`,
+              'info',
+            )
           } else {
             addLog(
               mkLog(
@@ -1813,9 +1865,15 @@ export function useStrategyBot(token: string | null) {
             })
             if (sellErr) {
               addLog(mkLog('error', 'order', `SELL failed: ${sellErr}`))
+              notify('Trade Error', `SELL failed: ${sellErr}`, 'error')
               return
             }
             addLog(mkLog('info', 'order', 'SELL placed successfully'))
+            notify(
+              'Trade Exited',
+              `SELL order placed. Reason: ${reason}`,
+              'info',
+            )
           }
           const nextState: BotState =
             cur.tradesCount >= config.maxTradesPerDay ? 'STOPPED' : 'RUNNING'

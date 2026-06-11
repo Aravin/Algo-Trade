@@ -75,7 +75,7 @@ export function runHardStopChecks(vrd: VrdData | null): {
 // ─── V4 composite signal ──────────────────────────────────────────────────────
 export function getV4Signal(ind: IndicatorsResult): SignalType {
   const { ema, adx, pcr, bollinger, rsi } = ind
-  if (rsi.signal === 'Overbought' || rsi.signal === 'Oversold') return 'Hold'
+  if (rsi.signal === 'Overbought') return 'Hold'
   // All 4 agree
   if (
     ema === 'Buy' &&
@@ -169,7 +169,7 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
   // VRD signals
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
-    if (mmi.direction === 'BULL' || mmi.contrarian) {
+    if (mmi.direction === 'BULL') {
       score += addScore(bd, 'L2', 'MMI', mmi.label, mmi.score, mmi.max)
       max += mmi.max
     }
@@ -267,10 +267,7 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
 
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
-    if (
-      mmi.direction === 'BEAR' ||
-      (mmi.contrarian && mmi.direction === 'BEAR')
-    ) {
+    if (mmi.direction === 'BEAR') {
       const pts = Math.abs(mmi.score)
       score += addScore(bd, 'L2', 'MMI', mmi.label, pts, mmi.max)
       max += mmi.max
@@ -295,7 +292,7 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    if (pe.bias === 'PE') {
+    if (pe.bias === 'PE' && pe.score !== 0) {
       score += addScore(
         bd,
         'L2',
@@ -337,9 +334,14 @@ export function getFinalSignal(
   const v4 = getV4Signal(data.indicators)
   const gap = Math.abs(bull.score - bear.score)
   const top = Math.max(bull.score, bear.score)
-  const max = Math.max(bull.max, bear.max, 1)
   const dominant =
     bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : 'none'
+  const scoreMax =
+    dominant === 'bull'
+      ? Math.max(bull.max, 1)
+      : dominant === 'bear'
+        ? Math.max(bear.max, 1)
+        : Math.max(bull.max, bear.max, 1)
 
   let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
   if (top >= config.strongThreshold && gap >= 6) confidence = 'strong'
@@ -360,7 +362,7 @@ export function getFinalSignal(
       v4,
       bullScore: bull.score,
       bearScore: bear.score,
-      scoreMax: max,
+      scoreMax: scoreMax,
     }
   }
 
@@ -374,7 +376,7 @@ export function getFinalSignal(
     v4,
     bullScore: bull.score,
     bearScore: bear.score,
-    scoreMax: max,
+    scoreMax: scoreMax,
   }
 }
 

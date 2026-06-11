@@ -24,7 +24,7 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   pollingIntervalSec: 60,
   minConfidence: 'moderate',
   otmSkip: 3,
-  executionMode: 'live',
+  executionMode: 'paper',
 }
 
 const KEY = 'algo-trade:strategy-config'

@@ -1,7 +1,7 @@
 export const buySellSignal
     = (momentum: string, trend: string, volatility: string, currentState: string, orderType: string): AllOrders | HoldOrExit | '' => {
     const orderState = buySellMatrix.find((v) => {
-        v.buy_order === momentum && v.trend_macd === trend && v.volatility_atr === volatility
+        return v.momentum_rsi === momentum && v.trend_macd === trend && v.volatility_atr === volatility
     });
 
     if (!orderState)

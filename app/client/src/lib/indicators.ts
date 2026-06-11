@@ -85,13 +85,14 @@ export function calcEMACrossover(
   const slowK = 2 / (slowPeriod + 1)
   let fastEMA = closes[0]
   let slowEMA = closes[0]
+  let prevFast = fastEMA
+  let prevSlow = slowEMA
   for (let i = 1; i < closes.length; i++) {
+    prevFast = fastEMA
+    prevSlow = slowEMA
     fastEMA = updateEMA(fastEMA, closes[i], fastK)
     slowEMA = updateEMA(slowEMA, closes[i], slowK)
   }
-  // Previous tick
-  const prevFast = updateEMA(fastEMA, closes[closes.length - 2], fastK)
-  const prevSlow = updateEMA(slowEMA, closes[closes.length - 2], slowK)
   if (fastEMA > slowEMA && prevFast <= prevSlow) return 'Buy'
   if (fastEMA < slowEMA && prevFast >= prevSlow) return 'Sell'
   return 'Hold'
@@ -99,18 +100,29 @@ export function calcEMACrossover(
 
 // ─── ADX(14) — trend strength + direction ────────────────────────────────────
 export function calcADX(candles: Candle[], period = 14): SignalType {
-  if (candles.length < period) return 'Hold'
-  const recent = candles.slice(-period)
+  if (candles.length < period * 2) return 'Hold'
+  const recent = candles.slice(-(period * 2))
   const pdms = new Array<number>(recent.length).fill(0)
   const ndms = new Array<number>(recent.length).fill(0)
+  const trs = new Array<number>(recent.length).fill(0)
   for (let i = 1; i < recent.length; i++) {
     const upMove = recent[i][2] - recent[i - 1][2]
     const downMove = recent[i - 1][3] - recent[i][3]
     pdms[i] = upMove > downMove && upMove > 0 ? upMove : 0
     ndms[i] = downMove > upMove && downMove > 0 ? downMove : 0
+    trs[i] = trueRange(recent[i], recent[i - 1][4])
   }
-  const plusDi = computeEMAArray(pdms, period)
-  const minusDi = computeEMAArray(ndms, period)
+  const smoothedPdm = computeEMAArray(pdms, period)
+  const smoothedNdm = computeEMAArray(ndms, period)
+  const smoothedTr = computeEMAArray(trs, period)
+  const plusDi = smoothedPdm.map((p, i) => {
+    const t = smoothedTr[i]
+    return t > 0 ? (p / t) * 100 : 0
+  })
+  const minusDi = smoothedNdm.map((n, i) => {
+    const t = smoothedTr[i]
+    return t > 0 ? (n / t) * 100 : 0
+  })
   const dxs = plusDi.map((p, i) => {
     const n = minusDi[i]
     const div = p + n
@@ -133,16 +145,25 @@ export function calcRSI(
   oversold = 30,
 ): { value: number; signal: MomentumType } {
   if (candles.length <= period) return { value: 50, signal: 'Hold' }
-  const recent = candles.slice(-(period + 1))
-  let gains = 0
-  let losses = 0
-  for (let i = 1; i < recent.length; i++) {
-    const diff = recent[i][4] - recent[i - 1][4]
-    if (diff >= 0) gains += diff
-    else losses -= diff
+  const closes = candles.map((c) => c[4])
+  // Seed with simple average of first period changes
+  let avgGain = 0
+  let avgLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i - 1]
+    if (diff >= 0) avgGain += diff
+    else avgLoss -= diff
   }
-  const avgGain = gains / period
-  const avgLoss = losses / period
+  avgGain /= period
+  avgLoss /= period
+  // Wilder's smoothing: EMA factor = 1/period
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1]
+    const gain = diff >= 0 ? diff : 0
+    const loss = diff < 0 ? -diff : 0
+    avgGain = (avgGain * (period - 1) + gain) / period
+    avgLoss = (avgLoss * (period - 1) + loss) / period
+  }
   if (avgLoss === 0) return { value: 100, signal: 'Overbought' }
   const rs = avgGain / avgLoss
   const value = parseFloat((100 - 100 / (1 + rs)).toFixed(2))
@@ -168,9 +189,10 @@ export function calcStochastic(
     const close = recent[i][4]
     kValues.push(high === low ? 50 : ((close - low) / (high - low)) * 100)
   }
-  const dValues = computeEMAArray(kValues, smoothing)
   const k = parseFloat((kValues[kValues.length - 1] ?? 50).toFixed(2))
-  const d = parseFloat((dValues[dValues.length - 1] ?? 50).toFixed(2))
+  const d = parseFloat(
+    (kValues.reduce((s, v) => s + v, 0) / kValues.length).toFixed(2),
+  )
   let signal: SignalType = 'Hold'
   if (k < d && k < 20) signal = 'Buy'
   else if (k > d && k > 80) signal = 'Sell'
@@ -209,27 +231,33 @@ export function calcBollingerBands(
   const middle = parseFloat(sma.toFixed(2))
   const currentPrice = candles[candles.length - 1][4]
   let signal: SignalType = 'Hold'
-  if (currentPrice > upper) signal = 'Buy'
-  else if (currentPrice < lower) signal = 'Sell'
+  if (currentPrice > upper) signal = 'Sell'
+  else if (currentPrice < lower) signal = 'Buy'
   const trend: TrendType =
     currentPrice > middle ? 'Up' : currentPrice < middle ? 'Down' : 'Neutral'
   return { upper, middle, lower, signal, trend }
 }
 
 // ─── ATR(14) ─────────────────────────────────────────────────────────────────
-function trueRange(c: Candle): number {
-  return Math.max(c[2] - c[3], Math.abs(c[4] - c[1]))
+function trueRange(c: Candle, prevClose: number): number {
+  return Math.max(
+    c[2] - c[3],
+    Math.abs(c[2] - prevClose),
+    Math.abs(c[3] - prevClose),
+  )
 }
 
 export function calcATR(
   candles: Candle[],
   period = 14,
 ): { value: number; level: VolatilityLevel } {
-  if (candles.length < period) return { value: 0, level: 'Low' }
-  const recent = candles.slice(-period)
-  const atr = parseFloat(
-    (recent.map(trueRange).reduce((s, t) => s + t, 0) / period).toFixed(2),
-  )
+  if (candles.length < period + 1) return { value: 0, level: 'Low' }
+  const recent = candles.slice(-(period + 1))
+  let trSum = 0
+  for (let i = 1; i < recent.length; i++) {
+    trSum += trueRange(recent[i], recent[i - 1][4])
+  }
+  const atr = parseFloat((trSum / period).toFixed(2))
   const spot = candles[candles.length - 1][4]
   const pct = spot > 0 ? atr / spot : 0
   const level: VolatilityLevel =

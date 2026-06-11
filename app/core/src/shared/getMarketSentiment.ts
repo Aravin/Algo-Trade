@@ -8,7 +8,7 @@ export const getMarketSentiment = (global: string, local: string, pcr: string): 
 
     if (canTrade) {
         const strategyMap = marketStrategyMapping.find(
-            (v) => v.marketSentiment === local && v.putCallRatio == pcr && v.strategy !== null);
+            (v) => v.marketSentiment === local && v.putCallRatio == pcr && v.orderType !== null);
 
         return (strategyMap?.orderType as OrderTypes || 'hold');
     }
