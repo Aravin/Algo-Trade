@@ -95,9 +95,9 @@ const evaluateMarketCondition = (marketData: any) => {
     }
 
     if (marketCondition <= -8) {
-        return 'bullish'
-    } else if (marketCondition >= 8) {
         return 'bearish'
+    } else if (marketCondition >= 8) {
+        return 'bullish'
     } else {
         return 'neutral';
     }

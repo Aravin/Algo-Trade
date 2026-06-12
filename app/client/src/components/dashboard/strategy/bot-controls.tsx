@@ -58,11 +58,30 @@ export function BotControls({
 
   const pct = position
     ? (() => {
-        const pos = position as ActivePosition & { currentPrice?: number }
-        return pos.currentPrice !== undefined
-          ? ((pos.currentPrice - position.entryPrice) / position.entryPrice) *
-              100
-          : null
+        if (position.legs && position.legs.length > 0) {
+          let totalPnl = 0
+          let totalEntryValue = 0
+          for (const leg of position.legs) {
+            const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+            const legPnl =
+              leg.tradeType === 'selling'
+                ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+                : (legCurrentPrice - leg.entryPrice) * leg.quantity
+            totalPnl += legPnl
+            totalEntryValue += leg.entryPrice * leg.quantity
+          }
+          return totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+        }
+
+        const pos = position as ActivePosition & {
+          currentPrice?: number
+          tradeType?: 'buying' | 'selling' | 'both'
+        }
+        if (pos.currentPrice === undefined) return null
+        const isSelling = pos.tradeType === 'selling'
+        return isSelling
+          ? ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100
+          : ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
       })()
     : null
 
@@ -128,13 +147,24 @@ export function BotControls({
         {position && (
           <div className="rounded-lg border bg-muted/40 p-3 space-y-2">
             <div className="flex items-center gap-2">
-              {position.direction === 'CE' ? (
+              {position.tradeType === 'both' ? (
+                position.direction === 'CE' ? (
+                  <TrendingUp size={13} className="text-success" />
+                ) : (
+                  <TrendingDown size={13} className="text-destructive" />
+                )
+              ) : (position.tradeType === 'selling' &&
+                  position.direction === 'PE') ||
+                (position.tradeType !== 'selling' &&
+                  position.direction === 'CE') ? (
                 <TrendingUp size={13} className="text-success" />
               ) : (
                 <TrendingDown size={13} className="text-destructive" />
               )}
               <span className="text-xs font-medium">
-                {position.direction} Option
+                {position.tradeType === 'both'
+                  ? 'Long & Short Combo'
+                  : `${position.tradeType === 'selling' ? 'Short' : 'Long'} ${position.direction} Option`}
               </span>
               {position.executionMode === 'paper' && (
                 <Badge variant="secondary" className="text-xs">
@@ -145,14 +175,54 @@ export function BotControls({
                 qty {position.quantity}
               </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-x-4 text-xs">
-              <span className="text-muted-foreground">Entry</span>
-              <span className="font-mono">
-                {position.entryPrice.toFixed(2)}
-              </span>
+
+            {position.legs && position.legs.length > 0 && (
+              <div className="space-y-1.5 border-t border-border/40 pt-2 text-xs">
+                {position.legs.map((leg, idx) => {
+                  const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+                  const legPct =
+                    leg.tradeType === 'selling'
+                      ? ((leg.entryPrice - legCurrentPrice) / leg.entryPrice) *
+                        100
+                      : ((legCurrentPrice - leg.entryPrice) / leg.entryPrice) *
+                        100
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-[11px] font-mono bg-muted/20 px-2 py-1 rounded"
+                    >
+                      <span className="text-muted-foreground">
+                        {leg.tradeType === 'selling' ? 'Short' : 'Long'}{' '}
+                        {leg.direction}
+                      </span>
+                      <span className="text-foreground">
+                        {leg.entryPrice.toFixed(2)} →{' '}
+                        {legCurrentPrice.toFixed(2)}
+                      </span>
+                      <span
+                        className={`font-semibold ${legPct >= 0 ? 'text-success' : 'text-destructive'}`}
+                      >
+                        {legPct >= 0 ? '+' : ''}
+                        {legPct.toFixed(1)}%
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-x-4 text-xs pt-1.5 border-t border-border/40">
+              {(!position.legs || position.legs.length === 0) && (
+                <>
+                  <span className="text-muted-foreground">Entry</span>
+                  <span className="font-mono">
+                    {position.entryPrice.toFixed(2)}
+                  </span>
+                </>
+              )}
               {pct !== null && (
                 <>
-                  <span className="text-muted-foreground">P&L</span>
+                  <span className="text-muted-foreground">Total P&L</span>
                   <span
                     className={`font-mono font-semibold ${pct >= 0 ? 'text-success' : 'text-destructive'}`}
                   >

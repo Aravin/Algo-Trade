@@ -30,8 +30,8 @@
     {
       "binding": "PAPER_TRADING_DB",
       "database_name": "algo-trade-paper",
-      "database_id": "dc8d72f3-11ee-4ff9-8f24-3c9b5f3b5c33"
-    }
+      "database_id": "dc8d72f3-11ee-4ff9-8f24-3c9b5f3b5c33",
+    },
   ],
   /**
    * Environment Variables

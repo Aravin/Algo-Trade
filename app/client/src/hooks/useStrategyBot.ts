@@ -13,7 +13,6 @@ import {
   type IndicatorsResult,
 } from '@/lib/indicators'
 import {
-  transformGlobalData,
   evaluateGlobalSentiment,
   evaluateNiftySentiment,
   evaluatePCR,
@@ -28,6 +27,7 @@ import {
   type AllSignalData,
   type FinalSignal,
   type ActivePosition,
+  type PositionLeg,
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import {
@@ -50,6 +50,14 @@ export interface BotLog {
   msg: string
 }
 
+export interface GlobalIndexItem {
+  symbol: string
+  last_price: number
+  change_per: number
+  net_change?: number
+  [key: string]: unknown
+}
+
 export interface BotStatus {
   state: BotState
   position: ActivePosition | null
@@ -63,6 +71,7 @@ export interface BotStatus {
   tradesCount: number
   logs: BotLog[]
   sourceStatus: Record<string, SourceStatus>
+  globalIndices: GlobalIndexItem[] | null
 }
 
 // ─── LocalStorage keys ─────────────────────────────────────────────────────────
@@ -88,6 +97,7 @@ type BotSnapshot = Pick<
   | 'hardStop'
   | 'lastUpdated'
   | 'sourceStatus'
+  | 'globalIndices'
 >
 
 // ─── Log factory ───────────────────────────────────────────────────────────────
@@ -308,23 +318,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-function evaluateGlobalSentimentFromVrd(
-  items: { change?: number; displayName?: string }[],
-): 'bullish' | 'bearish' | 'neutral' {
-  let score = 0
-  for (const item of items) {
-    const change = item.change ?? 0
-    const weight = item.displayName?.toLowerCase().includes('gift') ? 2 : 1
-    if (change >= 1.5) score += 2 * weight
-    else if (change > 0.15) score += 1 * weight
-    else if (change <= -1.5) score -= 2 * weight
-    else if (change < -0.15) score -= 1 * weight
-  }
-  if (score <= -4) return 'bullish'
-  if (score >= 4) return 'bearish'
-  return 'neutral'
-}
-
 function evaluateNiftySentimentFromAdvanceCount(
   advances: number | null,
 ): ReturnType<typeof evaluateNiftySentiment> {
@@ -540,98 +533,86 @@ function computeProxyValuation(
 }
 
 // ─── Market Sentiment data (replaces VRD fetch) ───────────────────────────────
-const MKTDATA_SOURCES: { key: string; label: string }[] = [
-  { key: 'vix', label: 'VIX' },
-  { key: 'breadth', label: 'Breadth' },
-  { key: 'vrd/dashboard', label: 'VRD Dashboard' },
-  { key: 'vrd/mmi', label: 'VRD MMI' },
-  { key: 'vrd/fii-ratio', label: 'VRD FII Ratio' },
-  { key: 'vrd/fii-position', label: 'VRD FII Pos' },
-  { key: 'vrd/pe', label: 'VRD PE' },
-  { key: 'vrd/ad', label: 'VRD A/D' },
-  { key: 'vrd/pcr', label: 'VRD PCR' },
-  { key: 'synthetic/flow', label: 'Proxy Flow' },
-  { key: 'synthetic/value', label: 'Proxy Value' },
-]
-
 async function fetchMarketSentiment(
   token: string,
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
   optionChain: OptionData[],
   indicators: IndicatorsResult,
-  cachedVrdData: VrdData | null,
+  breadth: {
+    advances: number
+    declines: number
+    ratio: number
+    total: number
+  } | null,
 ): Promise<VrdData> {
-  for (const s of MKTDATA_SOURCES) sourceUpdate(s.key, 'pending')
+  sourceUpdate('vix', 'pending')
+  sourceUpdate('upstox/fii', 'pending')
+  sourceUpdate('upstox/dii', 'pending')
+  sourceUpdate('upstox/pcr', 'pending')
+  sourceUpdate('upstox/max-pain', 'pending')
+  sourceUpdate('synthetic/value', 'pending')
 
-  const [
-    vixRes,
-    breadthRes,
-    vrdDashboardRes,
-    vrdMmiRes,
-    vrdFiiRatioRes,
-    vrdFiiPositionRes,
-    vrdPeRes,
-    vrdAdRes,
-    vrdPcrRes,
-  ] = await Promise.allSettled([
-    safeFetch<{ vix: number | null }>('/api/market/vix', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    }),
-    safeFetch<{
-      advances: number
-      declines: number
-      ratio: number
-      total: number
-    }>('/api/market/breadth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    }),
-    safeFetch<{ vix: number | null; pcr: number | null }>(
-      '/api/market/vrd/dashboard',
-    ),
-    safeFetch<{ score: number | null; date: string | null }>(
-      '/api/market/vrd/market-mood',
-    ),
-    safeFetch<{
-      longPct: number | null
-      shortPct: number | null
-      date: string | null
-    }>('/api/market/vrd/fii-ratio'),
-    safeFetch<{
-      netPosition: number | null
-      consecutiveShortDays: number | null
-      date: string | null
-    }>('/api/market/vrd/fii-positioning'),
-    safeFetch<{ pe: number | null; label: string | null; date: string | null }>(
-      '/api/market/vrd/pe',
-    ),
-    safeFetch<{
-      advances: number | null
-      declines: number | null
-      ratio: number | null
-      date: string | null
-    }>('/api/market/vrd/advance-decline'),
-    safeFetch<{ value: number | null; date: string | null }>(
-      '/api/market/vrd/pcr',
-    ),
-  ])
+  const latestExpiry = optionChain[0]?.expiry ?? ''
 
-  const vrdDashboard =
-    vrdDashboardRes.status === 'fulfilled' && !vrdDashboardRes.value[1]
-      ? vrdDashboardRes.value[0]
-      : null
-  sourceUpdate('vrd/dashboard', vrdDashboard ? 'ok' : 'error')
-  if (!vrdDashboard) {
-    const err =
-      vrdDashboardRes.status === 'fulfilled'
-        ? (vrdDashboardRes.value[1] ?? 'unknown')
-        : 'fetch failed'
-    addLog(mkLog('warn', 'vrd/dashboard', err))
-  }
+  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes] = await Promise.allSettled(
+    [
+      safeFetch<{ vix: number | null }>('/api/market/vix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+      safeFetch<{
+        status: string
+        data?: Record<
+          string,
+          {
+            time_stamp: number
+            total_long_contracts: number
+            total_short_contracts: number
+            buy_amount: number
+            sell_amount: number
+          }[]
+        >
+      }>('/api/market/upstox/fii', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+      safeFetch<{
+        status: string
+        data?: Record<
+          string,
+          {
+            time_stamp: number
+            buy_amount: number
+            sell_amount: number
+          }[]
+        >
+      }>('/api/market/upstox/dii', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+      safeFetch<{
+        value: number | null
+      }>('/api/market/upstox/pcr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, expiry: latestExpiry }),
+      }),
+      safeFetch<{
+        status: string
+        data?: {
+          max_pain: number
+        }
+      }>('/api/market/upstox/max-pain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, expiry: latestExpiry }),
+      }),
+    ],
+  )
 
   // VIX
   let vix: number | null = null
@@ -641,7 +622,7 @@ async function fetchMarketSentiment(
       mkLog(
         vix !== null ? 'info' : 'warn',
         'vix',
-        vix !== null ? `VIX=${vix}` : 'VIX returned null',
+        vix !== null ? 'VIX=' + vix : 'VIX returned null',
       ),
     )
     sourceUpdate('vix', vix !== null ? 'ok' : 'error')
@@ -650,378 +631,228 @@ async function fetchMarketSentiment(
       vixRes.status === 'fulfilled'
         ? (vixRes.value[1] ?? 'unknown')
         : 'fetch failed'
-    if (vrdDashboard?.vix !== null && vrdDashboard?.vix !== undefined) {
-      vix = vrdDashboard.vix
-      addLog(
-        mkLog(
-          'warn',
-          'vix',
-          `Upstox failed (${err}); using VRD dashboard VIX=${vix}`,
-        ),
-      )
-      sourceUpdate('vix', 'ok')
-    } else if (
-      cachedVrdData?.vix !== null &&
-      cachedVrdData?.vix !== undefined
-    ) {
-      vix = cachedVrdData.vix
-      addLog(
-        mkLog(
-          'warn',
-          'vix',
-          `live sources unavailable (${err}); using cached VIX=${vix}`,
-        ),
-      )
-      sourceUpdate('vix', 'stale')
-    } else {
-      addLog(mkLog('error', 'vix', err))
-      sourceUpdate('vix', 'error')
-    }
+    addLog(mkLog('error', 'vix', err))
+    sourceUpdate('vix', 'error')
   }
 
-  // Breadth
-  let advances: number | null = null
-  let declines: number | null = null
-  let adRatio: number | null = null
-  if (breadthRes.status === 'fulfilled' && !breadthRes.value[1]) {
-    const bd = breadthRes.value[0]
-    advances = bd?.advances ?? null
-    declines = bd?.declines ?? null
-    adRatio = bd?.ratio ?? null
+  // FII
+  let fiiLongShort: { longPct: number | null; shortPct: number | null } | null =
+    null
+  let fiiPositioning: {
+    netPosition: number | null
+    consecutiveShortDays: number | null
+  } | null = null
+
+  if (
+    fiiRes.status === 'fulfilled' &&
+    !fiiRes.value[1] &&
+    fiiRes.value[0]?.data
+  ) {
+    const fiiData = fiiRes.value[0].data
+    const indexFutures = fiiData['NSE_FO|INDEX_FUTURES'] ?? []
+    const sortedFii = [...indexFutures].sort(
+      (a, b) => b.time_stamp - a.time_stamp,
+    )
+    const latestFii = sortedFii[0]
+
+    if (latestFii) {
+      const long = latestFii.total_long_contracts ?? 0
+      const short = latestFii.total_short_contracts ?? 0
+      const total = long + short
+
+      if (total > 0) {
+        fiiLongShort = {
+          longPct: parseFloat(((long / total) * 100).toFixed(1)),
+          shortPct: parseFloat(((short / total) * 100).toFixed(1)),
+        }
+        fiiPositioning = {
+          netPosition: long - short,
+          consecutiveShortDays: 0,
+        }
+
+        let shortDays = 0
+        for (const entry of sortedFii) {
+          const entryNet =
+            (entry.total_long_contracts ?? 0) -
+            (entry.total_short_contracts ?? 0)
+          if (entryNet < 0) {
+            shortDays++
+          } else {
+            break
+          }
+        }
+        fiiPositioning.consecutiveShortDays = shortDays || null
+
+        addLog(
+          mkLog(
+            'info',
+            'fii',
+            `FII Futures: L=${fiiLongShort.longPct}% S=${fiiLongShort.shortPct}% Net=${fiiPositioning.netPosition}`,
+          ),
+        )
+        sourceUpdate('upstox/fii', 'ok')
+      } else {
+        sourceUpdate('upstox/fii', 'error')
+      }
+    } else {
+      sourceUpdate('upstox/fii', 'error')
+    }
+  } else {
+    sourceUpdate('upstox/fii', 'error')
+  }
+
+  // Fallback to proxy/synthetic FII if Upstox FII failed
+  const niftyLtp = optionChain[0]?.underlying_spot_price ?? 0
+  if (!fiiLongShort || !fiiPositioning) {
+    const proxyFlow = computeProxyFlow(optionChain, niftyLtp)
+    fiiLongShort =
+      proxyFlow.longPct !== null && proxyFlow.shortPct !== null
+        ? { longPct: proxyFlow.longPct, shortPct: proxyFlow.shortPct }
+        : null
+    fiiPositioning =
+      proxyFlow.netPosition !== null
+        ? {
+            netPosition: proxyFlow.netPosition,
+            consecutiveShortDays: proxyFlow.consecutiveShortDays,
+          }
+        : null
     addLog(
       mkLog(
-        'info',
-        'breadth',
-        `A/D=${advances}↑ ${declines}↓ ratio=${adRatio} (${bd?.total} stocks)`,
+        'warn',
+        'fii',
+        'FII API unavailable; fell back to synthetic flow options estimate',
       ),
     )
-    sourceUpdate('breadth', advances !== null ? 'ok' : 'error')
-    sourceUpdate('vrd/ad', 'unknown')
-  } else {
-    const err =
-      breadthRes.status === 'fulfilled'
-        ? (breadthRes.value[1] ?? 'unknown')
-        : 'fetch failed'
-    const vrdAd =
-      vrdAdRes.status === 'fulfilled' && !vrdAdRes.value[1]
-        ? vrdAdRes.value[0]
-        : null
-    sourceUpdate('vrd/ad', vrdAd ? 'ok' : 'error')
-    if (
-      vrdAd?.advances !== null &&
-      vrdAd?.advances !== undefined &&
-      vrdAd?.declines !== null &&
-      vrdAd?.declines !== undefined
-    ) {
-      advances = vrdAd.advances
-      declines = vrdAd.declines
-      adRatio =
-        vrdAd.ratio ??
-        (declines > 0 ? Number((advances / declines).toFixed(3)) : null)
+    sourceUpdate('upstox/fii', 'stale')
+  }
+
+  // DII
+  if (
+    diiRes.status === 'fulfilled' &&
+    !diiRes.value[1] &&
+    diiRes.value[0]?.data
+  ) {
+    const diiData = diiRes.value[0].data
+    const cashList = diiData['NSE_EQ|CASH'] ?? []
+    const latestDii = [...cashList].sort(
+      (a, b) => b.time_stamp - a.time_stamp,
+    )[0]
+    if (latestDii) {
+      const netCash = (latestDii.buy_amount ?? 0) - (latestDii.sell_amount ?? 0)
       addLog(
         mkLog(
-          'warn',
-          'breadth',
-          `Upstox failed (${err}); using VRD A/D=${advances}↑ ${declines}↓ ratio=${adRatio}`,
+          'info',
+          'dii',
+          `DII Cash Net: ${(netCash / 10000000).toFixed(2)} Cr`,
         ),
       )
-      sourceUpdate('breadth', 'ok')
-    } else if (
-      cachedVrdData?.advancesDeclines?.advances !== null &&
-      cachedVrdData?.advancesDeclines?.advances !== undefined
-    ) {
-      advances = cachedVrdData.advancesDeclines.advances
-      declines = cachedVrdData.advancesDeclines.declines
-      adRatio = cachedVrdData.advancesDeclines.ratio ?? null
-      addLog(
-        mkLog(
-          'warn',
-          'breadth',
-          `live breadth unavailable (${err}); using cached A/D=${advances}↑ ${declines}↓ ratio=${adRatio}`,
-        ),
-      )
-      sourceUpdate('breadth', 'stale')
-      sourceUpdate('vrd/ad', 'stale')
+      sourceUpdate('upstox/dii', 'ok')
     } else {
-      addLog(mkLog('error', 'breadth', err))
-      sourceUpdate('breadth', 'error')
+      sourceUpdate('upstox/dii', 'error')
     }
+  } else {
+    sourceUpdate('upstox/dii', 'error')
+  }
+
+  // PCR
+  let officialPcr: number | null = null
+  if (pcrRes.status === 'fulfilled' && !pcrRes.value[1]) {
+    officialPcr = pcrRes.value[0]?.value ?? null
+    if (officialPcr !== null) {
+      addLog(
+        mkLog('info', 'upstox/pcr', `Upstox PCR=${officialPcr.toFixed(3)}`),
+      )
+      sourceUpdate('upstox/pcr', 'ok')
+    } else {
+      sourceUpdate('upstox/pcr', 'error')
+    }
+  } else {
+    sourceUpdate('upstox/pcr', 'error')
+  }
+
+  const effectivePcr = officialPcr ?? indicators.pcrValue
+  addLog(mkLog('info', 'pcr', 'Option PCR=' + effectivePcr.toFixed(3)))
+
+  // Max Pain
+  if (maxPainRes.status === 'fulfilled' && !maxPainRes.value[1]) {
+    const maxPain = maxPainRes.value[0]?.data?.max_pain ?? null
+    if (maxPain !== null) {
+      addLog(
+        mkLog('info', 'upstox/max-pain', `Upstox Max Pain Strike=${maxPain}`),
+      )
+      sourceUpdate('upstox/max-pain', 'ok')
+    } else {
+      sourceUpdate('upstox/max-pain', 'error')
+    }
+  } else {
+    sourceUpdate('upstox/max-pain', 'error')
   }
 
   // Compute straddle IV from option chain
-  const niftyLtp = optionChain[0]?.underlying_spot_price ?? 0
   const straddleIv = computeStraddleIV(optionChain, niftyLtp, vix)
   addLog(
     mkLog(
       'debug',
       'straddle-iv',
-      `ATM IV=${straddleIv.currentIv} vs VIX=${vix} → ${straddleIv.percentAboveAvg?.toFixed(1)}% above avg`,
+      'ATM IV=' +
+        straddleIv.currentIv +
+        ' vs VIX=' +
+        vix +
+        ' -> ' +
+        (straddleIv.percentAboveAvg !== null
+          ? straddleIv.percentAboveAvg.toFixed(1)
+          : 'null') +
+        '% above avg',
     ),
   )
 
-  const proxyFlow = computeProxyFlow(optionChain, niftyLtp)
-  const vrdFiiRatio =
-    vrdFiiRatioRes.status === 'fulfilled' && !vrdFiiRatioRes.value[1]
-      ? vrdFiiRatioRes.value[0]
-      : null
-  const vrdFiiPosition =
-    vrdFiiPositionRes.status === 'fulfilled' && !vrdFiiPositionRes.value[1]
-      ? vrdFiiPositionRes.value[0]
-      : null
-
-  const fiiLongShort =
-    vrdFiiRatio?.longPct !== null &&
-    vrdFiiRatio?.longPct !== undefined &&
-    vrdFiiRatio?.shortPct !== null &&
-    vrdFiiRatio?.shortPct !== undefined
-      ? { longPct: vrdFiiRatio.longPct, shortPct: vrdFiiRatio.shortPct }
-      : proxyFlow.longPct !== null && proxyFlow.shortPct !== null
-        ? { longPct: proxyFlow.longPct, shortPct: proxyFlow.shortPct }
-        : cachedVrdData?.fiiLongShort?.longPct !== null &&
-            cachedVrdData?.fiiLongShort?.longPct !== undefined &&
-            cachedVrdData?.fiiLongShort?.shortPct !== null &&
-            cachedVrdData?.fiiLongShort?.shortPct !== undefined
-          ? {
-              longPct: cachedVrdData.fiiLongShort.longPct,
-              shortPct: cachedVrdData.fiiLongShort.shortPct,
-            }
-          : null
-  const fiiPositioning =
-    vrdFiiPosition && vrdFiiPosition.netPosition !== null
-      ? {
-          netPosition: vrdFiiPosition.netPosition,
-          consecutiveShortDays: vrdFiiPosition.consecutiveShortDays,
-        }
-      : proxyFlow.netPosition !== null
-        ? {
-            netPosition: proxyFlow.netPosition,
-            consecutiveShortDays: proxyFlow.consecutiveShortDays,
-          }
-        : cachedVrdData?.fiiPositioning?.netPosition !== null &&
-            cachedVrdData?.fiiPositioning?.netPosition !== undefined
-          ? {
-              netPosition: cachedVrdData.fiiPositioning.netPosition,
-              consecutiveShortDays:
-                cachedVrdData.fiiPositioning.consecutiveShortDays,
-            }
-          : null
-
-  const usingProxyFlow = proxyFlow.netPosition !== null
-  const usingCachedFii =
-    !usingProxyFlow && (fiiLongShort !== null || fiiPositioning !== null)
-
-  sourceUpdate(
-    'synthetic/flow',
-    proxyFlow.netPosition !== null
-      ? 'ok'
-      : usingCachedFii
-        ? 'stale'
-        : 'unknown',
-  )
-
-  sourceUpdate(
-    'vrd/fii-ratio',
-    fiiLongShort
-      ? vrdFiiRatio?.longPct !== null && vrdFiiRatio?.shortPct !== null
-        ? 'ok'
-        : cachedVrdData?.fiiLongShort
-          ? 'stale'
-          : 'unknown'
-      : 'error',
-  )
-  sourceUpdate(
-    'vrd/fii-position',
-    fiiPositioning
-      ? vrdFiiPosition?.netPosition !== null
-        ? 'ok'
-        : cachedVrdData?.fiiPositioning
-          ? 'stale'
-          : 'unknown'
-      : 'error',
-  )
-
-  if (
-    vrdFiiRatio?.longPct !== null &&
-    vrdFiiRatio?.longPct !== undefined &&
-    vrdFiiRatio?.shortPct !== null &&
-    vrdFiiRatio?.shortPct !== undefined
-  ) {
-    addLog(
-      mkLog(
-        'info',
-        'vrd/fii-ratio',
-        `L=${vrdFiiRatio.longPct}% S=${vrdFiiRatio.shortPct}%`,
-      ),
-    )
-  } else {
-    addLog(
-      mkLog(
-        proxyFlow.netPosition !== null ? 'warn' : 'error',
-        'synthetic/flow',
-        proxyFlow.netPosition !== null
-          ? `VRD FII ratio unavailable; using proxy putShare=${proxyFlow.longPct}% callShare=${proxyFlow.shortPct}%`
-          : 'VRD FII ratio unavailable and proxy flow unavailable',
-      ),
-    )
-  }
-
-  if (vrdFiiPosition && vrdFiiPosition.netPosition !== null) {
-    addLog(
-      mkLog(
-        'info',
-        'vrd/fii-position',
-        `net=${vrdFiiPosition.netPosition} shortDays=${vrdFiiPosition.consecutiveShortDays ?? '—'}`,
-      ),
-    )
-  } else if (proxyFlow.netPosition !== null) {
-    addLog(
-      mkLog(
-        'warn',
-        'synthetic/flow',
-        `VRD FII positioning unavailable; using proxy net=${proxyFlow.netPosition} shortDays=${proxyFlow.consecutiveShortDays ?? '—'}`,
-      ),
-    )
-  } else if (
-    cachedVrdData?.fiiPositioning?.netPosition !== null &&
-    cachedVrdData?.fiiPositioning?.netPosition !== undefined
-  ) {
-    addLog(
-      mkLog(
-        'warn',
-        'vrd/fii-position',
-        `live positioning unavailable; using cached net=${cachedVrdData.fiiPositioning.netPosition} shortDays=${cachedVrdData.fiiPositioning.consecutiveShortDays ?? '—'}`,
-      ),
-    )
-  }
-
+  const adRatio = breadth?.ratio ?? null
   const proxyValue = computeProxyValuation(niftyLtp, indicators, vix, adRatio)
-  const vrdPe =
-    vrdPeRes.status === 'fulfilled' && !vrdPeRes.value[1]
-      ? vrdPeRes.value[0]
-      : null
-  sourceUpdate(
-    'vrd/pe',
-    vrdPe?.pe !== null && vrdPe?.pe !== undefined
-      ? 'ok'
-      : cachedVrdData?.niftyPe?.pe !== null &&
-          cachedVrdData?.niftyPe?.pe !== undefined
-        ? 'stale'
-        : 'unknown',
-  )
   sourceUpdate('synthetic/value', 'ok')
 
-  const niftyPe =
-    vrdPe?.pe !== null && vrdPe?.pe !== undefined
-      ? { pe: vrdPe.pe, label: vrdPe.label ?? 'VRD value' }
-      : cachedVrdData?.niftyPe?.pe !== null &&
-          cachedVrdData?.niftyPe?.pe !== undefined
-        ? {
-            pe: cachedVrdData.niftyPe.pe,
-            label: cachedVrdData.niftyPe.label ?? 'Cached value',
-          }
-        : { pe: proxyValue.pe, label: proxyValue.label }
+  const niftyPe = { pe: proxyValue.pe, label: proxyValue.label }
   addLog(
     mkLog(
-      vrdPe?.pe !== null && vrdPe?.pe !== undefined ? 'info' : 'warn',
-      vrdPe?.pe !== null && vrdPe?.pe !== undefined
-        ? 'vrd/pe'
-        : 'synthetic/value',
-      vrdPe?.pe !== null && vrdPe?.pe !== undefined
-        ? `PE=${vrdPe.pe} (${vrdPe.label ?? 'VRD'})`
-        : `VRD PE unavailable; using proxy valuation=${proxyValue.pe} (${proxyValue.label})`,
+      'info',
+      'synthetic/value',
+      'Computed proxy Nifty PE valuation=' +
+        proxyValue.pe +
+        ' (' +
+        proxyValue.label +
+        ')',
     ),
   )
-
-  const vrdPcr =
-    vrdPcrRes.status === 'fulfilled' && !vrdPcrRes.value[1]
-      ? vrdPcrRes.value[0]
-      : null
-  sourceUpdate(
-    'vrd/pcr',
-    vrdPcr?.value !== null && vrdPcr?.value !== undefined
-      ? 'ok'
-      : vrdDashboard?.pcr !== null && vrdDashboard?.pcr !== undefined
-        ? 'unknown'
-        : cachedVrdData?.pcr?.value !== null &&
-            cachedVrdData?.pcr?.value !== undefined
-          ? 'stale'
-          : 'error',
-  )
-  const effectivePcr =
-    indicators.pcrValue > 0
-      ? indicators.pcrValue
-      : (vrdPcr?.value ?? vrdDashboard?.pcr ?? cachedVrdData?.pcr?.value ?? 0)
-  if (indicators.pcrValue > 0) {
-    addLog(
-      mkLog(
-        'info',
-        'pcr',
-        `option-chain PCR=${indicators.pcrValue.toFixed(3)}`,
-      ),
-    )
-  } else if (vrdPcr?.value !== null && vrdPcr?.value !== undefined) {
-    addLog(
-      mkLog(
-        'warn',
-        'pcr',
-        `option-chain PCR unavailable; using VRD PCR=${vrdPcr.value}`,
-      ),
-    )
-  } else if (vrdDashboard?.pcr !== null && vrdDashboard?.pcr !== undefined) {
-    addLog(
-      mkLog(
-        'warn',
-        'pcr',
-        `option-chain PCR unavailable; using VRD dashboard PCR=${vrdDashboard.pcr}`,
-      ),
-    )
-  } else {
-    addLog(mkLog('error', 'pcr', 'PCR unavailable from option chain and VRD'))
-  }
 
   // Synthetic MMI
-  const vrdMmi =
-    vrdMmiRes.status === 'fulfilled' && !vrdMmiRes.value[1]
-      ? vrdMmiRes.value[0]
-      : null
-  sourceUpdate(
-    'vrd/mmi',
-    vrdMmi?.score !== null && vrdMmi?.score !== undefined
-      ? 'ok'
-      : vix !== null || effectivePcr > 0
-        ? 'unknown'
-        : 'error',
-  )
-  const mmi =
-    vrdMmi?.score !== null && vrdMmi?.score !== undefined
-      ? {
-          score: vrdMmi.score,
-          label:
-            vrdMmi.score < 30
-              ? 'Extreme Fear'
-              : vrdMmi.score < 50
-                ? 'Fear'
-                : vrdMmi.score < 70
-                  ? 'Greed'
-                  : 'Extreme Greed',
-        }
-      : computeMMI(vix, indicators.rsi.value, effectivePcr)
+  const mmi = computeMMI(vix, indicators.rsi.value, effectivePcr)
   addLog(
     mkLog(
-      vrdMmi?.score !== null && vrdMmi?.score !== undefined ? 'info' : 'warn',
-      vrdMmi?.score !== null && vrdMmi?.score !== undefined ? 'vrd/mmi' : 'mmi',
-      vrdMmi?.score !== null && vrdMmi?.score !== undefined
-        ? `VRD MMI=${vrdMmi.score}`
-        : `VRD MMI unavailable; using computed score=${mmi.score} (${mmi.label}) [vix=${vix} rsi=${indicators.rsi.value.toFixed(1)} pcr=${effectivePcr.toFixed(3)}]`,
+      'info',
+      'mmi',
+      'Computed proxy MMI score=' +
+        mmi.score +
+        ' (' +
+        mmi.label +
+        ') [vix=' +
+        vix +
+        ' rsi=' +
+        indicators.rsi.value.toFixed(1) +
+        ' pcr=' +
+        effectivePcr.toFixed(3) +
+        ']',
     ),
   )
 
-  // Assemble VrdData (same shape as before — compatible with all scoring functions)
   return {
     mmi: { score: mmi.score, label: mmi.label },
     advancesDeclines:
-      advances !== null
-        ? { advances, declines: declines ?? 0, ratio: adRatio, label: null }
+      breadth !== null && breadth.advances !== null
+        ? {
+            advances: breadth.advances,
+            declines: breadth.declines,
+            ratio: breadth.ratio,
+            label: null,
+          }
         : null,
     fiiLongShort: fiiLongShort,
     fiiPositioning: fiiPositioning,
@@ -1055,32 +886,28 @@ async function fetchMarket(
   token: string,
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
-): Promise<{ candles: Candle[]; optionChain: OptionData[]; v3: V3OrderType }> {
-  const [contractsData, contractsErr] = await safeFetch<{
-    expiries?: string[]
-  }>('/api/market/option-contracts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
-  })
-  const expiryCandidates = (contractsData?.expiries ?? []).slice(0, 5)
-  let expiryDate: string | null = null
+): Promise<{
+  candles: Candle[]
+  optionChain: OptionData[]
+  v3: V3OrderType
+  breadth: {
+    advances: number
+    declines: number
+    ratio: number
+    total: number
+  } | null
+  globalIndices: GlobalIndexItem[]
+}> {
   addLog(
-    mkLog(
-      expiryCandidates.length > 0 ? 'debug' : 'warn',
-      'market',
-      expiryCandidates.length > 0
-        ? `fetching candles + option chain (candidate expiries: ${expiryCandidates.join(', ')})`
-        : `option contracts unavailable${contractsErr ? ` (${contractsErr})` : ''}`,
-    ),
+    mkLog('debug', 'market', 'fetching candles + breadth + option contracts'),
   )
 
   sourceUpdate('candles', 'pending')
+  sourceUpdate('breadth', 'pending')
   sourceUpdate('option-chain', 'pending')
   sourceUpdate('global-sentiment', 'pending')
-  sourceUpdate('nifty-sentiment', 'pending')
 
-  const [candleRes, globalRes, niftyRes, vrdDashboardRes, vrdAdRes, vrdPcrRes] =
+  const [candleRes, breadthRes, contractsRes, globalRes] =
     await Promise.allSettled([
       safeFetch<{ data?: { candles?: Candle[] } }>(
         '/api/market/candles/intraday',
@@ -1094,22 +921,31 @@ async function fetchMarket(
           }),
         },
       ),
-      safeFetch<unknown>('/api/market/global-sentiment'),
-      safeFetch<{ resultData?: { change_per?: number }[] }>(
-        '/api/market/nifty-sentiment',
-      ),
       safeFetch<{
-        asia?: { change?: number; displayName?: string }[]
-        us?: { change?: number; displayName?: string }[]
-        commodities?: { change?: number; displayName?: string }[]
-        pcr?: number | null
-      }>('/api/market/vrd/dashboard'),
+        advances: number
+        declines: number
+        ratio: number
+        total: number
+      }>('/api/market/breadth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
       safeFetch<{
-        advances: number | null
-        declines: number | null
-        ratio: number | null
-      }>('/api/market/vrd/advance-decline'),
-      safeFetch<{ value: number | null }>('/api/market/vrd/pcr'),
+        expiries?: string[]
+      }>('/api/market/option-contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+      safeFetch<{
+        status: string
+        data?: GlobalIndexItem[]
+      }>('/api/market/upstox/global-indices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
     ])
 
   // candles
@@ -1121,7 +957,7 @@ async function fetchMarket(
       sourceUpdate('candles', 'error')
     } else {
       candles = data?.data?.candles ?? []
-      addLog(mkLog('info', 'candles', `${candles.length} candles loaded`))
+      addLog(mkLog('info', 'candles', candles.length + ' candles loaded'))
       sourceUpdate('candles', candles.length > 0 ? 'ok' : 'error')
     }
   } else {
@@ -1129,7 +965,46 @@ async function fetchMarket(
     sourceUpdate('candles', 'error')
   }
 
+  // breadth
+  let breadth: {
+    advances: number
+    declines: number
+    ratio: number
+    total: number
+  } | null = null
+  if (breadthRes.status === 'fulfilled' && !breadthRes.value[1]) {
+    breadth = breadthRes.value[0]
+    addLog(
+      mkLog(
+        'info',
+        'breadth',
+        'Nifty 50 A/D loaded: ' +
+          breadth?.advances +
+          '↑ ' +
+          breadth?.declines +
+          '↓ ratio=' +
+          breadth?.ratio,
+      ),
+    )
+    sourceUpdate('breadth', 'ok')
+  } else {
+    const err =
+      breadthRes.status === 'fulfilled'
+        ? (breadthRes.value[1] ?? 'unknown')
+        : 'fetch failed'
+    addLog(mkLog('error', 'breadth', err))
+    sourceUpdate('breadth', 'error')
+  }
+
   // option chain
+  const contractsData =
+    contractsRes.status === 'fulfilled' && !contractsRes.value[1]
+      ? contractsRes.value[0]
+      : null
+  const contractsErr =
+    contractsRes.status === 'fulfilled' ? contractsRes.value[1] : 'fetch failed'
+  const expiryCandidates = (contractsData?.expiries ?? []).slice(0, 5)
+
   let optionChain: OptionData[] = []
   let optionChainError =
     contractsErr ?? 'No live expiry returned from Upstox option contracts'
@@ -1143,31 +1018,34 @@ async function fetchMarket(
       },
     )
     if (err) {
-      optionChainError = `${candidate}: ${err}`
+      optionChainError = candidate + ': ' + err
       addLog(
-        mkLog('warn', 'option-chain', `expiry ${candidate} failed: ${err}`),
+        mkLog(
+          'warn',
+          'option-chain',
+          'expiry ' + candidate + ' failed: ' + err,
+        ),
       )
       continue
     }
     const chain = data?.data ?? []
     if (!chain.length) {
-      optionChainError = `${candidate}: empty chain`
+      optionChainError = candidate + ': empty chain'
       addLog(
         mkLog(
           'warn',
           'option-chain',
-          `expiry ${candidate} returned empty chain`,
+          'expiry ' + candidate + ' returned empty chain',
         ),
       )
       continue
     }
     optionChain = chain
-    expiryDate = candidate
     addLog(
       mkLog(
         'info',
         'option-chain',
-        `${optionChain.length} strikes loaded (expiry: ${expiryDate})`,
+        optionChain.length + ' strikes loaded (expiry: ' + candidate + ')',
       ),
     )
     sourceUpdate('option-chain', 'ok')
@@ -1179,130 +1057,42 @@ async function fetchMarket(
     sourceUpdate('option-chain', 'error')
   }
 
-  let upstoxPcr: { value: number | null } | null = null
-  if (expiryDate) {
-    const [pcrData, pcrErr] = await safeFetch<{ value: number | null }>(
-      '/api/market/upstox/pcr',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, expiry: expiryDate, bucketInterval: 60 }),
-      },
-    )
-    if (pcrErr)
-      addLog(
-        mkLog('warn', 'pcr', `Upstox PCR failed for ${expiryDate}: ${pcrErr}`),
-      )
-    else upstoxPcr = pcrData
-  } else {
-    addLog(
-      mkLog(
-        'warn',
-        'pcr',
-        'Skipping Upstox PCR because no valid option-chain expiry was resolved',
-      ),
-    )
-  }
-
-  // V3
-  let v3: V3OrderType = 'hold'
-  const globalOk = globalRes.status === 'fulfilled' && !globalRes.value[1]
-  const niftyOk = niftyRes.status === 'fulfilled' && !niftyRes.value[1]
-  const vrdDashboard =
-    vrdDashboardRes.status === 'fulfilled' && !vrdDashboardRes.value[1]
-      ? vrdDashboardRes.value[0]
-      : null
-  const vrdAd =
-    vrdAdRes.status === 'fulfilled' && !vrdAdRes.value[1]
-      ? vrdAdRes.value[0]
-      : null
-  const vrdPcr =
-    vrdPcrRes.status === 'fulfilled' && !vrdPcrRes.value[1]
-      ? vrdPcrRes.value[0]
-      : null
-
+  // Global Sentiment
   let globalSentiment: ReturnType<typeof evaluateGlobalSentiment> = 'neutral'
-  let niftySentiment: ReturnType<typeof evaluateNiftySentiment> = 'neutral'
-  let pcrZone: ReturnType<typeof evaluatePCR> = 'neutral'
   let globalSentimentFetched = false
-  let niftySentimentFetched = false
-  let pcrZoneFetched = false
-
-  if (globalOk) {
-    try {
-      const gData = transformGlobalData(
-        globalRes.value[0] as Parameters<typeof transformGlobalData>[0],
-      )
-      globalSentiment = evaluateGlobalSentiment(gData)
-      globalSentimentFetched = true
-      sourceUpdate('global-sentiment', 'ok')
-    } catch (e) {
-      addLog(
-        mkLog(
-          'error',
-          'global-sentiment',
-          `compute failed: ${(e as Error).message}`,
-        ),
-      )
-      sourceUpdate('global-sentiment', 'error')
-    }
-  } else if (vrdDashboard) {
-    globalSentiment = evaluateGlobalSentimentFromVrd([
-      ...(vrdDashboard.asia ?? []),
-      ...(vrdDashboard.us ?? []),
-      ...(vrdDashboard.commodities ?? []),
-    ])
+  let globalIndices: GlobalIndexItem[] = []
+  if (globalRes.status === 'fulfilled' && !globalRes.value[1]) {
+    const gData = globalRes.value[0]?.data ?? []
+    globalIndices = gData
+    globalSentiment = evaluateGlobalSentiment(gData)
     globalSentimentFetched = true
     addLog(
       mkLog(
-        'warn',
+        'info',
         'global-sentiment',
-        `legacy source failed; using VRD dashboard fallback=${globalSentiment}`,
+        `Global Indices: DJI/NASDAQ/DAX/GIFT rating = ${globalSentiment}`,
       ),
     )
     sourceUpdate('global-sentiment', 'ok')
   } else {
-    addLog(
-      mkLog(
-        'error',
-        'global-sentiment',
-        globalRes.status === 'fulfilled'
-          ? (globalRes.value[1] ?? 'unknown')
-          : 'fetch failed',
-      ),
-    )
+    const err =
+      globalRes.status === 'fulfilled'
+        ? (globalRes.value[1] ?? 'unknown')
+        : 'fetch failed'
+    addLog(mkLog('error', 'global-sentiment', err))
     sourceUpdate('global-sentiment', 'error')
   }
 
-  if (niftyOk) {
-    niftySentiment = evaluateNiftySentiment(
-      (niftyRes.value[0] as { resultData?: { change_per?: number }[] })
-        ?.resultData ?? [],
-    )
+  // V3
+  let v3: V3OrderType = 'hold'
+  let niftySentiment: ReturnType<typeof evaluateNiftySentiment> = 'neutral'
+  let pcrZone: ReturnType<typeof evaluatePCR> = 'neutral'
+  let niftySentimentFetched = false
+  let pcrZoneFetched = false
+
+  if (breadth && breadth.advances !== null) {
+    niftySentiment = evaluateNiftySentimentFromAdvanceCount(breadth.advances)
     niftySentimentFetched = true
-    sourceUpdate('nifty-sentiment', 'ok')
-  } else if (vrdAd?.advances !== null && vrdAd?.advances !== undefined) {
-    niftySentiment = evaluateNiftySentimentFromAdvanceCount(vrdAd.advances)
-    niftySentimentFetched = true
-    addLog(
-      mkLog(
-        'warn',
-        'nifty-sentiment',
-        `legacy source failed; using VRD A/D fallback=${niftySentiment}`,
-      ),
-    )
-    sourceUpdate('nifty-sentiment', 'ok')
-  } else {
-    addLog(
-      mkLog(
-        'error',
-        'nifty-sentiment',
-        niftyRes.status === 'fulfilled'
-          ? (niftyRes.value[1] ?? 'unknown')
-          : 'fetch failed',
-      ),
-    )
-    sourceUpdate('nifty-sentiment', 'error')
   }
 
   const totalPut = optionChain.reduce(
@@ -1316,36 +1106,6 @@ async function fetchMarket(
   if (totalCall > 0) {
     pcrZone = evaluatePCR(totalPut / totalCall)
     pcrZoneFetched = true
-  } else if (upstoxPcr?.value != null) {
-    pcrZone = evaluatePCR(upstoxPcr.value)
-    pcrZoneFetched = true
-    addLog(
-      mkLog(
-        'warn',
-        'option-chain',
-        `OI data unavailable; using Upstox PCR=${upstoxPcr.value}`,
-      ),
-    )
-  } else if (vrdPcr?.value != null) {
-    pcrZone = evaluatePCR(vrdPcr.value)
-    pcrZoneFetched = true
-    addLog(
-      mkLog(
-        'warn',
-        'option-chain',
-        `OI data unavailable; using VRD PCR=${vrdPcr.value}`,
-      ),
-    )
-  } else if (vrdDashboard?.pcr != null) {
-    pcrZone = evaluatePCR(vrdDashboard.pcr)
-    pcrZoneFetched = true
-    addLog(
-      mkLog(
-        'warn',
-        'option-chain',
-        `OI data unavailable; using VRD dashboard PCR=${vrdDashboard.pcr}`,
-      ),
-    )
   }
 
   try {
@@ -1355,15 +1115,22 @@ async function fetchMarket(
         mkLog(
           'info',
           'v3',
-          `signal=${v3} | global=${globalSentiment} | nifty=${niftySentiment} | pcr=${pcrZone}`,
+          'signal=' +
+            v3 +
+            ' | global=' +
+            globalSentiment +
+            ' | nifty=' +
+            niftySentiment +
+            ' | pcr=' +
+            pcrZone,
         ),
       )
     }
   } catch (e) {
-    addLog(mkLog('error', 'v3', `compute failed: ${(e as Error).message}`))
+    addLog(mkLog('error', 'v3', 'compute failed: ' + (e as Error).message))
   }
 
-  return { candles, optionChain, v3 }
+  return { candles, optionChain, v3, breadth, globalIndices }
 }
 
 const LOT_SIZE = 25
@@ -1382,6 +1149,7 @@ const INITIAL: BotStatus = {
   tradesCount: 0,
   logs: [],
   sourceStatus: {},
+  globalIndices: null,
 }
 
 export function useStrategyBot(token: string | null) {
@@ -1460,10 +1228,11 @@ export function useStrategyBot(token: string | null) {
 
     try {
       const config = getStrategyConfig()
+      let positionUpdate: Partial<BotStatus> = {}
 
       // Step 1: fetch candles + option chain + V3 signal in parallel
       const market = await fetchMarket(token, (e) => tickLogs.push(e), srcUpd)
-      const { candles, optionChain, v3 } = market
+      const { candles, optionChain, v3, breadth, globalIndices } = market
 
       if (!candles.length) {
         const canUseSnapshot = Boolean(
@@ -1507,7 +1276,7 @@ export function useStrategyBot(token: string | null) {
         srcUpd,
         optionChain,
         indicators,
-        cur.vrdData,
+        breadth,
       )
       saveVrdCache(vrdData)
       log(
@@ -1531,21 +1300,25 @@ export function useStrategyBot(token: string | null) {
       tickLogs.length = 0
 
       updateStatus({
+        ...positionUpdate,
         indicators,
         vrdData,
         allSignalData,
         finalSignal,
         hardStop,
+        globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
         lastUpdated: new Date().toLocaleTimeString('en-IN'),
         error: null,
       })
       saveSnapshot({
+        ...positionUpdate,
         indicators,
         vrdData,
         allSignalData,
         finalSignal,
         hardStop,
+        globalIndices,
         lastUpdated: new Date().toLocaleTimeString('en-IN'),
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
       })
@@ -1593,28 +1366,58 @@ export function useStrategyBot(token: string | null) {
           finalSignal.signal === 'BUY_CE' ||
           finalSignal.signal === 'BUY_PE'
         ) {
-          const dir = finalSignal.signal === 'BUY_CE' ? 'CE' : 'PE'
-          const strike = getOtmStrike(optionChain, dir, config.otmSkip)
-          if (!strike) {
-            addLog(mkLog('warn', 'order', `no OTM strike found for ${dir}`))
-            return
+          interface LegSetup {
+            direction: 'CE' | 'PE'
+            tradeType: 'buying' | 'selling'
           }
-          const instrumentKey =
-            dir === 'CE'
-              ? strike.call_options.instrument_key
-              : strike.put_options.instrument_key
-          const ltp =
-            dir === 'CE'
-              ? strike.call_options.market_data.ltp
-              : strike.put_options.market_data.ltp
+          const legsToPlace: LegSetup[] = []
+          if (config.tradeType === 'both') {
+            legsToPlace.push({
+              direction: finalSignal.signal === 'BUY_CE' ? 'CE' : 'PE',
+              tradeType: 'buying',
+            })
+            legsToPlace.push({
+              direction: finalSignal.signal === 'BUY_CE' ? 'PE' : 'CE',
+              tradeType: 'selling',
+            })
+          } else {
+            legsToPlace.push({
+              direction:
+                config.tradeType === 'selling'
+                  ? finalSignal.signal === 'BUY_CE'
+                    ? 'PE'
+                    : 'CE'
+                  : finalSignal.signal === 'BUY_CE'
+                    ? 'CE'
+                    : 'PE',
+              tradeType: config.tradeType,
+            })
+          }
+
+          let totalReq = 0
+          for (const leg of legsToPlace) {
+            const strike = getOtmStrike(
+              optionChain,
+              leg.direction,
+              config.otmSkip,
+            )
+            if (!strike) continue
+            const ltp =
+              leg.direction === 'CE'
+                ? strike.call_options.market_data.ltp
+                : strike.put_options.market_data.ltp
+            const legReq = leg.tradeType === 'selling' ? 4000 : ltp
+            totalReq += legReq
+          }
+
           const executionMode: ExecutionMode = config.executionMode
           let qty =
             finalSignal.positionSize === 'full'
               ? LOT_SIZE
               : Math.floor(LOT_SIZE / 2)
-          let paperTrade: PaperTrade | null = null
+
+          let paperBalance: number | null = null
           if (executionMode === 'paper') {
-            let paperBalance: number | null = null
             try {
               const summary = await fetchPaperAccount()
               paperBalance = summary.account.balance
@@ -1628,18 +1431,18 @@ export function useStrategyBot(token: string | null) {
               )
             }
 
-            if (paperBalance !== null) {
-              const affordableQty = Math.floor(paperBalance / ltp)
+            if (paperBalance !== null && totalReq > 0) {
+              const affordableQty = Math.floor(paperBalance / totalReq)
               if (affordableQty <= 0) {
                 addLog(
                   mkLog(
                     'warn',
                     'paper',
-                    `Skipping paper BUY ${dir}: balance ₹${paperBalance.toFixed(2)} cannot afford 1 unit at ₹${ltp.toFixed(2)}`,
+                    `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford combo margin/cost ₹${totalReq.toFixed(2)}`,
                   ),
                 )
                 updateStatus({
-                  error: `Paper credit ₹${paperBalance.toFixed(2)} is below option price ₹${ltp.toFixed(2)}`,
+                  error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost ₹${totalReq.toFixed(2)}`,
                 })
                 return
               }
@@ -1648,7 +1451,7 @@ export function useStrategyBot(token: string | null) {
                   mkLog(
                     'warn',
                     'paper',
-                    `Reducing paper quantity from ${qty} to ${affordableQty} to fit credit ₹${paperBalance.toFixed(2)}`,
+                    `Reducing quantity from ${qty} to ${affordableQty} to fit credit ₹${paperBalance.toFixed(2)}`,
                   ),
                 )
                 qty = affordableQty
@@ -1656,124 +1459,181 @@ export function useStrategyBot(token: string | null) {
             }
           }
 
-          addLog(
-            mkLog(
-              'info',
-              'order',
-              `placing BUY ${dir} ${instrumentKey} qty=${qty} ltp=${ltp}`,
-            ),
-          )
+          const positionLegs: PositionLeg[] = []
+          let success = true
+          let firstInstrumentKey = ''
+          let firstDirection: 'CE' | 'PE' = 'CE'
+          let firstEntryPrice = 0
 
-          if (executionMode === 'paper') {
-            const [paperData, paperErr] = await safeFetch<{
-              trade?: PaperTrade
-              account?: PaperAccountSummary['account']
-            }>('/api/paper/trades/enter', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instrumentKey,
-                direction: dir,
-                quantity: qty,
-                entryPrice: ltp,
-                metadata: {
-                  signal: finalSignal.signal,
-                  confidence: finalSignal.confidence,
-                  bullScore: finalSignal.bullScore,
-                  bearScore: finalSignal.bearScore,
-                },
-              }),
-            })
-            if (paperErr || !paperData?.trade?.id) {
+          for (const leg of legsToPlace) {
+            const strike = getOtmStrike(
+              optionChain,
+              leg.direction,
+              config.otmSkip,
+            )
+            if (!strike) {
               addLog(
                 mkLog(
-                  'error',
-                  'paper',
-                  `Paper BUY failed: ${paperErr ?? JSON.stringify(paperData)}`,
+                  'warn',
+                  'order',
+                  `no OTM strike found for ${leg.direction}`,
                 ),
               )
-              updateStatus({ error: paperErr ?? 'Paper trade entry failed' })
-              return
+              success = false
+              break
             }
-            paperTrade = paperData.trade
-            addLog(
-              mkLog(
-                'info',
-                'paper',
-                `Paper BUY created tradeId=${paperTrade.id}`,
-              ),
-            )
-            notify(
-              'Paper Trade Executed',
-              `Paper BUY ${dir} ${qty}qty (${instrumentKey}) placed`,
-              'success',
-            )
-          } else {
-            const [orderData, orderErr] = await safeFetch<{
-              status?: string
-              data?: { order_id?: string }
-            }>('/api/order/place', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token,
-                instrumentKey,
-                transactionType: 'BUY',
-                quantity: qty,
-              }),
-            })
-            if (
-              orderErr ||
-              (!orderData?.data?.order_id && orderData?.status !== 'success')
-            ) {
-              const failure = `BUY failed: ${orderErr ?? JSON.stringify(orderData)}`
-              addLog(mkLog('error', 'order', failure))
-              if (isStaticIpRestrictionError(orderErr)) {
-                if (intervalRef.current) clearInterval(intervalRef.current)
-                intervalRef.current = null
-                updateStatus({
-                  state: 'STOPPED',
-                  error:
-                    'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
-                })
-                addLog(
-                  mkLog(
-                    'warn',
-                    'bot',
-                    'stopping bot — Upstox order API is blocked by static IP restriction',
-                  ),
-                )
-              }
-              return
+            const instrumentKey =
+              leg.direction === 'CE'
+                ? strike.call_options.instrument_key
+                : strike.put_options.instrument_key
+            const ltp =
+              leg.direction === 'CE'
+                ? strike.call_options.market_data.ltp
+                : strike.put_options.market_data.ltp
+
+            if (!firstInstrumentKey) {
+              firstInstrumentKey = instrumentKey
+              firstDirection = leg.direction
+              firstEntryPrice = ltp
             }
+
+            const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
             addLog(
               mkLog(
                 'info',
                 'order',
-                `BUY placed orderId=${orderData?.data?.order_id ?? '—'}`,
+                `placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
               ),
             )
-            notify(
-              'Trade Executed',
-              `BUY ${dir} ${qty}qty (${instrumentKey}) placed successfully`,
-              'success',
-            )
+
+            let paperTradeId: string | undefined
+            if (executionMode === 'paper') {
+              const [paperData, paperErr] = await safeFetch<{
+                trade?: PaperTrade
+                account?: PaperAccountSummary['account']
+              }>('/api/paper/trades/enter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  instrumentKey,
+                  direction: leg.direction,
+                  quantity: qty,
+                  entryPrice: ltp,
+                  metadata: {
+                    signal: finalSignal.signal,
+                    confidence: finalSignal.confidence,
+                    bullScore: finalSignal.bullScore,
+                    bearScore: finalSignal.bearScore,
+                    tradeType: leg.tradeType,
+                  },
+                }),
+              })
+              if (paperErr || !paperData?.trade?.id) {
+                addLog(
+                  mkLog(
+                    'error',
+                    'paper',
+                    `Paper ${side} failed: ${paperErr ?? JSON.stringify(paperData)}`,
+                  ),
+                )
+                updateStatus({ error: paperErr ?? 'Paper trade entry failed' })
+                success = false
+                break
+              }
+              paperTradeId = paperData.trade.id
+              addLog(
+                mkLog(
+                  'info',
+                  'paper',
+                  `Paper ${side} created tradeId=${paperTradeId}`,
+                ),
+              )
+              notify(
+                'Paper Trade Executed',
+                `Paper ${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed`,
+                'success',
+              )
+            } else {
+              const [orderData, orderErr] = await safeFetch<{
+                status?: string
+                data?: { order_id?: string }
+              }>('/api/order/place', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token,
+                  instrumentKey,
+                  transactionType: side,
+                  quantity: qty,
+                }),
+              })
+              if (
+                orderErr ||
+                (!orderData?.data?.order_id && orderData?.status !== 'success')
+              ) {
+                const failure = `${side} failed: ${orderErr ?? JSON.stringify(orderData)}`
+                addLog(mkLog('error', 'order', failure))
+                success = false
+                if (isStaticIpRestrictionError(orderErr)) {
+                  if (intervalRef.current) clearInterval(intervalRef.current)
+                  intervalRef.current = null
+                  updateStatus({
+                    state: 'STOPPED',
+                    error:
+                      'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
+                  })
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'bot',
+                      'stopping bot — Upstox order API is blocked by static IP restriction',
+                    ),
+                  )
+                }
+                break
+              }
+              addLog(
+                mkLog(
+                  'info',
+                  'order',
+                  `${side} placed orderId=${orderData?.data?.order_id ?? '—'}`,
+                ),
+              )
+              notify(
+                'Trade Executed',
+                `${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed successfully`,
+                'success',
+              )
+            }
+
+            positionLegs.push({
+              instrumentKey,
+              direction: leg.direction,
+              entryPrice: ltp,
+              quantity: qty,
+              tradeType: leg.tradeType,
+              paperTradeId,
+            })
           }
-          const position: ActivePosition = {
-            instrumentKey,
-            direction: dir,
-            entryPrice: ltp,
-            quantity: qty,
-            entryTime: new Date().toISOString(),
-            tradeId: Date.now(),
-            executionMode,
-            paperTradeId: paperTrade?.id,
+
+          if (success) {
+            const position: ActivePosition = {
+              instrumentKey: firstInstrumentKey,
+              direction: firstDirection,
+              entryPrice: firstEntryPrice,
+              quantity: qty,
+              entryTime: new Date().toISOString(),
+              tradeId: Date.now(),
+              executionMode,
+              tradeType: config.tradeType,
+              legs: positionLegs,
+            }
+            updateStatus({
+              state: 'ORDERED',
+              position,
+              tradesCount: cur.tradesCount + 1,
+            })
           }
-          updateStatus({
-            state: 'ORDERED',
-            position,
-            tradesCount: cur.tradesCount + 1,
-          })
         } else {
           addLog(
             mkLog('debug', 'bot', `signal=${finalSignal.signal} — no entry`),
@@ -1790,6 +1650,34 @@ export function useStrategyBot(token: string | null) {
             ? match.call_options.market_data.ltp
             : match.put_options.market_data.ltp
           : cur.position.entryPrice
+
+        let updatedLegs: PositionLeg[] | undefined
+        if (cur.position.legs && cur.position.legs.length > 0) {
+          updatedLegs = cur.position.legs.map((leg) => {
+            const legMatch = optionChain.find(
+              (o) =>
+                o.call_options.instrument_key === leg.instrumentKey ||
+                o.put_options.instrument_key === leg.instrumentKey,
+            )
+            const legCurrentPrice = legMatch
+              ? leg.direction === 'CE'
+                ? legMatch.call_options.market_data.ltp
+                : legMatch.put_options.market_data.ltp
+              : leg.entryPrice
+            return {
+              ...leg,
+              currentPrice: legCurrentPrice,
+            }
+          })
+        }
+
+        positionUpdate = {
+          position: {
+            ...cur.position,
+            currentPrice,
+            legs: updatedLegs,
+          },
+        }
 
         if (!match)
           addLog(
@@ -1811,69 +1699,120 @@ export function useStrategyBot(token: string | null) {
           ? `EOD forced exit — after ${config.lastEntryTime}`
           : signalReason
         if (exit) {
-          if (isPaperPosition(cur.position)) {
-            addLog(
-              mkLog(
-                'info',
-                'paper',
-                `exit triggered: ${reason} — closing paper trade`,
-              ),
-            )
-            const [, paperExitErr] = await safeFetch('/api/paper/trades/exit', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tradeId: cur.position.paperTradeId,
-                exitPrice: currentPrice,
-                metadata: { reason },
-              }),
-            })
-            if (paperExitErr) {
+          const legsToExit =
+            cur.position.legs && cur.position.legs.length > 0
+              ? cur.position.legs
+              : [
+                  {
+                    instrumentKey: cur.position.instrumentKey,
+                    direction: cur.position.direction,
+                    entryPrice: cur.position.entryPrice,
+                    quantity: cur.position.quantity,
+                    tradeType:
+                      cur.position.tradeType === 'selling'
+                        ? ('selling' as const)
+                        : ('buying' as const),
+                    paperTradeId: cur.position.paperTradeId,
+                    currentPrice,
+                  },
+                ]
+
+          for (const leg of legsToExit) {
+            const isSelling = leg.tradeType === 'selling'
+            const exitTxType = isSelling ? 'BUY' : 'SELL'
+            if (isPaperPosition(cur.position)) {
               addLog(
-                mkLog('error', 'paper', `Paper SELL failed: ${paperExitErr}`),
+                mkLog(
+                  'info',
+                  'paper',
+                  `exit triggered: ${reason} — closing paper trade leg ${leg.instrumentKey}`,
+                ),
+              )
+              const [, paperExitErr] = await safeFetch(
+                '/api/paper/trades/exit',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tradeId: leg.paperTradeId,
+                    exitPrice: leg.currentPrice ?? currentPrice,
+                    metadata: { reason },
+                  }),
+                },
+              )
+              if (paperExitErr) {
+                addLog(
+                  mkLog(
+                    'error',
+                    'paper',
+                    `Paper ${exitTxType} failed for ${leg.instrumentKey}: ${paperExitErr}`,
+                  ),
+                )
+                notify(
+                  'Paper Trade Error',
+                  `Paper ${exitTxType} failed: ${paperExitErr}`,
+                  'error',
+                )
+                continue
+              }
+              addLog(
+                mkLog(
+                  'info',
+                  'paper',
+                  `Paper ${exitTxType} settled successfully for ${leg.instrumentKey}`,
+                ),
               )
               notify(
-                'Paper Trade Error',
-                `Paper SELL failed: ${paperExitErr}`,
-                'error',
-              )
-              return
-            }
-            addLog(mkLog('info', 'paper', 'Paper SELL settled successfully'))
-            notify(
-              'Paper Trade Exited',
-              `Paper SELL settled. Reason: ${reason}`,
-              'info',
-            )
-          } else {
-            addLog(
-              mkLog(
+                'Paper Trade Exited',
+                `Paper ${exitTxType} settled for ${leg.instrumentKey}. Reason: ${reason}`,
                 'info',
-                'order',
-                `exit triggered: ${reason} — placing SELL`,
-              ),
-            )
-            const [, sellErr] = await safeFetch('/api/order/place', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                token,
-                instrumentKey: cur.position.instrumentKey,
-                transactionType: 'SELL',
-                quantity: cur.position.quantity,
-              }),
-            })
-            if (sellErr) {
-              addLog(mkLog('error', 'order', `SELL failed: ${sellErr}`))
-              notify('Trade Error', `SELL failed: ${sellErr}`, 'error')
-              return
+              )
+            } else {
+              addLog(
+                mkLog(
+                  'info',
+                  'order',
+                  `exit triggered: ${reason} — placing ${exitTxType} for ${leg.instrumentKey}`,
+                ),
+              )
+              const [, sellErr] = await safeFetch('/api/order/place', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token,
+                  instrumentKey: leg.instrumentKey,
+                  transactionType: exitTxType,
+                  quantity: leg.quantity,
+                }),
+              })
+              if (sellErr) {
+                addLog(
+                  mkLog(
+                    'error',
+                    'order',
+                    `${exitTxType} failed for ${leg.instrumentKey}: ${sellErr}`,
+                  ),
+                )
+                notify(
+                  'Trade Error',
+                  `${exitTxType} failed: ${sellErr}`,
+                  'error',
+                )
+                continue
+              }
+              addLog(
+                mkLog(
+                  'info',
+                  'order',
+                  `${exitTxType} placed successfully for ${leg.instrumentKey}`,
+                ),
+              )
+              notify(
+                'Trade Exited',
+                `${exitTxType} order placed for ${leg.instrumentKey}. Reason: ${reason}`,
+                'info',
+              )
             }
-            addLog(mkLog('info', 'order', 'SELL placed successfully'))
-            notify(
-              'Trade Exited',
-              `SELL order placed. Reason: ${reason}`,
-              'info',
-            )
           }
           const nextState: BotState =
             cur.tradesCount >= config.maxTradesPerDay ? 'STOPPED' : 'RUNNING'
@@ -1883,11 +1822,12 @@ export function useStrategyBot(token: string | null) {
             error: `Exited: ${reason}`,
           })
         } else {
+          const displayPrice = currentPrice
           addLog(
             mkLog(
               'debug',
               'position',
-              `holding — price=${currentPrice.toFixed(2)} pnl=${(((currentPrice - cur.position.entryPrice) / cur.position.entryPrice) * 100).toFixed(2)}%`,
+              `holding — price=${displayPrice.toFixed(2)}`,
             ),
           )
         }

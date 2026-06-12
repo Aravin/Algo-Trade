@@ -12,7 +12,8 @@ export type V3OrderType = 'buy' | 'sell' | 'hold'
 
 interface McMarketItem {
   symbol: string
-  technical_rating: string
+  technical_rating?: string
+  change_per?: number
   [key: string]: unknown
 }
 
@@ -24,7 +25,7 @@ export function transformGlobalData(apiData: {
   apiData.dataList.forEach((section) => {
     if (section.data) {
       section.data.forEach((row: unknown[]) => {
-        const item: McMarketItem = { symbol: '', technical_rating: '' }
+        const item: McMarketItem = { symbol: '' }
         row.forEach((val, k) => {
           item[apiData.header[k]?.name ?? String(k)] = val
         })
@@ -35,14 +36,8 @@ export function transformGlobalData(apiData: {
   return result
 }
 
-const SKIP_SYMBOLS = [
-  'CCMP:IND',
-  'SPX:IND',
-  'sg;STII',
-  'tw;IXTA',
-  'th;SETI',
-  'id;JSC',
-]
+// Symbols to exclude from global sentiment scoring (none currently needed for Upstox)
+const SKIP_SYMBOLS: string[] = []
 
 export function evaluateGlobalSentiment(
   marketData: McMarketItem[],
@@ -50,24 +45,47 @@ export function evaluateGlobalSentiment(
   let score = 0
   for (const item of marketData) {
     if (SKIP_SYMBOLS.includes(item.symbol)) continue
-    const m = item.symbol === 'in;gsx' ? 2 : 1
-    switch (item.technical_rating) {
-      case 'Very Bullish':
-        score += 2 * m
-        break
-      case 'Bullish':
-        score += 1 * m
-        break
-      case 'Very Bearish':
-        score -= 2 * m
-        break
-      case 'Bearish':
-        score -= 1 * m
-        break
+    // VRD does not include Gift Nifty in globalIndicesByRegion — no SGX double-weight needed
+    const isSgx = false
+    const m = isSgx ? 2 : 1
+
+    // Inversely correlated with Indian equities (rising = bearish for Nifty)
+    const upperSym = item.symbol.toUpperCase()
+    const isIndicator =
+      upperSym === 'USD/INR' || upperSym === 'BRENT OIL' || upperSym === 'GOLD'
+    const directionMultiplier = isIndicator ? -1 : 1
+
+    if (item.technical_rating) {
+      switch (item.technical_rating) {
+        case 'Very Bullish':
+          score += 2 * m * directionMultiplier
+          break
+        case 'Bullish':
+          score += 1 * m * directionMultiplier
+          break
+        case 'Very Bearish':
+          score -= 2 * m * directionMultiplier
+          break
+        case 'Bearish':
+          score -= 1 * m * directionMultiplier
+          break
+      }
+    } else if (typeof item.change_per === 'number') {
+      const pct = item.change_per
+      if (pct >= 0.8) {
+        score += 2 * m * directionMultiplier
+      } else if (pct >= 0.2) {
+        score += 1 * m * directionMultiplier
+      } else if (pct <= -0.8) {
+        score -= 2 * m * directionMultiplier
+      } else if (pct <= -0.2) {
+        score -= 1 * m * directionMultiplier
+      }
     }
   }
-  if (score <= -8) return 'bearish'
-  if (score >= 8) return 'bullish'
+  // With 13 instruments (max ~±26 range), require clear directional consensus
+  if (score <= -5) return 'bearish'
+  if (score >= 5) return 'bullish'
   return 'neutral'
 }
 

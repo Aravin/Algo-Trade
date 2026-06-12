@@ -45,6 +45,16 @@ export interface AllSignalData {
 
 import type { ExecutionMode } from './paperTrading'
 
+export interface PositionLeg {
+  instrumentKey: string
+  direction: 'CE' | 'PE'
+  entryPrice: number
+  quantity: number
+  tradeType: 'buying' | 'selling'
+  paperTradeId?: string
+  currentPrice?: number
+}
+
 export interface ActivePosition {
   instrumentKey: string
   direction: 'CE' | 'PE'
@@ -54,6 +64,9 @@ export interface ActivePosition {
   tradeId: number
   executionMode?: ExecutionMode
   paperTradeId?: string
+  tradeType?: 'buying' | 'selling' | 'both'
+  currentPrice?: number
+  legs?: PositionLeg[]
 }
 
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
@@ -387,7 +400,27 @@ export function shouldExit(
   currentPrice: number,
   config: Pick<StrategyConfig, 'maxProfitPct' | 'maxLossPct'>,
 ): { exit: boolean; reason: string } {
-  const pct = ((currentPrice - position.entryPrice) / position.entryPrice) * 100
+  let pct: number
+  if (position.legs && position.legs.length > 0) {
+    let totalPnl = 0
+    let totalEntryValue = 0
+    for (const leg of position.legs) {
+      const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+      const legPnl =
+        leg.tradeType === 'selling'
+          ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+          : (legCurrentPrice - leg.entryPrice) * leg.quantity
+      totalPnl += legPnl
+      totalEntryValue += leg.entryPrice * leg.quantity
+    }
+    pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+  } else {
+    const isSelling = position.tradeType === 'selling'
+    pct = isSelling
+      ? ((position.entryPrice - currentPrice) / position.entryPrice) * 100
+      : ((currentPrice - position.entryPrice) / position.entryPrice) * 100
+  }
+
   if (pct >= config.maxProfitPct)
     return { exit: true, reason: `Profit +${pct.toFixed(1)}% reached` }
   if (pct <= -config.maxLossPct)
@@ -397,19 +430,24 @@ export function shouldExit(
     }
 
   const v4 = getV4Signal(currentData.indicators)
-  const reversal = position.direction === 'CE' ? 'Sell' : 'Buy'
+  const isSellingMode = position.tradeType === 'selling'
+  const isBullishBias = isSellingMode
+    ? position.direction === 'PE'
+    : position.direction === 'CE'
+
+  const reversal = isBullishBias ? 'Sell' : 'Buy'
   if (v4 === reversal)
     return { exit: true, reason: `V4 signal reversed to ${v4}` }
 
-  const v3Reversal = position.direction === 'CE' ? 'sell' : 'buy'
+  const v3Reversal = isBullishBias ? 'sell' : 'buy'
   if (currentData.v3 === v3Reversal)
     return { exit: true, reason: `V3 signal reversed to ${currentData.v3}` }
 
   const ad = currentData.vrd?.advancesDeclines
   if (ad?.ratio != null) {
-    if (position.direction === 'CE' && ad.ratio < 0.8)
+    if (isBullishBias && ad.ratio < 0.8)
       return { exit: true, reason: 'Breadth turned bearish' }
-    if (position.direction === 'PE' && ad.ratio > 1.5)
+    if (!isBullishBias && ad.ratio > 1.5)
       return { exit: true, reason: 'Breadth turned bullish' }
   }
 

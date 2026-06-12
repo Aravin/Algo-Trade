@@ -165,6 +165,20 @@ export function StrategyConfig({
             <option value="paper">Paper Trade</option>
           </select>
         </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Trade Type</label>
+          <select
+            value={local.tradeType}
+            onChange={(e) =>
+              set('tradeType', e.target.value as StrategyConfig['tradeType'])
+            }
+            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="buying">Option Buying (Long CE/PE)</option>
+            <option value="selling">Option Selling (Short CE/PE)</option>
+            <option value="both">Both (Long & Short)</option>
+          </select>
+        </div>
         <div className="flex gap-2">
           <Button size="sm" onClick={handleSave} className="flex-1">
             {saved ? 'Saved ✓' : 'Save Config'}

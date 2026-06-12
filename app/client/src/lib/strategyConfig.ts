@@ -12,6 +12,7 @@ export interface StrategyConfig {
   minConfidence: 'strong' | 'moderate'
   otmSkip: number // how many OTM strikes to skip
   executionMode: ExecutionMode
+  tradeType: 'buying' | 'selling' | 'both'
 }
 
 export const DEFAULT_CONFIG: StrategyConfig = {
@@ -25,6 +26,7 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   minConfidence: 'moderate',
   otmSkip: 3,
   executionMode: 'paper',
+  tradeType: 'buying',
 }
 
 const KEY = 'algo-trade:strategy-config'

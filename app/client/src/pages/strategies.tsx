@@ -6,6 +6,7 @@ import { fetchPaperAccount } from '@/lib/paperTrading'
 
 import { HardStopBanner } from '@/components/dashboard/strategy/hard-stop-banner'
 import { MarketSetupPanel } from '@/components/dashboard/strategy/market-setup-panel'
+import { GlobalMarketsPanel } from '@/components/dashboard/strategy/global-markets-panel'
 import { InstitutionalPanel } from '@/components/dashboard/strategy/institutional-panel'
 import { BreadthPanel } from '@/components/dashboard/strategy/breadth-panel'
 import { IndicatorsPanel } from '@/components/dashboard/strategy/indicators-panel'
@@ -68,6 +69,9 @@ export function StrategiesPage() {
 
       {/* Market setup */}
       <MarketSetupPanel vrdData={bot.vrdData} />
+
+      {/* Global Markets & Indicators */}
+      <GlobalMarketsPanel globalIndices={bot.globalIndices} />
 
       {/* Institutional + Breadth */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

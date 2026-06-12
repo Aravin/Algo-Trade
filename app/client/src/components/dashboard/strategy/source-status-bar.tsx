@@ -17,18 +17,13 @@ const LABEL: Record<SourceStatus, string> = {
 const SOURCES: { key: string; label: string }[] = [
   { key: 'candles', label: 'Candles' },
   { key: 'option-chain', label: 'OptionChain' },
-  { key: 'global-sentiment', label: 'Global' },
-  { key: 'nifty-sentiment', label: 'Nifty A/D' },
   { key: 'vix', label: 'VIX' },
   { key: 'breadth', label: 'Breadth' },
-  { key: 'vrd/dashboard', label: 'VRD Dash' },
-  { key: 'vrd/mmi', label: 'VRD MMI' },
-  { key: 'vrd/fii-ratio', label: 'VRD FII' },
-  { key: 'vrd/fii-position', label: 'VRD Pos' },
-  { key: 'vrd/pe', label: 'VRD PE' },
-  { key: 'vrd/ad', label: 'VRD A/D' },
-  { key: 'vrd/pcr', label: 'VRD PCR' },
-  { key: 'synthetic/flow', label: 'Proxy Flow' },
+  { key: 'global-sentiment', label: 'Global Sentiment' },
+  { key: 'upstox/fii', label: 'Upstox FII' },
+  { key: 'upstox/dii', label: 'Upstox DII' },
+  { key: 'upstox/pcr', label: 'Upstox PCR' },
+  { key: 'upstox/max-pain', label: 'Max Pain' },
   { key: 'synthetic/value', label: 'Proxy Value' },
 ]
 

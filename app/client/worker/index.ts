@@ -410,18 +410,44 @@ async function handlePaperTradeEnter(
   try {
     const account = await ensurePaperAccount(env)
     const entryValue = Number((entryPrice * quantity).toFixed(2))
-    if (entryValue > account.balance) {
-      return Response.json(
-        {
-          error: `Insufficient paper credit. Required ${entryValue}, available ${account.balance}`,
-        },
-        { status: 400 },
-      )
+    const metadataObj = body.metadata as {
+      tradeType?: 'buying' | 'selling'
+    } | null
+    const tradeType = metadataObj?.tradeType ?? 'buying'
+    const isSelling = tradeType === 'selling'
+
+    if (isSelling) {
+      const requiredMargin = quantity * 4000
+      if (requiredMargin > account.balance) {
+        return Response.json(
+          {
+            error: `Insufficient paper credit for margin. Required ${requiredMargin}, available ${account.balance}`,
+          },
+          { status: 400 },
+        )
+      }
+    } else {
+      if (entryValue > account.balance) {
+        return Response.json(
+          {
+            error: `Insufficient paper credit. Required ${entryValue}, available ${account.balance}`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     const tradeId = makeId('paper_trade')
     const createdAt = nowIso()
-    const balanceAfter = Number((account.balance - entryValue).toFixed(2))
+    const balanceAfter = isSelling
+      ? Number((account.balance + entryValue).toFixed(2))
+      : Number((account.balance - entryValue).toFixed(2))
+
+    const amountChange = isSelling ? entryValue : -entryValue
+    const noteStr = isSelling
+      ? `Paper SELL ${body.direction}`
+      : `Paper BUY ${body.direction}`
+
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
         'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
@@ -446,10 +472,10 @@ async function handlePaperTradeEnter(
         makeId('stmt'),
         account.id,
         'paper_entry',
-        -entryValue,
+        amountChange,
         account.balance,
         balanceAfter,
-        `Paper BUY ${body.direction}`,
+        noteStr,
         JSON.stringify({
           tradeId,
           instrumentKey: body.instrumentKey,
@@ -511,10 +537,29 @@ async function handlePaperTradeExit(
         { status: 400 },
       )
 
+    let tradeType = 'buying'
+    if (trade.metadata_json) {
+      try {
+        const meta = JSON.parse(trade.metadata_json) as { tradeType?: string }
+        if (meta?.tradeType === 'selling') {
+          tradeType = 'selling'
+        }
+      } catch {
+        /* ignore invalid metadata */
+      }
+    }
+    const isSelling = tradeType === 'selling'
+
     const closedAt = nowIso()
     const exitValue = Number((exitPrice * trade.quantity).toFixed(2))
-    const realizedPnl = Number((exitValue - trade.entry_value).toFixed(2))
-    const balanceAfter = Number((account.balance + exitValue).toFixed(2))
+    const realizedPnl = isSelling
+      ? Number((trade.entry_value - exitValue).toFixed(2))
+      : Number((exitValue - trade.entry_value).toFixed(2))
+    const balanceAfter = isSelling
+      ? Number((account.balance - exitValue).toFixed(2))
+      : Number((account.balance + exitValue).toFixed(2))
+    const amountChange = isSelling ? -exitValue : exitValue
+
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
         'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
@@ -536,7 +581,7 @@ async function handlePaperTradeExit(
         makeId('stmt'),
         account.id,
         'paper_exit',
-        exitValue,
+        amountChange,
         account.balance,
         balanceAfter,
         `Paper EXIT ${trade.direction}`,
@@ -1017,238 +1062,6 @@ async function handleOrderList(request: Request): Promise<Response> {
   return Response.json(data, { status: upstream.status })
 }
 
-// ─── Global sentiment (MoneyControl) ──────────────────────────────────────────
-async function handleGlobalSentiment(): Promise<Response> {
-  const url =
-    'https://priceapi.moneycontrol.com/technicalCompanyData/globalMarket?deviceType=W&sortOrder=desc&sortBy=weight&count=100&type=IT'
-  let upstream: Response
-  try {
-    upstream = await fetch(url, { headers: { Accept: 'application/json' } })
-  } catch {
-    return Response.json(
-      { error: 'Failed to reach MoneyControl API' },
-      { status: 502 },
-    )
-  }
-  const data = await upstream.json()
-  return Response.json(data, { status: upstream.status })
-}
-
-// ─── Nifty sentiment (NiftyTrader) ────────────────────────────────────────────
-async function handleNiftySentiment(): Promise<Response> {
-  const url = 'https://webapi.niftytrader.in/webapi/Resource/nifty50-data'
-  let upstream: Response
-  try {
-    upstream = await fetch(url, { headers: { Accept: 'application/json' } })
-  } catch {
-    return Response.json(
-      { error: 'Failed to reach NiftyTrader API' },
-      { status: 502 },
-    )
-  }
-  const data = await upstream.json()
-  return Response.json(data, { status: upstream.status })
-}
-
-// ─── VRD fallback APIs ───────────────────────────────────────────────────────
-const VRD_HEADERS = {
-  Accept: 'application/json',
-  'User-Agent': 'Mozilla/5.0 (compatible; AlgoTrade/1.0)',
-}
-
-async function fetchVrdJson<T>(path: string): Promise<T> {
-  const res = await fetch(`https://www.vrdnation.com${path}`, {
-    headers: VRD_HEADERS,
-  })
-  if (!res.ok) throw new Error(`VRD returned ${res.status}`)
-  return res.json()
-}
-
-async function handleVrdMarketMood(): Promise<Response> {
-  try {
-    const data = await fetchVrdJson<{ date?: string; marketMood?: number }>(
-      '/pulse/api/market-mood',
-    )
-    return Response.json({
-      score: data.marketMood ?? null,
-      date: data.date ?? null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdFiiRatio(): Promise<Response> {
-  try {
-    const rows = await fetchVrdJson<
-      {
-        date?: string
-        fiiLong?: number
-        fiiShort?: number
-        indexLong?: number
-        indexShort?: number
-      }[]
-    >('/pulse/api/fii-ratio')
-    const latest = rows.at(-1) ?? null
-    return Response.json({
-      date: latest?.date ?? null,
-      longPct: latest?.fiiLong ?? null,
-      shortPct: latest?.fiiShort ?? null,
-      indexLong: latest?.indexLong ?? null,
-      indexShort: latest?.indexShort ?? null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdDashboard(): Promise<Response> {
-  try {
-    const data = await fetchVrdJson<{
-      indiaVix?: { price?: number; date?: string }
-      pcr?: { NF50?: { putCallRatio?: number; date?: string } }
-      giftNifty?: {
-        lastData?: { close?: number; change?: number; date?: string }
-      }
-      Asia?: {
-        displayName?: string
-        change?: number
-        price?: number
-        date?: string
-        region?: string
-      }[]
-      US?: {
-        displayName?: string
-        change?: number
-        price?: number
-        date?: string
-        region?: string
-      }[]
-      Commodities?: {
-        displayName?: string
-        change?: number
-        price?: number
-        date?: string
-        region?: string
-      }[]
-    }>('/pulse/api/dashboard')
-    return Response.json({
-      vix: data.indiaVix?.price ?? null,
-      vixDate: data.indiaVix?.date ?? null,
-      pcr: data.pcr?.NF50?.putCallRatio ?? null,
-      pcrDate: data.pcr?.NF50?.date ?? null,
-      giftNifty: data.giftNifty?.lastData?.close ?? null,
-      giftNiftyChange: data.giftNifty?.lastData?.change ?? null,
-      giftNiftyDate: data.giftNifty?.lastData?.date ?? null,
-      asia: data.Asia ?? [],
-      us: data.US ?? [],
-      commodities: data.Commodities ?? [],
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdAdvanceDecline(): Promise<Response> {
-  try {
-    const rows = await fetchVrdJson<
-      { date?: string; advances?: number; declines?: number }[]
-    >('/pulse/api/advance-decline/details/1')
-    const latest = rows.at(-1) ?? null
-    const advances = latest?.advances ?? null
-    const declines = latest?.declines ?? null
-    return Response.json({
-      date: latest?.date ?? null,
-      advances,
-      declines,
-      ratio:
-        advances !== null && declines !== null && declines > 0
-          ? Number((advances / declines).toFixed(3))
-          : null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdPcr(): Promise<Response> {
-  try {
-    const rows = await fetchVrdJson<
-      { date?: string; putCallRatio?: number; price?: number }[]
-    >('/pulse/api/put-call-ratio/details/NF50')
-    const latest = rows.at(-1) ?? null
-    return Response.json({
-      value: latest?.putCallRatio ?? null,
-      date: latest?.date ?? null,
-      price: latest?.price ?? null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdPe(): Promise<Response> {
-  try {
-    const rows = await fetchVrdJson<
-      {
-        date?: string
-        priceEarnings?: number
-        priceToBook?: number
-        dividendYield?: number
-      }[]
-    >('/pulse/api/price-earnings/day-wise-details/NF50')
-    const latest = rows.at(-1) ?? null
-    const pe = latest?.priceEarnings ?? null
-    return Response.json({
-      pe,
-      pb: latest?.priceToBook ?? null,
-      dividendYield: latest?.dividendYield ?? null,
-      date: latest?.date ?? null,
-      label:
-        pe === null
-          ? null
-          : pe < 18
-            ? 'Undervalued'
-            : pe > 24
-              ? 'Overvalued'
-              : 'Fair Value',
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
-async function handleVrdFiiPositioning(): Promise<Response> {
-  try {
-    const months = await fetchVrdJson<{ month?: number; year?: number }[]>(
-      '/pulse/api/fii/date',
-    )
-    const latestMonth = months[0]
-    if (!latestMonth?.month || !latestMonth?.year) {
-      return Response.json(
-        { error: 'VRD FII month list empty' },
-        { status: 502 },
-      )
-    }
-    const rows = await fetchVrdJson<{ date?: string; netFutIndex?: number }[]>(
-      `/pulse/api/fii/${latestMonth.month}/${latestMonth.year}`,
-    )
-    const latest = rows.at(-1) ?? null
-    let consecutiveShortDays = 0
-    for (let index = rows.length - 1; index >= 0; index -= 1) {
-      if ((rows[index]?.netFutIndex ?? 0) < 0) consecutiveShortDays += 1
-      else break
-    }
-    return Response.json({
-      date: latest?.date ?? null,
-      netPosition: latest?.netFutIndex ?? null,
-      consecutiveShortDays: consecutiveShortDays || null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
-}
-
 // ─── VIX via Upstox ───────────────────────────────────────────────────────────
 async function handleVix(request: Request): Promise<Response> {
   let body: { token: string }
@@ -1284,56 +1097,56 @@ async function handleVix(request: Request): Promise<Response> {
 
 // ─── Nifty50 breadth (A/D) via Upstox batch quotes ───────────────────────────
 const NIFTY50_KEYS = [
-  'NSE_EQ|ADANIENT',
-  'NSE_EQ|ADANIPORTS',
-  'NSE_EQ|APOLLOHOSP',
-  'NSE_EQ|ASIANPAINT',
-  'NSE_EQ|AXISBANK',
-  'NSE_EQ|BAJAJ-AUTO',
-  'NSE_EQ|BAJFINANCE',
-  'NSE_EQ|BAJAJFINSV',
-  'NSE_EQ|BPCL',
-  'NSE_EQ|BHARTIARTL',
-  'NSE_EQ|BRITANNIA',
-  'NSE_EQ|CIPLA',
-  'NSE_EQ|COALINDIA',
-  'NSE_EQ|DIVISLAB',
-  'NSE_EQ|DRREDDY',
-  'NSE_EQ|EICHERMOT',
-  'NSE_EQ|GRASIM',
-  'NSE_EQ|HCLTECH',
-  'NSE_EQ|HDFCBANK',
-  'NSE_EQ|HDFCLIFE',
-  'NSE_EQ|HEROMOTOCO',
-  'NSE_EQ|HINDALCO',
-  'NSE_EQ|HINDUNILVR',
-  'NSE_EQ|ICICIBANK',
-  'NSE_EQ|INDUSINDBK',
-  'NSE_EQ|INFY',
-  'NSE_EQ|ITC',
-  'NSE_EQ|JSWSTEEL',
-  'NSE_EQ|KOTAKBANK',
-  'NSE_EQ|LT',
-  'NSE_EQ|LTIM',
-  'NSE_EQ|M&M',
-  'NSE_EQ|MARUTI',
-  'NSE_EQ|NESTLEIND',
-  'NSE_EQ|NTPC',
-  'NSE_EQ|ONGC',
-  'NSE_EQ|POWERGRID',
-  'NSE_EQ|RELIANCE',
-  'NSE_EQ|SBILIFE',
-  'NSE_EQ|SHRIRAMFIN',
-  'NSE_EQ|SBIN',
-  'NSE_EQ|SUNPHARMA',
-  'NSE_EQ|TCS',
-  'NSE_EQ|TATACONSUM',
-  'NSE_EQ|TATAMOTORS',
-  'NSE_EQ|TATASTEEL',
-  'NSE_EQ|TECHM',
-  'NSE_EQ|TITAN',
-  'NSE_EQ|TRENT',
-  'NSE_EQ|ULTRACEMCO',
+  'NSE_EQ|INE423A01024',
+  'NSE_EQ|INE742F01042',
+  'NSE_EQ|INE437A01024',
+  'NSE_EQ|INE021A01026',
+  'NSE_EQ|INE238A01034',
+  'NSE_EQ|INE917I01010',
+  'NSE_EQ|INE296A01032',
+  'NSE_EQ|INE918I01026',
+  'NSE_EQ|INE029A01011',
+  'NSE_EQ|INE397D01024',
+  'NSE_EQ|INE216A01030',
+  'NSE_EQ|INE059A01026',
+  'NSE_EQ|INE522F01014',
+  'NSE_EQ|INE361B01024',
+  'NSE_EQ|INE089A01031',
+  'NSE_EQ|INE066A01021',
+  'NSE_EQ|INE047A01021',
+  'NSE_EQ|INE860A01027',
+  'NSE_EQ|INE040A01034',
+  'NSE_EQ|INE795G01014',
+  'NSE_EQ|INE158A01026',
+  'NSE_EQ|INE038A01020',
+  'NSE_EQ|INE030A01027',
+  'NSE_EQ|INE090A01021',
+  'NSE_EQ|INE095A01012',
+  'NSE_EQ|INE009A01021',
+  'NSE_EQ|INE154A01025',
+  'NSE_EQ|INE019A01038',
+  'NSE_EQ|INE237A01036',
+  'NSE_EQ|INE018A01030',
+  'NSE_EQ|INE214T01019',
+  'NSE_EQ|INE101A01026',
+  'NSE_EQ|INE585B01010',
+  'NSE_EQ|INE239A01024',
+  'NSE_EQ|INE733E01010',
+  'NSE_EQ|INE213A01029',
+  'NSE_EQ|INE752E01010',
+  'NSE_EQ|INE002A01018',
+  'NSE_EQ|INE123W01016',
+  'NSE_EQ|INE721A01047',
+  'NSE_EQ|INE062A01020',
+  'NSE_EQ|INE044A01036',
+  'NSE_EQ|INE467B01029',
+  'NSE_EQ|INE192A01025',
+  'NSE_EQ|INE155A01022',
+  'NSE_EQ|INE081A01020',
+  'NSE_EQ|INE669C01036',
+  'NSE_EQ|INE280A01028',
+  'NSE_EQ|INE849A01020',
+  'NSE_EQ|INE481G01011',
 ]
 
 async function handleBreadth(request: Request): Promise<Response> {
@@ -1383,106 +1196,325 @@ async function handleBreadth(request: Request): Promise<Response> {
   })
 }
 
-// ─── NSE public data (PE + FII) ───────────────────────────────────────────────
-const NSE_BROWSER_HEADERS = {
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  Accept: 'application/json, text/plain, */*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  Referer: 'https://www.nseindia.com/',
+// ─── FII/DII/OI/Max Pain/Smartlist via Upstox ─────────────────────────────────
+async function handleUpstoxFii(request: Request): Promise<Response> {
+  let body: { token: string; from?: string; interval?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token)
+    return Response.json({ error: 'Missing token' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    data_type: 'NSE_FO|INDEX_FUTURES,NSE_FO|INDEX_OPTIONS,NSE_EQ|CASH',
+    interval: body.interval ?? '1D',
+  })
+  if (body.from) {
+    qs.set('from', body.from)
+  } else {
+    const date = new Date()
+    date.setDate(date.getDate() - 15)
+    qs.set('from', formatIsoDate(date))
+  }
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/fii?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
 }
 
-async function nseWithSession(path: string): Promise<Response> {
-  // First try without cookie
-  let res = await fetch(`https://www.nseindia.com${path}`, {
-    headers: NSE_BROWSER_HEADERS,
-  })
-  if (res.ok) return res
-  // Session-cookie fallback: hit the homepage to get valid cookies, then retry
+async function handleUpstoxDii(request: Request): Promise<Response> {
+  let body: { token: string; from?: string; interval?: string }
   try {
-    const homeRes = await fetch('https://www.nseindia.com/', {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token)
+    return Response.json({ error: 'Missing token' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    data_type: 'NSE_EQ|CASH',
+    interval: body.interval ?? '1D',
+  })
+  if (body.from) {
+    qs.set('from', body.from)
+  } else {
+    const date = new Date()
+    date.setDate(date.getDate() - 15)
+    qs.set('from', formatIsoDate(date))
+  }
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/dii?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
+async function handleUpstoxMaxPain(request: Request): Promise<Response> {
+  let body: {
+    token: string
+    expiry: string
+    date?: string
+    bucketInterval?: number
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.expiry)
+    return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    instrument_key: 'NSE_INDEX|Nifty 50',
+    expiry: body.expiry,
+    date: body.date ?? formatIsoDate(),
+    bucket_interval: String(body.bucketInterval ?? 60),
+  })
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/max-pain?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
+async function handleUpstoxOi(request: Request): Promise<Response> {
+  let body: { token: string; expiry: string; date?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.expiry)
+    return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    instrument_key: 'NSE_INDEX|Nifty 50',
+    expiry: body.expiry,
+    date: body.date ?? formatIsoDate(),
+  })
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/oi?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
+async function handleUpstoxChangeOi(request: Request): Promise<Response> {
+  let body: {
+    token: string
+    expiry: string
+    date?: string
+    interval?: number
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.expiry)
+    return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    instrument_key: 'NSE_INDEX|Nifty 50',
+    expiry: body.expiry,
+    date: body.date ?? formatIsoDate(),
+    interval: String(body.interval ?? 1),
+  })
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/change-oi?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
+async function handleUpstoxSmartlistFutures(
+  request: Request,
+): Promise<Response> {
+  let body: {
+    token: string
+    assetType?: string
+    category?: string
+    pageNumber?: number
+    pageSize?: number
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token)
+    return Response.json({ error: 'Missing token' }, { status: 400 })
+
+  const qs = new URLSearchParams({
+    asset_type: body.assetType ?? 'INDEX',
+    category: body.category ?? 'TOP_TRADED',
+    page_number: String(body.pageNumber ?? 1),
+    page_size: String(body.pageSize ?? 20),
+  })
+
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market/smartlist/futures?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
+// ─── Global Indices via VRD Nation dashboard ─────────────────────────────────
+const VRD_DASHBOARD_URL = 'https://www.vrdnation.com/pulse/api/dashboard'
+
+async function handleGlobalIndices(): Promise<Response> {
+  let upstream: Response
+  try {
+    upstream = await fetch(VRD_DASHBOARD_URL, {
       headers: {
-        ...NSE_BROWSER_HEADERS,
-        Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'application/json',
       },
     })
-    const cookieHeader = homeRes.headers.get('set-cookie')
-    if (cookieHeader) {
-      const cookie = cookieHeader
-        .split(',')
-        .map((c) => c.split(';')[0].trim())
-        .join('; ')
-      res = await fetch(`https://www.nseindia.com${path}`, {
-        headers: { ...NSE_BROWSER_HEADERS, Cookie: cookie },
-      })
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach VRD: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  if (!upstream.ok) {
+    return Response.json(
+      { error: `VRD returned ${upstream.status}` },
+      { status: 502 },
+    )
+  }
+
+  const raw = await upstream.json<{
+    globalIndicesByRegion?: {
+      US?: { displayName: string; price: number; change: number }[]
+      ASIA?: { displayName: string; price: number; change: number }[]
+      Commodities?: { displayName: string; price: number; change: number }[]
     }
-  } catch {
-    /* fallthrough — return original failed response */
-  }
-  return res
-}
+  }>()
 
-async function handleNsePe(): Promise<Response> {
-  try {
-    const res = await nseWithSession('/api/allIndices')
-    if (!res.ok)
-      return Response.json(
-        { error: `NSE returned ${res.status}` },
-        { status: 502 },
-      )
-    const data = await res.json<{
-      data?: {
-        indexSymbol?: string
-        pe?: string
-        pb?: string
-        advances?: number
-        declines?: number
-      }[]
-    }>()
-    const nifty = data?.data?.find((d) => d.indexSymbol === 'NIFTY 50')
-    return Response.json({
-      pe: nifty?.pe ? parseFloat(nifty.pe) : null,
-      pb: nifty?.pb ? parseFloat(nifty.pb) : null,
-      advances: nifty?.advances ?? null,
-      declines: nifty?.declines ?? null,
-      label: nifty?.pe
-        ? parseFloat(nifty.pe) < 18
-          ? 'Undervalued'
-          : parseFloat(nifty.pe) > 24
-            ? 'Overvalued'
-            : 'Fair Value'
-        : null,
-    })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
+  const regions = raw?.globalIndicesByRegion
+  if (!regions) {
+    return Response.json(
+      { error: 'No globalIndicesByRegion from VRD', raw },
+      { status: 502 },
+    )
   }
-}
 
-async function handleNseFii(): Promise<Response> {
-  try {
-    const res = await nseWithSession('/api/fiidiiTradeReact')
-    if (!res.ok)
-      return Response.json(
-        { error: `NSE returned ${res.status}` },
-        { status: 502 },
-      )
-    const rows = await res.json<
-      {
-        category?: string
-        buyValue?: number
-        sellValue?: number
-        netValue?: number
-        date?: string
-      }[]
-    >()
-    // Return last 5 trading days of FII data
-    const fii = rows
-      .filter((r) => r.category === 'FII/FPI' || r.category === 'FII')
-      .slice(0, 5)
-    return Response.json({ data: fii })
-  } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 })
-  }
+  // Flatten all regions into a single array of GlobalIndexItem
+  const allItems = [
+    ...(regions.US ?? []),
+    ...(regions.ASIA ?? []),
+    ...(regions.Commodities ?? []),
+  ]
+
+  const normalized = allItems.map((item) => ({
+    symbol: item.displayName,
+    last_price: item.price ?? 0,
+    change_per: item.change ?? 0,
+  }))
+
+  return Response.json({ status: 'success', data: normalized })
 }
 
 export default {
@@ -1575,55 +1607,6 @@ export default {
     if (url.pathname === '/api/order/list' && request.method === 'POST') {
       return handleOrderList(request)
     }
-    if (
-      url.pathname === '/api/market/global-sentiment' &&
-      request.method === 'GET'
-    ) {
-      return handleGlobalSentiment()
-    }
-    if (
-      url.pathname === '/api/market/nifty-sentiment' &&
-      request.method === 'GET'
-    ) {
-      return handleNiftySentiment()
-    }
-
-    if (
-      url.pathname === '/api/market/vrd/market-mood' &&
-      request.method === 'GET'
-    ) {
-      return handleVrdMarketMood()
-    }
-    if (
-      url.pathname === '/api/market/vrd/fii-ratio' &&
-      request.method === 'GET'
-    ) {
-      return handleVrdFiiRatio()
-    }
-    if (
-      url.pathname === '/api/market/vrd/dashboard' &&
-      request.method === 'GET'
-    ) {
-      return handleVrdDashboard()
-    }
-    if (
-      url.pathname === '/api/market/vrd/advance-decline' &&
-      request.method === 'GET'
-    ) {
-      return handleVrdAdvanceDecline()
-    }
-    if (url.pathname === '/api/market/vrd/pcr' && request.method === 'GET') {
-      return handleVrdPcr()
-    }
-    if (url.pathname === '/api/market/vrd/pe' && request.method === 'GET') {
-      return handleVrdPe()
-    }
-    if (
-      url.pathname === '/api/market/vrd/fii-positioning' &&
-      request.method === 'GET'
-    ) {
-      return handleVrdFiiPositioning()
-    }
 
     // ── New Upstox-based market data ──────────────────────────────────────────
     if (url.pathname === '/api/market/vix' && request.method === 'POST') {
@@ -1633,12 +1616,45 @@ export default {
       return handleBreadth(request)
     }
 
-    // ── NSE public data ───────────────────────────────────────────────────────
-    if (url.pathname === '/api/market/nse/pe' && request.method === 'GET') {
-      return handleNsePe()
+    if (
+      url.pathname === '/api/market/upstox/fii' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxFii(request)
     }
-    if (url.pathname === '/api/market/nse/fii' && request.method === 'GET') {
-      return handleNseFii()
+    if (
+      url.pathname === '/api/market/upstox/dii' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxDii(request)
+    }
+    if (
+      url.pathname === '/api/market/upstox/max-pain' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxMaxPain(request)
+    }
+    if (url.pathname === '/api/market/upstox/oi' && request.method === 'POST') {
+      return handleUpstoxOi(request)
+    }
+    if (
+      url.pathname === '/api/market/upstox/change-oi' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxChangeOi(request)
+    }
+    if (
+      url.pathname === '/api/market/upstox/smartlist/futures' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxSmartlistFutures(request)
+    }
+    if (
+      (url.pathname === '/api/market/upstox/global-indices' ||
+        url.pathname === '/api/market/global-sentiment') &&
+      (request.method === 'POST' || request.method === 'GET')
+    ) {
+      return handleGlobalIndices()
     }
 
     if (url.pathname.startsWith('/api/')) {
