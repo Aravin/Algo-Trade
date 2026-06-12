@@ -37,16 +37,12 @@ function calcEMACrossover(
   const slowK = 2 / (slowPeriod + 1)
   let fastEMA = closes[0]
   let slowEMA = closes[0]
-  let prevFast = fastEMA
-  let prevSlow = slowEMA
   for (let i = 1; i < closes.length; i++) {
-    prevFast = fastEMA
-    prevSlow = slowEMA
     fastEMA = updateEMA(fastEMA, closes[i], fastK)
     slowEMA = updateEMA(slowEMA, closes[i], slowK)
   }
-  if (fastEMA > slowEMA && prevFast <= prevSlow) return 'Buy'
-  if (fastEMA < slowEMA && prevFast >= prevSlow) return 'Sell'
+  if (fastEMA > slowEMA) return 'Buy'
+  if (fastEMA < slowEMA) return 'Sell'
   return 'Hold'
 }
 

@@ -149,8 +149,8 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
   // VRD signals
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
-    max += mmi.max
     if (mmi.direction === 'BULL') {
+      max += mmi.max
       score += addScore(bd, 'L2', 'MMI', mmi.label, mmi.score, mmi.max)
     }
 
@@ -160,15 +160,15 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
       ad?.declines ?? null,
       ad?.ratio ?? null,
     )
-    max += adS.max
     if (adS.direction === 'BULL') {
+      max += adS.max
       score += addScore(bd, 'L3', 'A/D Ratio', adS.label, adS.score, adS.max)
     }
 
     const fii = data.vrd.fiiLongShort
     const fiiS = scoreFiiLongShort(fii?.longPct ?? null, fii?.shortPct ?? null)
-    max += fiiS.max
     if (fiiS.direction === 'BULL' || fiiS.contrarian) {
+      max += fiiS.max
       score += addScore(bd, 'L2', 'FII L/S', fiiS.label, fiiS.score, fiiS.max)
     }
 
@@ -177,8 +177,8 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
       pos?.netPosition ?? null,
       pos?.consecutiveShortDays ?? null,
     )
-    max += posS.max
     if (posS.score > 0) {
+      max += posS.max
       score += addScore(
         bd,
         'L2',
@@ -190,14 +190,14 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    max += pe.max
     if (pe.bias !== 'PE') {
+      max += pe.max
       score += addScore(bd, 'L2', 'Nifty PE', pe.label, pe.score, pe.max)
     }
 
     const iv = scoreStraddleIV(data.vrd.straddleIv?.percentAboveAvg ?? null)
-    max += iv.max
     if (iv.preferBuy) {
+      max += iv.max
       score += addScore(bd, 'L3', 'Straddle IV', iv.label, iv.score, iv.max)
     }
   }
@@ -247,8 +247,8 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
 
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
-    max += mmi.max
     if (mmi.direction === 'BEAR') {
+      max += mmi.max
       const pts = Math.abs(mmi.score)
       score += addScore(bd, 'L2', 'MMI', mmi.label, pts, mmi.max)
     }
@@ -259,8 +259,8 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
       ad?.declines ?? null,
       ad?.ratio ?? null,
     )
-    max += adS.max
     if (adS.direction === 'BEAR') {
+      max += adS.max
       score += addScore(
         bd,
         'L3',
@@ -272,8 +272,8 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    max += pe.max
     if (pe.bias === 'PE') {
+      max += pe.max
       score += addScore(
         bd,
         'L2',
@@ -285,8 +285,8 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
     }
 
     const iv = scoreStraddleIV(data.vrd.straddleIv?.percentAboveAvg ?? null)
-    max += iv.max
     if (!iv.preferBuy && iv.score < 0) {
+      max += iv.max
       score += addScore(
         bd,
         'L3',

@@ -141,26 +141,32 @@ export function ScorePanel({
                 <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
                   Score breakdown ▾
                 </summary>
-                <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
-                  {bull.breakdown.map((row, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between text-xs"
-                    >
+                <div className="mt-2 space-y-3 max-h-60 overflow-y-auto pr-1">
+                  {(finalSignal?.bearScore > finalSignal?.bullScore
+                    ? bear.breakdown
+                    : bull.breakdown
+                  ).map((row, i) => (
+                    <div key={i} className="flex flex-col text-xs space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-foreground">
+                          [{row.layer}] {row.indicator}
+                        </span>
+                        <span
+                          className={
+                            row.points > 0
+                              ? 'text-success font-medium tabular-nums'
+                              : row.points < 0
+                                ? 'text-destructive font-medium tabular-nums'
+                                : 'text-muted-foreground font-medium tabular-nums'
+                          }
+                        >
+                          {row.points > 0 ? '+' : ''}
+                          {row.points}
+                          {row.max > 0 ? ` / ${row.max}` : ''}
+                        </span>
+                      </div>
                       <span className="text-muted-foreground">
-                        [{row.layer}] {row.indicator}
-                      </span>
-                      <span
-                        className={
-                          row.points > 0
-                            ? 'text-success font-medium'
-                            : row.points < 0
-                              ? 'text-destructive font-medium'
-                              : 'text-muted-foreground'
-                        }
-                      >
-                        {row.points > 0 ? '+' : ''}
-                        {row.points}
+                        {row.condition}
                       </span>
                     </div>
                   ))}
