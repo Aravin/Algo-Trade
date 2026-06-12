@@ -166,8 +166,14 @@ export function scoreFiiPositioning(
     consecutiveShortDays !== null
       ? `FII net ${direction}${formatted} (${consecutiveShortDays} short days)`
       : `FII net ${direction}${formatted}`
-  const score =
-    consecutiveShortDays !== null && consecutiveShortDays >= 15 ? 1 : 0
+  let score = 0
+  if (consecutiveShortDays !== null && consecutiveShortDays >= 15) {
+    score = 1
+  } else if (netPosition > 50000) {
+    score = 1
+  } else if (netPosition < -50000) {
+    score = -1
+  }
   return { score, max: 1, label }
 }
 

@@ -72,54 +72,71 @@ export interface ActivePosition {
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
 export function runHardStopChecks(vrd: VrdData | null): {
   blocked: boolean
+  blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
   reasons: string[]
 } {
   const reasons: string[] = []
-  if (!vrd) return { blocked: false, reasons }
+  let blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE' = 'NONE'
+
+  if (!vrd) return { blocked: false, blockedDirection: 'NONE', reasons }
   const vixCheck = scoreVix(vrd.vix)
-  if (!vixCheck.tradeable) reasons.push(vixCheck.label)
+  if (!vixCheck.tradeable) {
+    reasons.push(vixCheck.label)
+    blockedDirection = 'BOTH'
+  }
   const pe = vrd.niftyPe?.pe
   if (pe !== null && pe !== undefined && pe > 28) {
     reasons.push(`Nifty PE ${pe} > 28 — historically overvalued`)
+    if (blockedDirection === 'NONE') {
+      blockedDirection = 'CE'
+    } else {
+      blockedDirection = 'BOTH'
+    }
   }
-  return { blocked: reasons.length > 0, reasons }
+  return { blocked: reasons.length > 0, blockedDirection, reasons }
 }
 
 // ─── V4 composite signal ──────────────────────────────────────────────────────
 export function getV4Signal(ind: IndicatorsResult): SignalType {
   const { ema, adx, pcr, bollinger, rsi } = ind
-  if (rsi.signal === 'Overbought') return 'Hold'
+  let baseSignal: SignalType = 'Hold'
+
   // All 4 agree
   if (
     ema === 'Buy' &&
     (adx === 'Buy' || adx === 'Hold') &&
     pcr === 'Buy' &&
     bollinger.signal === 'Buy'
-  )
-    return 'Buy'
-  if (
+  ) {
+    baseSignal = 'Buy'
+  } else if (
     ema === 'Sell' &&
     (adx === 'Sell' || adx === 'Hold') &&
     pcr === 'Sell' &&
     bollinger.signal === 'Sell'
-  )
-    return 'Sell'
-  // 3 of 4 agree (relaxed)
-  const buyVotes = [
-    ema === 'Buy',
-    adx === 'Buy',
-    pcr === 'Buy',
-    bollinger.signal === 'Buy',
-  ].filter(Boolean).length
-  const sellVotes = [
-    ema === 'Sell',
-    adx === 'Sell',
-    pcr === 'Sell',
-    bollinger.signal === 'Sell',
-  ].filter(Boolean).length
-  if (buyVotes >= 3) return 'Buy'
-  if (sellVotes >= 3) return 'Sell'
-  return 'Hold'
+  ) {
+    baseSignal = 'Sell'
+  } else {
+    // 3 of 4 agree (relaxed)
+    const buyVotes = [
+      ema === 'Buy',
+      adx === 'Buy',
+      pcr === 'Buy',
+      bollinger.signal === 'Buy',
+    ].filter(Boolean).length
+    const sellVotes = [
+      ema === 'Sell',
+      adx === 'Sell',
+      pcr === 'Sell',
+      bollinger.signal === 'Sell',
+    ].filter(Boolean).length
+    if (buyVotes >= 3) baseSignal = 'Buy'
+    if (sellVotes >= 3) baseSignal = 'Sell'
+  }
+
+  if (rsi.signal === 'Overbought' && baseSignal === 'Buy') return 'Hold'
+  if (rsi.signal === 'Oversold' && baseSignal === 'Sell') return 'Hold'
+  return baseSignal
 }
 
 function addScore(
@@ -182,9 +199,9 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
   // VRD signals
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
+    max += mmi.max
     if (mmi.direction === 'BULL') {
       score += addScore(bd, 'L2', 'MMI', mmi.label, mmi.score, mmi.max)
-      max += mmi.max
     }
 
     const ad = data.vrd.advancesDeclines
@@ -193,16 +210,16 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
       ad?.declines ?? null,
       ad?.ratio ?? null,
     )
+    max += adS.max
     if (adS.direction === 'BULL') {
       score += addScore(bd, 'L3', 'A/D Ratio', adS.label, adS.score, adS.max)
-      max += adS.max
     }
 
     const fii = data.vrd.fiiLongShort
     const fiiS = scoreFiiLongShort(fii?.longPct ?? null, fii?.shortPct ?? null)
+    max += fiiS.max
     if (fiiS.direction === 'BULL' || fiiS.contrarian) {
       score += addScore(bd, 'L2', 'FII L/S', fiiS.label, fiiS.score, fiiS.max)
-      max += fiiS.max
     }
 
     const pos = data.vrd.fiiPositioning
@@ -210,6 +227,7 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
       pos?.netPosition ?? null,
       pos?.consecutiveShortDays ?? null,
     )
+    max += posS.max
     if (posS.score > 0) {
       score += addScore(
         bd,
@@ -219,19 +237,18 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
         posS.score,
         posS.max,
       )
-      max += posS.max
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
+    max += pe.max
     if (pe.bias !== 'PE') {
       score += addScore(bd, 'L2', 'Nifty PE', pe.label, pe.score, pe.max)
-      max += pe.max
     }
 
     const iv = scoreStraddleIV(data.vrd.straddleIv?.percentAboveAvg ?? null)
+    max += iv.max
     if (iv.preferBuy) {
       score += addScore(bd, 'L3', 'Straddle IV', iv.label, iv.score, iv.max)
-      max += iv.max
     }
   }
 
@@ -280,10 +297,10 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
 
   if (data.vrd) {
     const mmi = scoreMMI(data.vrd.mmi?.score ?? null)
+    max += mmi.max
     if (mmi.direction === 'BEAR') {
       const pts = Math.abs(mmi.score)
       score += addScore(bd, 'L2', 'MMI', mmi.label, pts, mmi.max)
-      max += mmi.max
     }
 
     const ad = data.vrd.advancesDeclines
@@ -292,6 +309,7 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
       ad?.declines ?? null,
       ad?.ratio ?? null,
     )
+    max += adS.max
     if (adS.direction === 'BEAR') {
       score += addScore(
         bd,
@@ -301,11 +319,11 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         Math.abs(adS.score),
         adS.max,
       )
-      max += adS.max
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    if (pe.bias === 'PE' && pe.score !== 0) {
+    max += pe.max
+    if (pe.bias === 'PE') {
       score += addScore(
         bd,
         'L2',
@@ -314,10 +332,10 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         Math.abs(pe.score),
         pe.max,
       )
-      max += pe.max
     }
 
     const iv = scoreStraddleIV(data.vrd.straddleIv?.percentAboveAvg ?? null)
+    max += iv.max
     if (!iv.preferBuy && iv.score < 0) {
       score += addScore(
         bd,
@@ -327,7 +345,6 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         Math.abs(iv.score),
         iv.max,
       )
-      max += iv.max
     }
   }
 

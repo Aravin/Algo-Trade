@@ -65,7 +65,11 @@ export interface BotStatus {
   vrdData: VrdData | null
   allSignalData: AllSignalData | null
   finalSignal: FinalSignal | null
-  hardStop: { blocked: boolean; reasons: string[] }
+  hardStop: {
+    blocked: boolean
+    blockedDirection?: 'CE' | 'PE' | 'BOTH' | 'NONE'
+    reasons: string[]
+  }
   lastUpdated: string | null
   error: string | null
   tradesCount: number
@@ -1143,7 +1147,7 @@ const INITIAL: BotStatus = {
   vrdData: null,
   allSignalData: null,
   finalSignal: null,
-  hardStop: { blocked: false, reasons: [] },
+  hardStop: { blocked: false, blockedDirection: 'NONE', reasons: [] },
   lastUpdated: null,
   error: null,
   tradesCount: 0,
@@ -1323,7 +1327,7 @@ export function useStrategyBot(token: string | null) {
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
       })
 
-      if (hardStop.blocked) {
+      if (hardStop.blocked && hardStop.blockedDirection === 'BOTH') {
         updateStatus({ state: 'STOPPED' })
         return
       }
@@ -1366,273 +1370,292 @@ export function useStrategyBot(token: string | null) {
           finalSignal.signal === 'BUY_CE' ||
           finalSignal.signal === 'BUY_PE'
         ) {
-          interface LegSetup {
-            direction: 'CE' | 'PE'
-            tradeType: 'buying' | 'selling'
-          }
-          const legsToPlace: LegSetup[] = []
-          if (config.tradeType === 'both') {
-            legsToPlace.push({
-              direction: finalSignal.signal === 'BUY_CE' ? 'CE' : 'PE',
-              tradeType: 'buying',
-            })
-            legsToPlace.push({
-              direction: finalSignal.signal === 'BUY_CE' ? 'PE' : 'CE',
-              tradeType: 'selling',
-            })
-          } else {
-            legsToPlace.push({
-              direction:
-                config.tradeType === 'selling'
-                  ? finalSignal.signal === 'BUY_CE'
-                    ? 'PE'
-                    : 'CE'
-                  : finalSignal.signal === 'BUY_CE'
-                    ? 'CE'
-                    : 'PE',
-              tradeType: config.tradeType,
-            })
-          }
-
-          let totalReq = 0
-          for (const leg of legsToPlace) {
-            const strike = getOtmStrike(
-              optionChain,
-              leg.direction,
-              config.otmSkip,
-            )
-            if (!strike) continue
-            const ltp =
-              leg.direction === 'CE'
-                ? strike.call_options.market_data.ltp
-                : strike.put_options.market_data.ltp
-            const legReq = leg.tradeType === 'selling' ? 4000 : ltp
-            totalReq += legReq
-          }
-
-          const executionMode: ExecutionMode = config.executionMode
-          let qty =
-            finalSignal.positionSize === 'full'
-              ? LOT_SIZE
-              : Math.floor(LOT_SIZE / 2)
-
-          let paperBalance: number | null = null
-          if (executionMode === 'paper') {
-            try {
-              const summary = await fetchPaperAccount()
-              paperBalance = summary.account.balance
-            } catch (error) {
-              addLog(
-                mkLog(
-                  'warn',
-                  'paper',
-                  `Unable to read paper balance before entry: ${(error as Error).message}`,
-                ),
-              )
-            }
-
-            if (paperBalance !== null && totalReq > 0) {
-              const affordableQty = Math.floor(paperBalance / totalReq)
-              if (affordableQty <= 0) {
-                addLog(
-                  mkLog(
-                    'warn',
-                    'paper',
-                    `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford combo margin/cost ₹${totalReq.toFixed(2)}`,
-                  ),
-                )
-                updateStatus({
-                  error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost ₹${totalReq.toFixed(2)}`,
-                })
-                return
-              }
-              if (affordableQty < qty) {
-                addLog(
-                  mkLog(
-                    'warn',
-                    'paper',
-                    `Reducing quantity from ${qty} to ${affordableQty} to fit credit ₹${paperBalance.toFixed(2)}`,
-                  ),
-                )
-                qty = affordableQty
-              }
-            }
-          }
-
-          const positionLegs: PositionLeg[] = []
-          let success = true
-          let firstInstrumentKey = ''
-          let firstDirection: 'CE' | 'PE' = 'CE'
-          let firstEntryPrice = 0
-
-          for (const leg of legsToPlace) {
-            const strike = getOtmStrike(
-              optionChain,
-              leg.direction,
-              config.otmSkip,
-            )
-            if (!strike) {
-              addLog(
-                mkLog(
-                  'warn',
-                  'order',
-                  `no OTM strike found for ${leg.direction}`,
-                ),
-              )
-              success = false
-              break
-            }
-            const instrumentKey =
-              leg.direction === 'CE'
-                ? strike.call_options.instrument_key
-                : strike.put_options.instrument_key
-            const ltp =
-              leg.direction === 'CE'
-                ? strike.call_options.market_data.ltp
-                : strike.put_options.market_data.ltp
-
-            if (!firstInstrumentKey) {
-              firstInstrumentKey = instrumentKey
-              firstDirection = leg.direction
-              firstEntryPrice = ltp
-            }
-
-            const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
+          if (
+            hardStop.blocked &&
+            ((hardStop.blockedDirection === 'CE' &&
+              finalSignal.signal === 'BUY_CE') ||
+              (hardStop.blockedDirection === 'PE' &&
+                finalSignal.signal === 'BUY_PE'))
+          ) {
             addLog(
               mkLog(
-                'info',
-                'order',
-                `placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
+                'warn',
+                'bot',
+                `Entry ${finalSignal.signal} blocked by hard stop: ${hardStop.reasons.join(', ')}`,
               ),
             )
-
-            let paperTradeId: string | undefined
-            if (executionMode === 'paper') {
-              const [paperData, paperErr] = await safeFetch<{
-                trade?: PaperTrade
-                account?: PaperAccountSummary['account']
-              }>('/api/paper/trades/enter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  instrumentKey,
-                  direction: leg.direction,
-                  quantity: qty,
-                  entryPrice: ltp,
-                  metadata: {
-                    signal: finalSignal.signal,
-                    confidence: finalSignal.confidence,
-                    bullScore: finalSignal.bullScore,
-                    bearScore: finalSignal.bearScore,
-                    tradeType: leg.tradeType,
-                  },
-                }),
+          } else {
+            interface LegSetup {
+              direction: 'CE' | 'PE'
+              tradeType: 'buying' | 'selling'
+            }
+            const legsToPlace: LegSetup[] = []
+            if (config.tradeType === 'both') {
+              legsToPlace.push({
+                direction: finalSignal.signal === 'BUY_CE' ? 'CE' : 'PE',
+                tradeType: 'buying',
               })
-              if (paperErr || !paperData?.trade?.id) {
+              legsToPlace.push({
+                direction: finalSignal.signal === 'BUY_CE' ? 'PE' : 'CE',
+                tradeType: 'selling',
+              })
+            } else {
+              legsToPlace.push({
+                direction:
+                  config.tradeType === 'selling'
+                    ? finalSignal.signal === 'BUY_CE'
+                      ? 'PE'
+                      : 'CE'
+                    : finalSignal.signal === 'BUY_CE'
+                      ? 'CE'
+                      : 'PE',
+                tradeType: config.tradeType,
+              })
+            }
+
+            let totalReq = 0
+            for (const leg of legsToPlace) {
+              const strike = getOtmStrike(
+                optionChain,
+                leg.direction,
+                config.otmSkip,
+              )
+              if (!strike) continue
+              const ltp =
+                leg.direction === 'CE'
+                  ? strike.call_options.market_data.ltp
+                  : strike.put_options.market_data.ltp
+              const legReq = leg.tradeType === 'selling' ? 4000 : ltp
+              totalReq += legReq
+            }
+
+            const executionMode: ExecutionMode = config.executionMode
+            let qty =
+              finalSignal.positionSize === 'full'
+                ? LOT_SIZE
+                : Math.floor(LOT_SIZE / 2)
+
+            let paperBalance: number | null = null
+            if (executionMode === 'paper') {
+              try {
+                const summary = await fetchPaperAccount()
+                paperBalance = summary.account.balance
+              } catch (error) {
                 addLog(
                   mkLog(
-                    'error',
+                    'warn',
                     'paper',
-                    `Paper ${side} failed: ${paperErr ?? JSON.stringify(paperData)}`,
+                    `Unable to read paper balance before entry: ${(error as Error).message}`,
                   ),
                 )
-                updateStatus({ error: paperErr ?? 'Paper trade entry failed' })
-                success = false
-                break
               }
-              paperTradeId = paperData.trade.id
-              addLog(
-                mkLog(
-                  'info',
-                  'paper',
-                  `Paper ${side} created tradeId=${paperTradeId}`,
-                ),
-              )
-              notify(
-                'Paper Trade Executed',
-                `Paper ${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed`,
-                'success',
-              )
-            } else {
-              const [orderData, orderErr] = await safeFetch<{
-                status?: string
-                data?: { order_id?: string }
-              }>('/api/order/place', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  token,
-                  instrumentKey,
-                  transactionType: side,
-                  quantity: qty,
-                }),
-              })
-              if (
-                orderErr ||
-                (!orderData?.data?.order_id && orderData?.status !== 'success')
-              ) {
-                const failure = `${side} failed: ${orderErr ?? JSON.stringify(orderData)}`
-                addLog(mkLog('error', 'order', failure))
-                success = false
-                if (isStaticIpRestrictionError(orderErr)) {
-                  if (intervalRef.current) clearInterval(intervalRef.current)
-                  intervalRef.current = null
-                  updateStatus({
-                    state: 'STOPPED',
-                    error:
-                      'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
-                  })
+
+              if (paperBalance !== null && totalReq > 0) {
+                const affordableQty = Math.floor(paperBalance / totalReq)
+                if (affordableQty <= 0) {
                   addLog(
                     mkLog(
                       'warn',
-                      'bot',
-                      'stopping bot — Upstox order API is blocked by static IP restriction',
+                      'paper',
+                      `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford combo margin/cost ₹${totalReq.toFixed(2)}`,
                     ),
                   )
+                  updateStatus({
+                    error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost ₹${totalReq.toFixed(2)}`,
+                  })
+                  return
                 }
+                if (affordableQty < qty) {
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'paper',
+                      `Reducing quantity from ${qty} to ${affordableQty} to fit credit ₹${paperBalance.toFixed(2)}`,
+                    ),
+                  )
+                  qty = affordableQty
+                }
+              }
+            }
+
+            const positionLegs: PositionLeg[] = []
+            let success = true
+            let firstInstrumentKey = ''
+            let firstDirection: 'CE' | 'PE' = 'CE'
+            let firstEntryPrice = 0
+
+            for (const leg of legsToPlace) {
+              const strike = getOtmStrike(
+                optionChain,
+                leg.direction,
+                config.otmSkip,
+              )
+              if (!strike) {
+                addLog(
+                  mkLog(
+                    'warn',
+                    'order',
+                    `no OTM strike found for ${leg.direction}`,
+                  ),
+                )
+                success = false
                 break
               }
+              const instrumentKey =
+                leg.direction === 'CE'
+                  ? strike.call_options.instrument_key
+                  : strike.put_options.instrument_key
+              const ltp =
+                leg.direction === 'CE'
+                  ? strike.call_options.market_data.ltp
+                  : strike.put_options.market_data.ltp
+
+              if (!firstInstrumentKey) {
+                firstInstrumentKey = instrumentKey
+                firstDirection = leg.direction
+                firstEntryPrice = ltp
+              }
+
+              const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
               addLog(
                 mkLog(
                   'info',
                   'order',
-                  `${side} placed orderId=${orderData?.data?.order_id ?? '—'}`,
+                  `placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
                 ),
               )
-              notify(
-                'Trade Executed',
-                `${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed successfully`,
-                'success',
-              )
+
+              let paperTradeId: string | undefined
+              if (executionMode === 'paper') {
+                const [paperData, paperErr] = await safeFetch<{
+                  trade?: PaperTrade
+                  account?: PaperAccountSummary['account']
+                }>('/api/paper/trades/enter', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    instrumentKey,
+                    direction: leg.direction,
+                    quantity: qty,
+                    entryPrice: ltp,
+                    metadata: {
+                      signal: finalSignal.signal,
+                      confidence: finalSignal.confidence,
+                      bullScore: finalSignal.bullScore,
+                      bearScore: finalSignal.bearScore,
+                      tradeType: leg.tradeType,
+                    },
+                  }),
+                })
+                if (paperErr || !paperData?.trade?.id) {
+                  addLog(
+                    mkLog(
+                      'error',
+                      'paper',
+                      `Paper ${side} failed: ${paperErr ?? JSON.stringify(paperData)}`,
+                    ),
+                  )
+                  updateStatus({
+                    error: paperErr ?? 'Paper trade entry failed',
+                  })
+                  success = false
+                  break
+                }
+                paperTradeId = paperData.trade.id
+                addLog(
+                  mkLog(
+                    'info',
+                    'paper',
+                    `Paper ${side} created tradeId=${paperTradeId}`,
+                  ),
+                )
+                notify(
+                  'Paper Trade Executed',
+                  `Paper ${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed`,
+                  'success',
+                )
+              } else {
+                const [orderData, orderErr] = await safeFetch<{
+                  status?: string
+                  data?: { order_id?: string }
+                }>('/api/order/place', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    token,
+                    instrumentKey,
+                    transactionType: side,
+                    quantity: qty,
+                  }),
+                })
+                if (
+                  orderErr ||
+                  (!orderData?.data?.order_id &&
+                    orderData?.status !== 'success')
+                ) {
+                  const failure = `${side} failed: ${orderErr ?? JSON.stringify(orderData)}`
+                  addLog(mkLog('error', 'order', failure))
+                  success = false
+                  if (isStaticIpRestrictionError(orderErr)) {
+                    if (intervalRef.current) clearInterval(intervalRef.current)
+                    intervalRef.current = null
+                    updateStatus({
+                      state: 'STOPPED',
+                      error:
+                        'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
+                    })
+                    addLog(
+                      mkLog(
+                        'warn',
+                        'bot',
+                        'stopping bot — Upstox order API is blocked by static IP restriction',
+                      ),
+                    )
+                  }
+                  break
+                }
+                addLog(
+                  mkLog(
+                    'info',
+                    'order',
+                    `${side} placed orderId=${orderData?.data?.order_id ?? '—'}`,
+                  ),
+                )
+                notify(
+                  'Trade Executed',
+                  `${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed successfully`,
+                  'success',
+                )
+              }
+
+              positionLegs.push({
+                instrumentKey,
+                direction: leg.direction,
+                entryPrice: ltp,
+                quantity: qty,
+                tradeType: leg.tradeType,
+                paperTradeId,
+              })
             }
 
-            positionLegs.push({
-              instrumentKey,
-              direction: leg.direction,
-              entryPrice: ltp,
-              quantity: qty,
-              tradeType: leg.tradeType,
-              paperTradeId,
-            })
-          }
-
-          if (success) {
-            const position: ActivePosition = {
-              instrumentKey: firstInstrumentKey,
-              direction: firstDirection,
-              entryPrice: firstEntryPrice,
-              quantity: qty,
-              entryTime: new Date().toISOString(),
-              tradeId: Date.now(),
-              executionMode,
-              tradeType: config.tradeType,
-              legs: positionLegs,
+            if (success) {
+              const position: ActivePosition = {
+                instrumentKey: firstInstrumentKey,
+                direction: firstDirection,
+                entryPrice: firstEntryPrice,
+                quantity: qty,
+                entryTime: new Date().toISOString(),
+                tradeId: Date.now(),
+                executionMode,
+                tradeType: config.tradeType,
+                legs: positionLegs,
+              }
+              updateStatus({
+                state: 'ORDERED',
+                position,
+                tradesCount: cur.tradesCount + 1,
+              })
             }
-            updateStatus({
-              state: 'ORDERED',
-              position,
-              tradesCount: cur.tradesCount + 1,
-            })
           }
         } else {
           addLog(
