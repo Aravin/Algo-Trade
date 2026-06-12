@@ -1,12 +1,10 @@
+import type { StrategyConfig } from '@/lib/types'
+import { DEFAULT_CONFIG } from '@/lib/types'
 import { useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  DEFAULT_CONFIG,
-  saveStrategyConfig,
-  type StrategyConfig,
-} from '@/lib/strategyConfig'
+import { saveStrategyConfig } from '@/lib/strategyConfig'
 
 function Field({
   label,

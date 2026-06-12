@@ -1,62 +1,14 @@
 // V4 Technical Indicators — pure TypeScript, ported from testapp/src/upstox/lib/
 
-// Candle: [timestamp, open, high, low, close, volume, oi?]
-export type Candle = [
-  string,
-  number,
-  number,
-  number,
-  number,
-  number,
-  (number | undefined)?,
-]
-
-export type SignalType = 'Buy' | 'Sell' | 'Hold'
-export type MomentumType = 'Overbought' | 'Oversold' | 'Hold'
-export type TrendType = 'Up' | 'Down' | 'Neutral'
-export type VolatilityLevel = 'High' | 'Low' | 'Neutral'
-
-export interface OptionGreeks {
-  iv: number // implied volatility (annualised %, e.g. 15.5 means 15.5%)
-  delta: number
-  theta: number
-  vega: number
-  gamma: number
-}
-
-export interface OptionData {
-  expiry: string
-  strike_price: number
-  underlying_spot_price: number
-  call_options: {
-    instrument_key: string
-    market_data: { ltp: number; volume: number; oi: number }
-    option_greeks?: OptionGreeks
-  }
-  put_options: {
-    instrument_key: string
-    market_data: { ltp: number; volume: number; oi: number }
-    option_greeks?: OptionGreeks
-  }
-}
-
-export interface IndicatorsResult {
-  ema: SignalType
-  adx: SignalType
-  rsi: { value: number; signal: MomentumType }
-  stochastic: { k: number; d: number; signal: SignalType }
-  bollinger: {
-    upper: number
-    middle: number
-    lower: number
-    signal: SignalType
-    trend: TrendType
-  }
-  atr: { value: number; level: VolatilityLevel }
-  pcr: SignalType
-  pcrValue: number
-}
-
+import type {
+  Candle,
+  SignalType,
+  MomentumType,
+  TrendType,
+  VolatilityLevel,
+  OptionData,
+  IndicatorsResult,
+} from './types'
 // ─── EMA helpers ─────────────────────────────────────────────────────────────
 function updateEMA(prev: number, price: number, k: number): number {
   return price * k + prev * (1 - k)
@@ -74,7 +26,7 @@ function computeEMAArray(values: number[], period: number): number[] {
 
 // ─── EMA Crossover — fast 10, slow 42 ────────────────────────────────────────
 // ADX fix: original testapp had +DI > -DI = Sell (inverted). Fixed here.
-export function calcEMACrossover(
+function calcEMACrossover(
   candles: Candle[],
   fastPeriod = 10,
   slowPeriod = 42,
@@ -99,7 +51,7 @@ export function calcEMACrossover(
 }
 
 // ─── ADX(14) — trend strength + direction ────────────────────────────────────
-export function calcADX(candles: Candle[], period = 14): SignalType {
+function calcADX(candles: Candle[], period = 14): SignalType {
   if (candles.length < period * 2) return 'Hold'
   const recent = candles.slice(-(period * 2))
   const pdms = new Array<number>(recent.length).fill(0)
@@ -138,7 +90,7 @@ export function calcADX(candles: Candle[], period = 14): SignalType {
 }
 
 // ─── RSI(14) ─────────────────────────────────────────────────────────────────
-export function calcRSI(
+function calcRSI(
   candles: Candle[],
   period = 14,
   overbought = 70,
@@ -173,7 +125,7 @@ export function calcRSI(
 }
 
 // ─── Stochastic(14) ──────────────────────────────────────────────────────────
-export function calcStochastic(
+function calcStochastic(
   candles: Candle[],
   period = 14,
   smoothing = 3,
@@ -200,7 +152,7 @@ export function calcStochastic(
 }
 
 // ─── Bollinger Bands(20) — breakout mode ─────────────────────────────────────
-export function calcBollingerBands(
+function calcBollingerBands(
   candles: Candle[],
   period = 20,
 ): {
@@ -247,7 +199,7 @@ function trueRange(c: Candle, prevClose: number): number {
   )
 }
 
-export function calcATR(
+function calcATR(
   candles: Candle[],
   period = 14,
 ): { value: number; level: VolatilityLevel } {
@@ -266,7 +218,7 @@ export function calcATR(
 }
 
 // ─── OI PCR from live option chain ───────────────────────────────────────────
-export function calcOiPCR(optionChain: OptionData[]): {
+function calcOiPCR(optionChain: OptionData[]): {
   signal: SignalType
   value: number
 } {
@@ -284,48 +236,6 @@ export function calcOiPCR(optionChain: OptionData[]): {
 }
 
 // ─── Next working Thursday (Nifty weekly expiry) ──────────────────────────────
-const NSE_HOLIDAYS = [
-  '2025-02-26',
-  '2025-03-14',
-  '2025-03-31',
-  '2025-04-10',
-  '2025-04-14',
-  '2025-04-18',
-  '2025-05-01',
-  '2025-08-15',
-  '2025-10-02',
-  '2025-10-21',
-  '2025-11-05',
-  '2025-12-25',
-  '2026-01-26',
-  '2026-03-02',
-  '2026-03-19',
-  '2026-03-20',
-  '2026-03-30',
-  '2026-04-02',
-  '2026-04-06',
-  '2026-04-14',
-  '2026-06-29',
-  '2026-08-15',
-  '2026-10-02',
-  '2026-12-25',
-]
-
-function padTwo(n: number) {
-  return n.toString().padStart(2, '0')
-}
-function fmtDate(d: Date) {
-  return `${d.getFullYear()}-${padTwo(d.getMonth() + 1)}-${padTwo(d.getDate())}`
-}
-
-export function getNextWorkingThursday(from = new Date()): string {
-  const d = new Date(from)
-  const day = d.getDay()
-  const daysUntil = day <= 4 ? 4 - day : 11 - day
-  d.setDate(d.getDate() + daysUntil)
-  while (NSE_HOLIDAYS.includes(fmtDate(d))) d.setDate(d.getDate() + 7)
-  return fmtDate(d)
-}
 
 // ─── OTM Strike picker ───────────────────────────────────────────────────────
 export function getOtmStrike(

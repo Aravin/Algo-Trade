@@ -1,15 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export type NotificationType = 'info' | 'success' | 'warn' | 'error'
-
-export interface AppNotification {
-  id: string
-  title: string
-  message: string
-  type: NotificationType
-  timestamp: string
-  read: boolean
-}
+import type { NotificationType, AppNotification } from './types'
 
 type Listener = (n: AppNotification[]) => void
 let notifications: AppNotification[] = []
@@ -68,13 +59,13 @@ export function notify(
   }
 }
 
-export function clearNotifications() {
+function clearNotifications() {
   notifications = []
   save()
   listeners.forEach((l) => l(notifications))
 }
 
-export function markAsRead(id: string) {
+function markAsRead(id: string) {
   notifications = notifications.map((n) =>
     n.id === id ? { ...n, read: true } : n,
   )
@@ -82,7 +73,7 @@ export function markAsRead(id: string) {
   listeners.forEach((l) => l(notifications))
 }
 
-export function markAllAsRead() {
+function markAllAsRead() {
   notifications = notifications.map((n) => ({ ...n, read: true }))
   save()
   listeners.forEach((l) => l(notifications))

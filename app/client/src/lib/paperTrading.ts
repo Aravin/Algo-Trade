@@ -1,48 +1,4 @@
-export type ExecutionMode = 'live' | 'paper'
-
-export interface PaperAccount {
-  id: string
-  mode: string
-  balance: number
-  currency: string
-  updated_at: string
-}
-
-export interface PaperStatementEntry {
-  id: string
-  entry_type: string
-  amount: number
-  balance_before: number
-  balance_after: number
-  note: string | null
-  metadata_json: string | null
-  created_at: string
-}
-
-export interface PaperTrade {
-  id: string
-  account_id: string
-  status: string
-  instrument_key: string
-  direction: string
-  quantity: number
-  entry_price: number
-  entry_value: number
-  exit_price: number | null
-  exit_value: number | null
-  realized_pnl: number | null
-  opened_at: string
-  closed_at: string | null
-  metadata_json: string | null
-}
-
-export interface PaperAccountSummary {
-  account: PaperAccount
-  recentEntries: PaperStatementEntry[]
-  openTradeCount: number
-  trades?: PaperTrade[]
-}
-
+import type { PaperAccountSummary } from './types'
 async function parseJson<T>(res: Response): Promise<T> {
   const data = (await res.json()) as T | { error?: string }
   if (!res.ok) {

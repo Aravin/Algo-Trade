@@ -1,8 +1,8 @@
+import type { VrdData } from '@/lib/types'
 import { Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { scoreADRatio, scoreStraddleIV } from '@/lib/vrdSignals'
-import type { VrdData } from '@/lib/vrdSignals'
 
 function PcrZoneBadge({ zone }: { zone: string | null | undefined }) {
   if (!zone) return <Badge variant="secondary">—</Badge>

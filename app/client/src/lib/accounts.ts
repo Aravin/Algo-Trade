@@ -1,19 +1,5 @@
-export type BrokerPurpose = 'analytics' | 'market-data' | 'orders'
-
-export interface BrokerAccount {
-  id: string
-  label: string
-  broker: 'upstox'
-  /** client_id — stored for re-auth, NOT the secret */
-  apiKey?: string
-  /** Standard OAuth access token (daily re-auth) — market data + orders */
-  accessToken?: string
-  /** Long-lived read-only analytics token (1 year) — portfolio + account */
-  analyticsToken?: string
-  purpose: BrokerPurpose[]
-  status: 'connected' | 'disconnected'
-  connectedAt?: string
-}
+import type { BrokerAccount } from './types'
+import { ACCOUNTS_CHANGED_EVENT } from './types'
 
 const STORAGE_KEY = 'algo-trade:broker-accounts'
 const REMOTE_STATE_KEY = 'brokerAccounts'
@@ -61,8 +47,6 @@ export async function hydrateAccounts(): Promise<void> {
     syncAccounts(localAccounts)
   }
 }
-
-export const ACCOUNTS_CHANGED_EVENT = 'algo-trade:accounts-changed'
 
 function notify() {
   window.dispatchEvent(new CustomEvent(ACCOUNTS_CHANGED_EVENT))

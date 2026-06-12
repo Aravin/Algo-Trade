@@ -1,12 +1,7 @@
+import type { AllSignalData, FinalSignal, StrategyConfig } from '@/lib/types'
 import { TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  scoreBullish,
-  scoreBearish,
-  type AllSignalData,
-  type FinalSignal,
-} from '@/lib/strategyEngine'
-import type { StrategyConfig } from '@/lib/strategyConfig'
+import { scoreBullish, scoreBearish } from '@/lib/strategyEngine'
 
 function ScoreBar({
   label,

@@ -1,6 +1,7 @@
+import type { BrokerPurpose } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { CheckCircle, Loader2, XCircle } from 'lucide-react'
-import { addAccount, updateAccount, type BrokerPurpose } from '@/lib/accounts'
+import { addAccount, updateAccount } from '@/lib/accounts'
 
 interface PendingAccount {
   id: string

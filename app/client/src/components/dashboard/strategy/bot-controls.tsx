@@ -1,11 +1,11 @@
+import type { ExecutionMode, ActivePosition } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { Play, Square, Clock, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { ExecutionMode } from '@/lib/paperTrading'
+
 import type { BotState } from '@/hooks/useStrategyBot'
-import type { ActivePosition } from '@/lib/strategyEngine'
 
 const STATE_DOT: Record<BotState, string> = {
   IDLE: 'bg-muted-foreground',

@@ -1,33 +1,6 @@
-import type { ExecutionMode } from './paperTrading'
 import { loadRemoteState, saveRemoteState } from '@/lib/clientState'
-
-export interface StrategyConfig {
-  strongThreshold: number // min score for 'strong' signal
-  moderateThreshold: number // min score for 'moderate' signal
-  maxProfitPct: number // exit when option gains this %
-  maxLossPct: number // exit when option loses this %
-  maxTradesPerDay: number
-  lastEntryTime: string // 'HH:MM' IST — no new entries after this
-  pollingIntervalSec: number
-  minConfidence: 'strong' | 'moderate'
-  otmSkip: number // how many OTM strikes to skip
-  executionMode: ExecutionMode
-  tradeType: 'buying' | 'selling' | 'both'
-}
-
-export const DEFAULT_CONFIG: StrategyConfig = {
-  strongThreshold: 12,
-  moderateThreshold: 10,
-  maxProfitPct: 10,
-  maxLossPct: 5,
-  maxTradesPerDay: 3,
-  lastEntryTime: '14:30',
-  pollingIntervalSec: 60,
-  minConfidence: 'moderate',
-  otmSkip: 3,
-  executionMode: 'paper',
-  tradeType: 'buying',
-}
+import type { StrategyConfig } from './types'
+import { DEFAULT_CONFIG } from './types'
 
 const KEY = 'algo-trade:strategy-config'
 const REMOTE_STATE_KEY = 'strategyConfig'

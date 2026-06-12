@@ -1,3 +1,4 @@
+import type { ExecutionMode, PaperAccountSummary } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import {
   ArrowDownRight,
@@ -24,11 +25,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAccounts } from '@/lib/accounts'
-import {
-  fetchPaperHistory,
-  type ExecutionMode,
-  type PaperAccountSummary,
-} from '@/lib/paperTrading'
+import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { cn } from '@/lib/utils'
 

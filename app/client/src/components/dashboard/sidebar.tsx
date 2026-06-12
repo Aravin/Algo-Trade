@@ -1,3 +1,4 @@
+import { ACCOUNTS_CHANGED_EVENT } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import {
   Clock,
@@ -9,7 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
-import { ACCOUNTS_CHANGED_EVENT, getAccounts } from '@/lib/accounts'
+import { getAccounts } from '@/lib/accounts'
 
 function useBrokerStatus() {
   const [summary, setSummary] = useState(() => derive())

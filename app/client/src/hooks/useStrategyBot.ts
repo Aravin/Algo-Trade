@@ -1,3 +1,17 @@
+import type {
+  Candle,
+  OptionData,
+  IndicatorsResult,
+  V3OrderType,
+  AllSignalData,
+  FinalSignal,
+  ActivePosition,
+  PositionLeg,
+  ExecutionMode,
+  PaperAccountSummary,
+  PaperTrade,
+  VrdData,
+} from '@/lib/types'
 import {
   useState,
   useEffect,
@@ -5,38 +19,21 @@ import {
   useRef,
   useCallback,
 } from 'react'
-import {
-  computeAllIndicators,
-  getOtmStrike,
-  type Candle,
-  type OptionData,
-  type IndicatorsResult,
-} from '@/lib/indicators'
+import { computeAllIndicators, getOtmStrike } from '@/lib/indicators'
 import {
   evaluateGlobalSentiment,
   evaluateNiftySentiment,
   evaluatePCR,
   getV3Signal,
-  type V3OrderType,
 } from '@/lib/v3Sentiment'
 import { notify } from '@/lib/notifications'
 import {
   runHardStopChecks,
   getFinalSignal,
   shouldExit,
-  type AllSignalData,
-  type FinalSignal,
-  type ActivePosition,
-  type PositionLeg,
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
-import {
-  fetchPaperAccount,
-  type ExecutionMode,
-  type PaperAccountSummary,
-  type PaperTrade,
-} from '@/lib/paperTrading'
-import type { VrdData } from '@/lib/vrdSignals'
+import { fetchPaperAccount } from '@/lib/paperTrading'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
@@ -411,7 +408,7 @@ function computeMMI(
 
 // ─── Straddle IV from ATM option chain Greeks ─────────────────────────────────
 function computeStraddleIV(
-  optionChain: import('@/lib/indicators').OptionData[],
+  optionChain: import('@/lib/types').OptionData[],
   niftyLtp: number,
   vix: number | null,
 ): {

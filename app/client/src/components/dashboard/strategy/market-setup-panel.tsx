@@ -1,6 +1,6 @@
+import type { VrdData } from '@/lib/types'
 import { Globe } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { VrdData } from '@/lib/vrdSignals'
 
 function Item({
   label,

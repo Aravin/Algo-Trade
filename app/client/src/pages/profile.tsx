@@ -1,14 +1,14 @@
+import type { BrokerAccount, PaperAccountSummary } from '@/lib/types'
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, RefreshCw, User, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getAccounts, type BrokerAccount } from '@/lib/accounts'
+import { getAccounts } from '@/lib/accounts'
 import {
   adjustPaperAccount,
   fetchPaperAccount,
   resetPaperAccount,
-  type PaperAccountSummary,
 } from '@/lib/paperTrading'
 
 // ─── Types ───────────────────────────────────────────────────────

@@ -1,43 +1,19 @@
 // V3 macro sentiment — ported from app/core/src/cron.ts + shared/getMarketSentiment.ts
 
-export type GlobalSentiment = 'bullish' | 'bearish' | 'neutral'
-export type NiftySentiment =
-  | 'very bullish'
-  | 'bullish'
-  | 'neutral'
-  | 'bearish'
-  | 'very bearish'
-export type PcrZone = 'buy' | 'sell' | 'neutral' | 'overbought' | 'oversold'
-export type V3OrderType = 'buy' | 'sell' | 'hold'
-
-interface McMarketItem {
-  symbol: string
-  technical_rating?: string
-  change_per?: number
-  [key: string]: unknown
-}
-
-export function transformGlobalData(apiData: {
-  header: { name: string }[]
-  dataList: { heading: string; data: unknown[][] }[]
-}): McMarketItem[] {
-  const result: McMarketItem[] = []
-  apiData.dataList.forEach((section) => {
-    if (section.data) {
-      section.data.forEach((row: unknown[]) => {
-        const item: McMarketItem = { symbol: '' }
-        row.forEach((val, k) => {
-          item[apiData.header[k]?.name ?? String(k)] = val
-        })
-        result.push(item)
-      })
-    }
-  })
-  return result
-}
+import type {
+  GlobalSentiment,
+  NiftySentiment,
+  PcrZone,
+  V3OrderType,
+  McMarketItem,
+} from './types'
+import {
+  SKIP_SYMBOLS,
+  globalNiftyMapping,
+  marketStrategyMapping,
+} from './types'
 
 // Symbols to exclude from global sentiment scoring (none currently needed for Upstox)
-const SKIP_SYMBOLS: string[] = []
 
 export function evaluateGlobalSentiment(
   marketData: McMarketItem[],
@@ -110,79 +86,6 @@ export function evaluatePCR(pcr: number): PcrZone {
 }
 
 // Full mapping tables from app/core/src/shared/getMarketSentiment.ts
-const globalNiftyMapping = [
-  { globalSentiment: 'bearish', marketSentiment: 'very bearish', canTrade: 1 },
-  { globalSentiment: 'bearish', marketSentiment: 'bearish', canTrade: 1 },
-  { globalSentiment: 'bearish', marketSentiment: 'neutral', canTrade: 1 },
-  { globalSentiment: 'bearish', marketSentiment: 'bullish', canTrade: 0 },
-  { globalSentiment: 'bearish', marketSentiment: 'very bullish', canTrade: 0 },
-  { globalSentiment: 'neutral', marketSentiment: 'very bearish', canTrade: 1 },
-  { globalSentiment: 'neutral', marketSentiment: 'bearish', canTrade: 1 },
-  { globalSentiment: 'neutral', marketSentiment: 'neutral', canTrade: 1 },
-  { globalSentiment: 'neutral', marketSentiment: 'bullish', canTrade: 1 },
-  { globalSentiment: 'neutral', marketSentiment: 'very bullish', canTrade: 1 },
-  { globalSentiment: 'bullish', marketSentiment: 'very bearish', canTrade: 0 },
-  { globalSentiment: 'bullish', marketSentiment: 'bearish', canTrade: 0 },
-  { globalSentiment: 'bullish', marketSentiment: 'neutral', canTrade: 1 },
-  { globalSentiment: 'bullish', marketSentiment: 'bullish', canTrade: 1 },
-  { globalSentiment: 'bullish', marketSentiment: 'very bullish', canTrade: 1 },
-]
-
-const marketStrategyMapping: {
-  marketSentiment: string
-  putCallRatio: string
-  orderType: string | null
-}[] = [
-  {
-    marketSentiment: 'very bearish',
-    putCallRatio: 'oversold',
-    orderType: 'buy',
-  },
-  { marketSentiment: 'bearish', putCallRatio: 'oversold', orderType: 'buy' },
-  { marketSentiment: 'neutral', putCallRatio: 'oversold', orderType: 'buy' },
-  { marketSentiment: 'bullish', putCallRatio: 'oversold', orderType: 'buy' },
-  {
-    marketSentiment: 'very bullish',
-    putCallRatio: 'oversold',
-    orderType: 'buy',
-  },
-  { marketSentiment: 'very bearish', putCallRatio: 'sell', orderType: 'sell' },
-  { marketSentiment: 'bearish', putCallRatio: 'sell', orderType: 'sell' },
-  { marketSentiment: 'neutral', putCallRatio: 'sell', orderType: 'sell' },
-  { marketSentiment: 'bullish', putCallRatio: 'sell', orderType: null },
-  { marketSentiment: 'very bullish', putCallRatio: 'sell', orderType: null },
-  {
-    marketSentiment: 'very bearish',
-    putCallRatio: 'neutral',
-    orderType: 'sell',
-  },
-  { marketSentiment: 'bearish', putCallRatio: 'neutral', orderType: 'sell' },
-  { marketSentiment: 'neutral', putCallRatio: 'neutral', orderType: 'hold' },
-  { marketSentiment: 'bullish', putCallRatio: 'neutral', orderType: 'buy' },
-  {
-    marketSentiment: 'very bullish',
-    putCallRatio: 'neutral',
-    orderType: 'buy',
-  },
-  { marketSentiment: 'very bearish', putCallRatio: 'buy', orderType: 'buy' },
-  { marketSentiment: 'bearish', putCallRatio: 'buy', orderType: 'buy' },
-  { marketSentiment: 'neutral', putCallRatio: 'buy', orderType: 'buy' },
-  { marketSentiment: 'bullish', putCallRatio: 'buy', orderType: 'buy' },
-  { marketSentiment: 'very bullish', putCallRatio: 'buy', orderType: 'buy' },
-  {
-    marketSentiment: 'very bearish',
-    putCallRatio: 'overbought',
-    orderType: 'sell',
-  },
-  { marketSentiment: 'bearish', putCallRatio: 'overbought', orderType: 'sell' },
-  { marketSentiment: 'neutral', putCallRatio: 'overbought', orderType: 'sell' },
-  { marketSentiment: 'bullish', putCallRatio: 'overbought', orderType: 'sell' },
-  {
-    marketSentiment: 'very bullish',
-    putCallRatio: 'overbought',
-    orderType: 'sell',
-  },
-]
 
 export function getV3Signal(
   globalSentiment: GlobalSentiment,

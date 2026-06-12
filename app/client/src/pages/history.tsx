@@ -1,3 +1,4 @@
+import type { PaperAccountSummary } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { Clock3, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchPaperAccount, type PaperAccountSummary } from '@/lib/paperTrading'
+import { fetchPaperAccount } from '@/lib/paperTrading'
 
 function fmtCurrency(value: number) {
   return value.toLocaleString('en-IN', {

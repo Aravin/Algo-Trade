@@ -1,34 +1,6 @@
 // VRD Nation data scoring — each function converts live data into points
 
-export interface VrdData {
-  mmi: { score: number | null; label: string | null } | null
-  advancesDeclines: {
-    advances: number | null
-    declines: number | null
-    ratio: number | null
-    label: string | null
-  } | null
-  fiiLongShort: { longPct: number | null; shortPct: number | null } | null
-  fiiPositioning: {
-    netPosition: number | null
-    consecutiveShortDays: number | null
-  } | null
-  pcr: { value: number | null; zone: string | null } | null
-  straddleIv: {
-    elevated: boolean | null
-    percentAboveAvg: number | null
-  } | null
-  niftyPe: { pe: number | null; label: string | null } | null
-  vix: number | null
-  fetchedAt: string
-}
-
-export interface VrdScore {
-  score: number
-  max: number
-  label: string
-  detail?: string
-}
+import type { VrdScore } from './types'
 
 // ─── MMI ─────────────────────────────────────────────────────────────────────
 export function scoreMMI(

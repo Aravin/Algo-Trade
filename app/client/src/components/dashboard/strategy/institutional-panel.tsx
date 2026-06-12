@@ -1,3 +1,4 @@
+import type { VrdData } from '@/lib/types'
 import { Building2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -7,7 +8,6 @@ import {
   scoreFiiPositioning,
   scoreNiftyPE,
 } from '@/lib/vrdSignals'
-import type { VrdData } from '@/lib/vrdSignals'
 
 function ScoreRow({
   label,

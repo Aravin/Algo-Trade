@@ -1,6 +1,3 @@
-import type { IndicatorsResult, SignalType } from './indicators'
-import type { V3OrderType } from './v3Sentiment'
-import type { VrdData } from './vrdSignals'
 import {
   scoreMMI,
   scoreADRatio,
@@ -10,64 +7,17 @@ import {
   scoreVix,
   scoreStraddleIV,
 } from './vrdSignals'
-import type { StrategyConfig } from './strategyConfig'
-
-export interface ScoreBreakdown {
-  layer: string
-  indicator: string
-  condition: string
-  points: number
-  max: number
-}
-
-export interface ScoreResult {
-  score: number
-  max: number
-  breakdown: ScoreBreakdown[]
-}
-
-export interface FinalSignal {
-  signal: 'BUY_CE' | 'BUY_PE' | 'WAIT' | 'NO_TRADE'
-  confidence: 'strong' | 'moderate' | 'weak' | 'none'
-  positionSize: 'full' | 'half' | 'none'
-  v3: V3OrderType
-  v4: SignalType
-  bullScore: number
-  bearScore: number
-  scoreMax: number
-}
-
-export interface AllSignalData {
-  v3: V3OrderType
-  indicators: IndicatorsResult
-  vrd: VrdData | null
-}
-
-import type { ExecutionMode } from './paperTrading'
-
-export interface PositionLeg {
-  instrumentKey: string
-  direction: 'CE' | 'PE'
-  entryPrice: number
-  quantity: number
-  tradeType: 'buying' | 'selling'
-  paperTradeId?: string
-  currentPrice?: number
-}
-
-export interface ActivePosition {
-  instrumentKey: string
-  direction: 'CE' | 'PE'
-  entryPrice: number
-  quantity: number
-  entryTime: string
-  tradeId: number
-  executionMode?: ExecutionMode
-  paperTradeId?: string
-  tradeType?: 'buying' | 'selling' | 'both'
-  currentPrice?: number
-  legs?: PositionLeg[]
-}
+import type {
+  IndicatorsResult,
+  SignalType,
+  VrdData,
+  StrategyConfig,
+  ScoreBreakdown,
+  ScoreResult,
+  FinalSignal,
+  AllSignalData,
+  ActivePosition,
+} from './types'
 
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
 export function runHardStopChecks(vrd: VrdData | null): {
@@ -97,7 +47,7 @@ export function runHardStopChecks(vrd: VrdData | null): {
 }
 
 // ─── V4 composite signal ──────────────────────────────────────────────────────
-export function getV4Signal(ind: IndicatorsResult): SignalType {
+function getV4Signal(ind: IndicatorsResult): SignalType {
   const { ema, adx, pcr, bollinger, rsi } = ind
   let baseSignal: SignalType = 'Hold'
 

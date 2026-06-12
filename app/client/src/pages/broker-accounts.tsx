@@ -1,3 +1,4 @@
+import type { BrokerAccount, BrokerPurpose } from '@/lib/types'
 import { useRef, useState } from 'react'
 import {
   BarChart2,
@@ -26,8 +27,6 @@ import {
   getAccounts,
   removeAccount,
   updateAccount,
-  type BrokerAccount,
-  type BrokerPurpose,
 } from '@/lib/accounts'
 
 function generateId(): string {

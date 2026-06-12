@@ -1,10 +1,6 @@
+import type { IndicatorsResult, SignalType, MomentumType } from '@/lib/types'
 import { BarChart2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type {
-  IndicatorsResult,
-  SignalType,
-  MomentumType,
-} from '@/lib/indicators'
 
 function signalColor(s: SignalType | MomentumType) {
   if (s === 'Buy' || s === 'Oversold') return 'text-success'

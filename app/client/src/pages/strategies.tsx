@@ -1,7 +1,8 @@
+import type { StrategyConfig } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { getAccounts } from '@/lib/accounts'
 import { useStrategyBot } from '@/hooks/useStrategyBot'
-import { getStrategyConfig, type StrategyConfig } from '@/lib/strategyConfig'
+import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
 
 import { HardStopBanner } from '@/components/dashboard/strategy/hard-stop-banner'
