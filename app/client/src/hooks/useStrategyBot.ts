@@ -34,6 +34,7 @@ import {
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
+import { scoreStraddleIV } from '@/lib/vrdSignals'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
@@ -1387,28 +1388,37 @@ export function useStrategyBot(token: string | null) {
               tradeType: 'buying' | 'selling'
             }
             const legsToPlace: LegSetup[] = []
+            let activeTradeType: 'buying' | 'selling' = 'buying'
             if (config.tradeType === 'both') {
-              legsToPlace.push({
-                direction: finalSignal.signal === 'BUY_CE' ? 'CE' : 'PE',
-                tradeType: 'buying',
-              })
-              legsToPlace.push({
-                direction: finalSignal.signal === 'BUY_CE' ? 'PE' : 'CE',
-                tradeType: 'selling',
-              })
+              const percentAboveAvg = vrdData?.straddleIv?.percentAboveAvg
+              if (percentAboveAvg !== undefined && percentAboveAvg !== null) {
+                const iv = scoreStraddleIV(percentAboveAvg)
+                activeTradeType = iv.preferBuy ? 'buying' : 'selling'
+              } else {
+                activeTradeType = 'buying'
+              }
+              addLog(
+                mkLog(
+                  'info',
+                  'bot',
+                  `Trade type 'both' resolved to '${activeTradeType}' based on Straddle IV (percentAboveAvg=${percentAboveAvg ?? 'null'})`,
+                ),
+              )
             } else {
-              legsToPlace.push({
-                direction:
-                  config.tradeType === 'selling'
-                    ? finalSignal.signal === 'BUY_CE'
-                      ? 'PE'
-                      : 'CE'
-                    : finalSignal.signal === 'BUY_CE'
-                      ? 'CE'
-                      : 'PE',
-                tradeType: config.tradeType,
-              })
+              activeTradeType = config.tradeType
             }
+
+            legsToPlace.push({
+              direction:
+                activeTradeType === 'selling'
+                  ? finalSignal.signal === 'BUY_CE'
+                    ? 'PE'
+                    : 'CE'
+                  : finalSignal.signal === 'BUY_CE'
+                    ? 'CE'
+                    : 'PE',
+              tradeType: activeTradeType,
+            })
 
             let totalReq = 0
             for (const leg of legsToPlace) {
@@ -1644,7 +1654,7 @@ export function useStrategyBot(token: string | null) {
                 entryTime: new Date().toISOString(),
                 tradeId: Date.now(),
                 executionMode,
-                tradeType: config.tradeType,
+                tradeType: activeTradeType,
                 legs: positionLegs,
               }
               updateStatus({

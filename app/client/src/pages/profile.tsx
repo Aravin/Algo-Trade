@@ -1,6 +1,6 @@
 import type { BrokerAccount, PaperAccountSummary } from '@/lib/types'
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, RefreshCw, User, Wallet } from 'lucide-react'
+import { Loader2, RefreshCw, Trash2, User, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -435,6 +435,73 @@ function PaperCreditSection() {
   )
 }
 
+function BotResetSection() {
+  const [loading, setLoading] = useState(false)
+
+  const handleReset = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to reset all strategy bot logs, active position state, today's trade count, indicator cache, and paper trading database history?",
+      )
+    ) {
+      return
+    }
+    setLoading(true)
+    try {
+      // Clear database paper trades and statement entries
+      await resetPaperAccount()
+    } catch (err) {
+      console.error('Failed to reset paper trading database:', err)
+    }
+
+    // Clear localStorage keys
+    localStorage.removeItem('algo-trade:bot-state')
+    localStorage.removeItem('algo-trade:bot-position')
+    localStorage.removeItem('algo-trade:bot-trades-today')
+    localStorage.removeItem('algo-trade:bot-trades-date')
+    localStorage.removeItem('algo-trade:vrd-cache')
+    localStorage.removeItem('algo-trade:bot-logs')
+    localStorage.removeItem('algo-trade:bot-snapshot')
+    localStorage.removeItem('algo-trade:proxy-history')
+
+    setTimeout(() => {
+      window.location.reload()
+    }, 500)
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2 text-destructive">
+          <Trash2 size={14} />
+          Reset Bot, Logs &amp; Paper History
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          This will permanently clear all strategy bot logs, active position
+          state, today's trade count, and indicator cache from the browser, as
+          well as all paper trading database history. The bot will return to its
+          default IDLE state.
+        </p>
+        <div>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => void handleReset()}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 size={12} className="animate-spin mr-1.5" />
+            ) : null}
+            Reset Bot &amp; Logs
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────
 export function ProfilePage() {
   const [account] = useState<BrokerAccount | null>(
@@ -528,8 +595,9 @@ export function ProfilePage() {
         </div>
       )}
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-4">
         <PaperCreditSection />
+        <BotResetSection />
       </div>
 
       {profile && (
