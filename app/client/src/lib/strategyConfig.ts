@@ -16,7 +16,7 @@ export interface StrategyConfig {
 }
 
 export const DEFAULT_CONFIG: StrategyConfig = {
-  strongThreshold: 16,
+  strongThreshold: 12,
   moderateThreshold: 10,
   maxProfitPct: 10,
   maxLossPct: 5,
