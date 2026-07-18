@@ -148,22 +148,22 @@ async function ensurePaperAccount(
   env: PaperTradeEnv,
   userId: string,
 ): Promise<PaperAccountRow> {
-  const existing = await env.PAPER_TRADING_DB.prepare(
-    'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
-  )
-    .bind(userId)
-    .first<PaperAccountRow>()
-
-  if (existing) return existing
-
   const createdAt = nowIso()
-  await env.PAPER_TRADING_DB.batch([
-    env.PAPER_TRADING_DB.prepare(
-      'INSERT INTO paper_accounts (id, mode, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?)',
-    ).bind(userId, 'paper', PAPER_STARTING_CREDIT, 'INR', createdAt),
-    env.PAPER_TRADING_DB.prepare(
-      'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(
+
+  // Use INSERT OR IGNORE to safely handle concurrent first-time requests
+  // without throwing a UNIQUE constraint error.
+  await env.PAPER_TRADING_DB.prepare(
+    'INSERT OR IGNORE INTO paper_accounts (id, mode, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?)',
+  )
+    .bind(userId, 'paper', PAPER_STARTING_CREDIT, 'INR', createdAt)
+    .run()
+
+  // Seed the initial statement entry only when the row was actually new.
+  // D1 meta.changes === 1 means a row was inserted (not ignored).
+  const insertResult = await env.PAPER_TRADING_DB.prepare(
+    'INSERT OR IGNORE INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+    .bind(
       makeId('stmt'),
       userId,
       'seed',
@@ -173,16 +173,19 @@ async function ensurePaperAccount(
       'Initial paper trading credit',
       JSON.stringify({ source: 'system-seed' }),
       createdAt,
-    ),
-  ])
+    )
+    .run()
 
-  return {
-    id: userId,
-    mode: 'paper',
-    balance: PAPER_STARTING_CREDIT,
-    currency: 'INR',
-    updated_at: createdAt,
-  }
+  void insertResult // seed entry is best-effort; ignore duplicate
+
+  const row = await env.PAPER_TRADING_DB.prepare(
+    'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
+  )
+    .bind(userId)
+    .first<PaperAccountRow>()
+
+  if (!row) throw new Error('Failed to initialise paper account')
+  return row
 }
 
 async function getPaperAccountSummary(
