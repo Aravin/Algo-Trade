@@ -1,148 +1,154 @@
 # Algo Trade
 
-NIFTY50 Option Trading based on Global sentiment and well-known technical indicators.
+Automated NIFTY50 Options Trading bot based on Global sentiment, institutional flows, and real-time technical indicators.
 
-![Basic Flow Diagram](/assets/images/basic-flow-diagram.png)
+![Basic Flow Diagram](assets/images/basic-flow-diagram.png)
 
-## Note:
+---
 
-1. This is console application still in testing phases. Website and Mobile application launching soon.
-2. It can work on one account at a time.
-3. You can run in your local or any cloud service with VM.
+## 🚀 Latest: Version 5 (Browser-based Full Automation)
 
-## Local Setup (console application)
+**V5** is a fully browser-based automated trading system for Nifty weekly options. It runs as a React dashboard backed by a Cloudflare Worker proxy and a D1 database for persistence. Order execution and tracking are fully automated via the Upstox API.
 
-1. Open the folder `app/core`
-2. Run the command `yarn install` or `npm install`
-3. Create the `.env` file and update the broker details & other configurations. Refer `.env.sample` for more details.
-4. Compile the project `tsc`
-5. Run the job `yarn run start` or `npm run start`.
+### Key Features of V5:
+- **5-Layer Scoring Engine**: Combines macro sentiments, technical indicators, and institutional flow into a single unified bullish/bearish score.
+- **Web Dashboard**: Modern UI available at `app/client` to control the bot, configure strategies, view signals, and manage positions.
+- **D1 Persistence**: Safely persists broker accounts and strategy configuration via a Cloudflare Worker backed by a SQLite D1 database.
+- **State Machine Polling**: Robust state management (`IDLE` ➔ `RUNNING` ➔ `ORDERED` ➔ `RUNNING/STOPPED`) polling every 60s.
+- **Automated Exit Logic**: Triggered automatically on target profit/loss, indicator/macro reversals, or index breadth flips.
 
-![App Starting Log](/assets/images/app-start.png)
+For complete details on the V5 strategy rules, see [docs/v5-strategy.md](docs/v5-strategy.md).
 
-![Trade Notification Log](/assets/images/telegram-notify.jpg)
+---
 
-## Let's Collaborate!
+## 🛠️ Setup Guide
 
-Interested in contributing to this project? I'd love to connect! Reach out to me on LinkedIn: <https://www.linkedin.com/in/itaravin/>
+### V5 Web Client & Worker Setup (Recommended)
 
-## Releases
+To run the latest V5 browser dashboard locally and deploy its backend:
 
-### V5 (latest) — Browser-based Full Automation
+1. Navigate to the client directory:
+   ```bash
+   cd app/client
+   ```
+2. Install the required dependencies:
+   ```bash
+   yarn install
+   ```
+3. Apply D1 migrations to set up the persistence database locally:
+   ```bash
+   yarn wrangler d1 migrations apply algo-trade-paper --local
+   ```
+4. Run the development server:
+   ```bash
+   yarn dev
+   ```
+5. *(Optional)* Apply migrations to your remote Cloudflare database and deploy the Worker:
+   ```bash
+   yarn wrangler d1 migrations apply algo-trade-paper --remote
+   yarn deploy
+   ```
 
-Full details: [docs/v5-strategy.md](docs/v5-strategy.md)
+For detailed client setup and migration steps, refer to [app/client/README.md](app/client/README.md) and [docs/client-persistence.md](docs/client-persistence.md).
 
-**Broker**: Upstox | **Platform**: Browser (React + Cloudflare Worker) | **Instrument**: Nifty weekly options
+---
 
-A 5-layer scoring engine that combines macro sentiment, technical indicators, and institutional flow into a single automated bot:
+### V1 - V4 Console Application Setup (Legacy CLI)
 
-| Layer | Source                     | Signal                                                              |
-| ----- | -------------------------- | ------------------------------------------------------------------- |
-| L0    | VRD Nation — VIX, Nifty PE | Hard stop (blocks trading)                                          |
-| L1    | MoneyControl + NiftyTrader | V3 macro: global indices + A/D + PCR                                |
-| L2    | Upstox 1-min candles       | V4 technical: EMA, ADX, RSI, Stochastic, BB, ATR                    |
-| L3    | VRD Nation                 | Institutional: MMI, FII L/S, FII Positioning, Nifty PE, Straddle IV |
-| L4    | Confluence gate            | Minimum score threshold + gap check                                 |
+If you wish to run the legacy CLI/console versions (V1–V4):
 
-- Bot runs in browser, polls every 60s, places MARKET orders via Upstox API
-- State machine: `IDLE → RUNNING → ORDERED → RUNNING/STOPPED`
-- Exits on profit %, stop loss %, V3/V4 reversal, or breadth flip
-- All config editable in the dashboard UI; broker accounts and strategy config now hydrate from Worker-backed D1 storage with `localStorage` as a fallback cache
-- Dashboard available at `app/client/` — run `npm run dev`
-- Persistence details: [docs/client-persistence.md](docs/client-persistence.md)
-- Client setup and migration steps: [app/client/README.md](app/client/README.md)
+1. Navigate to the core directory:
+   ```bash
+   cd app/core
+   ```
+2. Install dependencies:
+   ```bash
+   yarn install # or npm install
+   ```
+3. Create a `.env` file and configure your broker credentials. Use `.env.sample` as a template.
+4. Compile the TypeScript code:
+   ```bash
+   tsc
+   ```
+5. Start the console job:
+   ```bash
+   yarn start # or npm run start
+   ```
 
-### V4 (in development)
+#### Console Logs Preview:
+![App Starting Log](assets/images/app-start.png)
 
-Code: testapp/src/upstox/index.ts
-Broker: UpStox
+![Trade Notification Log](assets/images/telegram-notify.jpg)
 
-| Type       | Indicators                   | Comments                                  | Status   |
-| ---------- | ---------------------------- | ----------------------------------------- | -------- |
-| Trend      | Moving average               | 5 mins charts - EMA(10), EMA(20), EMA(42) | done     |
-| Trend      | Advance Decline Ratio        | NIFTY green/red                           | skip     |
-| Trend      | MACD or ADX                  | To know trend & reversal                  | ADX done |
-| Trend      | OI Put Call Radio (PCR)      | To know buy sell strength                 | done     |
-| Momentum   | RSI                          |                                           | done     |
-| Momentum   | Stochastic Oscillator        |                                           | done     |
-| Volatility | Bollinger Bands              |                                           | done     |
-| Volatility | ATR                          |                                           | done     |
-| Volatility | VIX                          |                                           | skip     |
-| Volulme    | On-Balance Volume            |                                           | skip     |
-| Stop Loss  | Fibonacci Retracement Levels |                                           | skip     |
+---
 
-### V3 (latest)
+## 📐 V5 Architecture & Scoring Engine
 
-- Fetch global sentiment from moneycontrol.com
-- Fetch nifty50 sentiment from nseindia.com - AD Ratio
-- Fetch OI PCR from niftytrader.com
-- place order (via upstox)
-- exit if profit or loss hit
+```
+Browser Tab (React + Vite)
+│
+├─ useStrategyBot.ts          ← State machine, 60s polling loop
+│   ├─ fetchMarket()          ← Candles + Option Chain + V3 signals
+│   └─ fetchVrd()             ← 8 VRD Nation data points
+│
+├─ strategyEngine.ts          ← 5-layer scoring → FinalSignal
+│   ├─ scoreBullish()         ← BUY CE score (max ~26 pts)
+│   └─ scoreBearish()         ← BUY PE score (mirror)
+│
+├─ Cloudflare Worker          ← CORS proxy for all external APIs
+│   ├─ Upstox API             ← Candles, option chain, place/exit orders
+│   ├─ MoneyControl API       ← Global indices technical ratings
+│   ├─ NiftyTrader API        ← Nifty50 A/D data
+│   └─ VRD Nation (scrape)    ← 8 pages of institutional data
+│
+└─ UI (strategies page)
+    ├─ MarketSetupPanel        ← VIX, FII %, Nifty PE, MMI
+    ├─ InstitutionalPanel      ← MMI gauge, FII scores
+    ├─ BreadthPanel            ← A/D ratio, PCR zone, Straddle IV
+    ├─ IndicatorsPanel         ← 6 V4 indicator cards
+    ├─ ScorePanel              ← Bull/bear score bars + final signal
+    ├─ BotControls             ← Start/Stop, position card, countdown
+    └─ StrategyConfig          ← Config form with localStorage
+```
 
-### V2
+### The 5 Scoring Layers
+| Layer | Source | Signal & Description |
+|---|---|---|
+| **L0: Hard Stops** | VRD Nation | Blocks trading completely if VIX is out of bounds (<10 or >25) or Nifty PE > 28. |
+| **L1: V3 Macro** | MoneyControl + NiftyTrader | Evaluates global index sentiment (Dow, Nikkei, Hang Seng, FTSE, etc.), Advance/Decline ratios, and Put-Call Ratio (PCR). |
+| **L2: V4 Technicals** | Upstox 1-min candles | Real-time indicators: EMA crossover (10/42), ADX, RSI, Stochastic, Bollinger Bands, and ATR. |
+| **L3: Institutional** | VRD Nation Scraper | Scrapes institutional flow (MMI, FII Long/Short ratio, Net Positioning, Straddle IV). |
+| **L4: Confluence Gate** | Unified Evaluator | Enforces minimum score gap (bull vs bear) and overall score threshold to generate entry signals. |
 
-- Scrap Investing.com and get global indicies trend
-- Scrap Investing.com and get last 1 min trend to get sentiment & direction
-- Use technical indicator RSI, MACD, ATR
-- If everything goes good, place order (via finvasia)
-- Exit the order if profit or loss hit (configurable %)
+---
 
-### V1
+## ⚙️ Strategy Configurations (Editable in UI)
 
-- Scrap Investing.com and get global indicies trend
-- Scrap Investing.com and get last 5 min trend & 1 min trend to get sentiment & direction
-- Use technical indicator ATR, RSI, HL
-- If everything goes good, place order (via finvasia)
-- Exit the order if profit or loss hit (configurable %)
+These parameters can be customized dynamically from the dashboard UI:
+- **Confidence Thresholds**: Customize minimum scores for both `moderate` and `strong` signals.
+- **Profit & Loss Limits**: Set trailing or absolute targets for automatic position exits.
+- **Max Trades Per Day**: Protect your account by limiting over-trading.
+- **Last Entry Time**: Restrict bot entry signals past a set time (e.g., 14:30 IST).
+- **Strike Offset (OTM Skip)**: Configurable offset to purchase out-of-the-money options (default: 3 strikes OTM).
 
-## Global Sentiments
+---
 
-1. Dow Jones
-2. Nikkei 225
-3. Hang Seng
-4. Shanghai
-5. FTSE 100
-6. KOSPI 50
-7. CAC 40
-8. SGX NIFTY
+## 📜 Release History
 
-- Brent Oil
-- USD/INR
+* **V5 (Latest)**: React Dashboard with Cloudflare Worker proxy, D1 schema storage, and multi-layer scoring engine.
+* **V4 (In Dev / Console)**: Integrates technical indicators directly from Upstox 1-min candles (EMA crossover, ADX, RSI, Stochastic, Bollinger Bands, ATR).
+* **V3**: Consolidated macro sentiment fetches from MoneyControl and NSE India, placing orders via Upstox.
+* **V2**: Scraped Investing.com for global trends and 1-min indicators, executed trades via Finvasia.
+* **V1**: Basic Investing.com scraper with 5-min/1-min trend checks and ATR/RSI, trading via Finvasia.
 
-## Technical Indicators
+---
 
-1. Pivot Points
-2. Moving Averages
-3. RSI
-4. MACD
+## 🤝 Collaboration & Contact
 
-## Configurations
+We welcome contributions! If you would like to collaborate:
+- Connect with me on LinkedIn: [itaravin](https://www.linkedin.com/in/itaravin/)
+- Submit issues or feature requests: [GitHub Issues](https://github.com/Aravin/Algo-Trade/issues)
 
-- Max trades per day
-- Max profit % per day
-- Max profit % per trade
-- Max loss % per day
-- Max loss % per trade
+#### Trade Logs (stored in AWS for console apps):
+![Trade Logs Diagram](assets/images/trade-log.png)
 
-## How to Access?
-
-- API
-- Website
-
-## Supported Brokers
-
-- Finvasia
-- Upstox (in progress)
-
-## Important Links
-
-- To get NIFTY50 data nseindia.com/api/equity-stockIndices?index=NIFTY%2050
-- To get Global data
-
-## Contact / Issue / Feedback
-
-- <https://github.com/Aravin/Algo-Trade/issues>
-
-## Trade Logs (store in AWS)
-
-![Basic Flow Diagram](assets/images/trade-log.png)
