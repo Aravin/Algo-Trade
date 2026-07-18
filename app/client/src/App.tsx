@@ -9,6 +9,10 @@ import { StrategiesPage } from '@/pages/strategies'
 import { LiveTradesPage } from '@/pages/live-trades'
 import { hydrateAccounts } from '@/lib/accounts'
 import { hydrateStrategyConfig } from '@/lib/strategyConfig'
+import { useAuth0 } from '@auth0/auth0-react'
+import { AuthService } from '@/lib/auth'
+import { isAuth0Enabled } from '@/lib/auth0-config'
+import { ArrowRight, Cpu } from 'lucide-react'
 import './App.css'
 
 function Placeholder({ title }: { title: string }) {
@@ -29,14 +33,65 @@ function App() {
   const [activeItem, setActiveItem] = useState(initialPage)
   const [isHydrated, setIsHydrated] = useState(isBrokerCallback)
 
+  const auth0Enabled = isAuth0Enabled()
+  const {
+    getAccessTokenSilently,
+    isAuthenticated,
+    isLoading,
+    loginWithRedirect,
+    user,
+  } = useAuth0()
+
+  // Register Auth0 token getter if enabled
   useEffect(() => {
-    if (!isBrokerCallback && window.location.search) {
-      window.history.replaceState({}, '', window.location.pathname)
+    if (auth0Enabled) {
+      AuthService.registerTokenGetter(async () => {
+        try {
+          return await getAccessTokenSilently()
+        } catch (e) {
+          console.error('Error fetching access token silently:', e)
+          return null
+        }
+      })
     }
-  }, [isBrokerCallback])
+  }, [auth0Enabled, getAccessTokenSilently])
 
   useEffect(() => {
     if (isBrokerCallback) return
+
+    const search = window.location.search
+    const isAuth0Callback =
+      search.includes('code=') && search.includes('state=')
+
+    if (isAuth0Callback) {
+      if (!isLoading) {
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    } else if (search) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [isBrokerCallback, isLoading])
+
+  useEffect(() => {
+    // If Auth0 is enabled, wait until authenticated to run hydration
+    if (isBrokerCallback || (auth0Enabled && !isAuthenticated)) return
+
+    // Prevent cross-user local storage state leaks by clearing keys on user change
+    const currentUserId = auth0Enabled
+      ? (user?.sub ?? 'local-dev-user')
+      : 'local-dev-user'
+    const storedUser = localStorage.getItem('algo-trade:active-user')
+    if (storedUser !== currentUserId) {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('algo-trade:')) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key))
+      localStorage.setItem('algo-trade:active-user', currentUserId)
+    }
 
     let cancelled = false
     void Promise.allSettled([
@@ -49,10 +104,50 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [isBrokerCallback])
+  }, [isBrokerCallback, auth0Enabled, isAuthenticated, user, isLoading])
 
   if (isBrokerCallback) {
     return <BrokerCallbackPage />
+  }
+
+  // Handle Auth0 loading state
+  if (auth0Enabled && isLoading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+        Connecting to session…
+      </div>
+    )
+  }
+
+  // Handle Unauthenticated state (simple dark-themed Auth0 Login page)
+  if (auth0Enabled && !isAuthenticated) {
+    return (
+      <div className="relative flex flex-col items-center justify-center min-h-dvh bg-zinc-950 font-sans text-foreground">
+        <div className="w-full max-w-sm p-6 flex flex-col items-center text-center">
+          {/* Logo / Icon */}
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-500/10 mb-6">
+            <Cpu size={24} />
+          </div>
+
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
+            AlgoTrade
+          </h1>
+          <p className="text-xs text-zinc-400 mb-8">
+            Algorithmic Trading Dashboard
+          </p>
+
+          {/* Call to Action */}
+          <button
+            onClick={() => {
+              void loginWithRedirect()
+            }}
+            className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+          >
+            Log In <ArrowRight size={14} />
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!isHydrated) {

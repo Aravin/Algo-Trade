@@ -7,6 +7,8 @@ import {
   useNotifications,
   requestNotificationPermission,
 } from '@/lib/notifications'
+import { useAuth0 } from '@auth0/auth0-react'
+import { isAuth0Enabled } from '@/lib/auth0-config'
 
 interface IndexData {
   name: string
@@ -154,10 +156,15 @@ export function Header() {
   const { isOpen: isMarketOpen, hint: marketHint } = useMarketStatus()
   const { indices, isLive, refresh } = useIndices(isMarketOpen)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
   const { notifications, markAllAsRead, clearNotifications, markAsRead } =
     useNotifications()
   const unreadCount = notifications.filter((n) => !n.read).length
   const popupRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+
+  const { user, logout } = useAuth0()
+  const auth0Enabled = isAuth0Enabled()
 
   useEffect(() => {
     requestNotificationPermission()
@@ -168,6 +175,12 @@ export function Header() {
         !popupRef.current.contains(event.target as Node)
       ) {
         setShowNotifications(false)
+      }
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setShowUserMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -331,10 +344,66 @@ export function Header() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 ml-2">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
-              AA
-            </div>
+          <div
+            className="flex items-center gap-2 ml-2 relative"
+            ref={userMenuRef}
+          >
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="w-8 h-8 rounded-full overflow-hidden border border-border bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary hover:opacity-85 transition-opacity cursor-pointer focus:outline-none"
+            >
+              {auth0Enabled && user?.picture ? (
+                <img
+                  src={user.picture}
+                  alt={user.name ?? 'User'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span>
+                  {auth0Enabled && user?.name
+                    ? user.name.substring(0, 2).toUpperCase()
+                    : 'AA'}
+                </span>
+              )}
+            </button>
+
+            {showUserMenu && (
+              <div className="absolute right-0 top-10 w-56 bg-popover text-popover-foreground border border-border rounded-md shadow-md z-50 overflow-hidden flex flex-col p-2">
+                {auth0Enabled ? (
+                  <>
+                    <div className="px-3 py-2 border-b border-border mb-1 text-left">
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {user?.name ?? 'User'}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {user?.email ?? ''}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="justify-start text-xs text-destructive hover:bg-destructive/10 hover:text-destructive w-full cursor-pointer"
+                      onClick={() => {
+                        void logout({
+                          logoutParams: { returnTo: window.location.origin },
+                        })
+                      }}
+                    >
+                      Log Out
+                    </Button>
+                  </>
+                ) : (
+                  <div className="px-3 py-2 text-left">
+                    <p className="text-xs font-semibold text-foreground">
+                      Local Developer Mode
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Auth0 environment variables are not configured.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

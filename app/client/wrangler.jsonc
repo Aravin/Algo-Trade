@@ -39,7 +39,7 @@
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/
    */
-  // "vars": {  "MY_VARIABLE": "production_value" }
+  // "vars": { "AUTH0_DOMAIN": "your-tenant.us.auth0.com", "AUTH0_AUDIENCE": "https://api.algo-trade.com" }
   /**
    * Service Bindings (communicate between multiple Workers)
    * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

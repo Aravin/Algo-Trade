@@ -18,7 +18,7 @@ export function BrokerCallbackPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(() => {
     const params = new URLSearchParams(window.location.search)
     if (!params.get('code')) return 'error'
-    if (!sessionStorage.getItem(`upstox-pending-${params.get('state')}`))
+    if (!localStorage.getItem(`upstox-pending-${params.get('state')}`))
       return 'error'
     return 'loading'
   })
@@ -26,7 +26,7 @@ export function BrokerCallbackPage() {
     const params = new URLSearchParams(window.location.search)
     if (!params.get('code'))
       return 'No authorization code received from Upstox.'
-    if (!sessionStorage.getItem(`upstox-pending-${params.get('state')}`))
+    if (!localStorage.getItem(`upstox-pending-${params.get('state')}`))
       return 'Session expired or state mismatch. Please try connecting again.'
     return ''
   })
@@ -38,11 +38,11 @@ export function BrokerCallbackPage() {
 
     if (!code) return
 
-    const raw = sessionStorage.getItem(`upstox-pending-${stateParam}`)
+    const raw = localStorage.getItem(`upstox-pending-${stateParam}`)
     if (!raw) return
 
     const pending = JSON.parse(raw) as PendingAccount
-    sessionStorage.removeItem(`upstox-pending-${stateParam}`)
+    localStorage.removeItem(`upstox-pending-${stateParam}`)
 
     fetch('/api/broker/upstox/token', {
       method: 'POST',
@@ -81,7 +81,15 @@ export function BrokerCallbackPage() {
           }
           setStatus('success')
           setTimeout(() => {
-            window.location.href = '/?page=broker-accounts'
+            if (window.opener) {
+              ;(window.opener as Window).postMessage(
+                'upstox-auth-success',
+                window.location.origin,
+              )
+              window.close()
+            } else {
+              window.location.href = '/?page=broker-accounts'
+            }
           }, 1500)
         } else {
           setStatus('error')
@@ -126,10 +134,13 @@ export function BrokerCallbackPage() {
             </p>
             <p className="text-xs text-muted-foreground">{errorMsg}</p>
             <button
-              onClick={() => (window.location.href = '/?page=broker-accounts')}
+              onClick={() => {
+                if (window.opener) window.close()
+                else window.location.href = '/?page=broker-accounts'
+              }}
               className="mt-2 text-xs text-primary hover:underline"
             >
-              Go back to Broker Accounts
+              Close Window or Go Back
             </button>
           </>
         )}

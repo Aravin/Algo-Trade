@@ -80,3 +80,30 @@ export function removeAccount(id: string): void {
   syncAccounts(accounts)
   notify()
 }
+
+export function getAccountConnectionState(
+  account: BrokerAccount,
+): 'connected' | 'expired' | 'need_auth' {
+  if (!account.accessToken) {
+    return 'need_auth'
+  }
+
+  try {
+    const parts = account.accessToken.split('.')
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1])) as { exp?: number }
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return 'expired'
+      }
+    }
+  } catch (error) {
+    console.error('Failed to parse broker access token:', error)
+    return 'expired'
+  }
+
+  return 'connected'
+}
+
+export function isAccountConnected(account: BrokerAccount): boolean {
+  return getAccountConnectionState(account) === 'connected'
+}

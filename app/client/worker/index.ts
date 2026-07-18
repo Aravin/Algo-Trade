@@ -1,16 +1,53 @@
+import * as jose from 'jose'
+
 interface PaperTradeEnv {
   PAPER_TRADING_DB: D1Database
+  AUTH0_DOMAIN?: string
+  AUTH0_AUDIENCE?: string
 }
 
 type Env = PaperTradeEnv
 
-interface ClientStateRow {
-  state_key: string
-  value_json: string
-  updated_at: string
+let _jwks: ReturnType<typeof jose.createRemoteJWKSet> | null = null
+
+function getJWKS(domain: string) {
+  return (_jwks ??= jose.createRemoteJWKSet(
+    new URL(`https://${domain}/.well-known/jwks.json`),
+  ))
 }
 
-const PAPER_ACCOUNT_ID = 'default'
+async function verifyAuth0Token(
+  request: Request,
+  env: Env,
+): Promise<string | null> {
+  const domain = env.AUTH0_DOMAIN
+  const audience = env.AUTH0_AUDIENCE
+
+  if (!domain || !audience) {
+    // If not configured, bypass authentication for local dev
+    return 'local-dev-user'
+  }
+
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null
+  }
+
+  const token = authHeader.substring(7).trim()
+  try {
+    const JWKS = getJWKS(domain)
+    const { payload } = await jose.jwtVerify(token, JWKS, {
+      issuer: `https://${domain}/`,
+      audience: audience,
+    })
+
+    return payload.sub ?? null
+  } catch (error) {
+    console.error('JWT verification failed:', error)
+    return null
+  }
+}
+
 const PAPER_STARTING_CREDIT = 5000
 
 interface PaperAccountRow {
@@ -66,20 +103,21 @@ function makeId(prefix: string): string {
 
 async function ensureClientStateTable(env: PaperTradeEnv): Promise<void> {
   await env.PAPER_TRADING_DB.prepare(
-    'CREATE TABLE IF NOT EXISTS client_state (state_key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS client_state (user_id TEXT NOT NULL, state_key TEXT NOT NULL, value_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, state_key))',
   ).run()
 }
 
 async function readClientState<T>(
   env: PaperTradeEnv,
+  userId: string,
   key: string,
 ): Promise<T | null> {
   await ensureClientStateTable(env)
   const row = await env.PAPER_TRADING_DB.prepare(
-    'SELECT state_key, value_json, updated_at FROM client_state WHERE state_key = ?',
+    'SELECT value_json FROM client_state WHERE user_id = ? AND state_key = ?',
   )
-    .bind(key)
-    .first<ClientStateRow>()
+    .bind(userId, key)
+    .first<{ value_json: string }>()
 
   if (!row) return null
 
@@ -88,30 +126,32 @@ async function readClientState<T>(
 
 async function writeClientState(
   env: PaperTradeEnv,
+  userId: string,
   key: string,
   value: unknown,
 ): Promise<void> {
   await ensureClientStateTable(env)
   await env.PAPER_TRADING_DB.prepare(
     `
-      INSERT INTO client_state (state_key, value_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(state_key) DO UPDATE SET
+      INSERT INTO client_state (user_id, state_key, value_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, state_key) DO UPDATE SET
         value_json = excluded.value_json,
         updated_at = excluded.updated_at
     `,
   )
-    .bind(key, JSON.stringify(value), nowIso())
+    .bind(userId, key, JSON.stringify(value), nowIso())
     .run()
 }
 
 async function ensurePaperAccount(
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<PaperAccountRow> {
   const existing = await env.PAPER_TRADING_DB.prepare(
     'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
   )
-    .bind(PAPER_ACCOUNT_ID)
+    .bind(userId)
     .first<PaperAccountRow>()
 
   if (existing) return existing
@@ -120,12 +160,12 @@ async function ensurePaperAccount(
   await env.PAPER_TRADING_DB.batch([
     env.PAPER_TRADING_DB.prepare(
       'INSERT INTO paper_accounts (id, mode, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?)',
-    ).bind(PAPER_ACCOUNT_ID, 'paper', PAPER_STARTING_CREDIT, 'INR', createdAt),
+    ).bind(userId, 'paper', PAPER_STARTING_CREDIT, 'INR', createdAt),
     env.PAPER_TRADING_DB.prepare(
       'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ).bind(
       makeId('stmt'),
-      PAPER_ACCOUNT_ID,
+      userId,
       'seed',
       PAPER_STARTING_CREDIT,
       0,
@@ -137,7 +177,7 @@ async function ensurePaperAccount(
   ])
 
   return {
-    id: PAPER_ACCOUNT_ID,
+    id: userId,
     mode: 'paper',
     balance: PAPER_STARTING_CREDIT,
     currency: 'INR',
@@ -145,12 +185,15 @@ async function ensurePaperAccount(
   }
 }
 
-async function getPaperAccountSummary(env: PaperTradeEnv): Promise<{
+async function getPaperAccountSummary(
+  env: PaperTradeEnv,
+  userId: string,
+): Promise<{
   account: PaperAccountRow
   recentEntries: PaperStatementRow[]
   openTradeCount: number
 }> {
-  const account = await ensurePaperAccount(env)
+  const account = await ensurePaperAccount(env, userId)
   const recentEntries = await env.PAPER_TRADING_DB.prepare(
     'SELECT id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at FROM paper_statement_entries WHERE account_id = ? ORDER BY created_at DESC LIMIT 20',
   )
@@ -171,19 +214,23 @@ async function getPaperAccountSummary(env: PaperTradeEnv): Promise<{
 
 async function listPaperTrades(
   env: PaperTradeEnv,
+  userId: string,
   limit = 50,
 ): Promise<PaperTradeRow[]> {
   const trades = await env.PAPER_TRADING_DB.prepare(
     'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE account_id = ? ORDER BY opened_at DESC LIMIT ?',
   )
-    .bind(PAPER_ACCOUNT_ID, limit)
+    .bind(userId, limit)
     .all<PaperTradeRow>()
   return trades.results ?? []
 }
 
-async function handlePaperAccount(env: PaperTradeEnv): Promise<Response> {
+async function handlePaperAccount(
+  env: PaperTradeEnv,
+  userId: string,
+): Promise<Response> {
   try {
-    const summary = await getPaperAccountSummary(env)
+    const summary = await getPaperAccountSummary(env, userId)
     return Response.json(summary)
   } catch (error) {
     return Response.json(
@@ -196,6 +243,7 @@ async function handlePaperAccount(env: PaperTradeEnv): Promise<Response> {
 async function handleClientStateGet(
   request: Request,
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<Response> {
   const key = new URL(request.url).searchParams.get('key')?.trim()
   if (!key) {
@@ -206,7 +254,7 @@ async function handleClientStateGet(
   }
 
   try {
-    const value = await readClientState<unknown>(env, key)
+    const value = await readClientState<unknown>(env, userId, key)
     return Response.json({ value })
   } catch (error) {
     return Response.json(
@@ -219,6 +267,7 @@ async function handleClientStateGet(
 async function handleClientStatePut(
   request: Request,
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<Response> {
   const body = (await request.json().catch(() => null)) as {
     key?: string
@@ -234,7 +283,7 @@ async function handleClientStatePut(
   }
 
   try {
-    await writeClientState(env, key, body?.value ?? null)
+    await writeClientState(env, userId, key, body?.value ?? null)
     return Response.json({ ok: true })
   } catch (error) {
     return Response.json(
@@ -244,11 +293,14 @@ async function handleClientStatePut(
   }
 }
 
-async function handlePaperHistory(env: PaperTradeEnv): Promise<Response> {
+async function handlePaperHistory(
+  env: PaperTradeEnv,
+  userId: string,
+): Promise<Response> {
   try {
     const [summary, trades] = await Promise.all([
-      getPaperAccountSummary(env),
-      listPaperTrades(env),
+      getPaperAccountSummary(env, userId),
+      listPaperTrades(env, userId),
     ])
     return Response.json({ ...summary, trades })
   } catch (error) {
@@ -262,6 +314,7 @@ async function handlePaperHistory(env: PaperTradeEnv): Promise<Response> {
 async function handlePaperAccountAdjust(
   request: Request,
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<Response> {
   let body: { amount?: number; note?: string; mode?: 'set' | 'adjust' }
   try {
@@ -286,7 +339,7 @@ async function handlePaperAccountAdjust(
   }
 
   try {
-    const account = await ensurePaperAccount(env)
+    const account = await ensurePaperAccount(env, userId)
     const balanceBefore = Number(account.balance)
     const balanceAfter = mode === 'set' ? amount : balanceBefore + amount
     if (balanceAfter < 0) {
@@ -320,7 +373,7 @@ async function handlePaperAccountAdjust(
       ),
     ])
 
-    const summary = await getPaperAccountSummary(env)
+    const summary = await getPaperAccountSummary(env, userId)
     return Response.json(summary)
   } catch (error) {
     return Response.json(
@@ -330,9 +383,12 @@ async function handlePaperAccountAdjust(
   }
 }
 
-async function handlePaperReset(env: PaperTradeEnv): Promise<Response> {
+async function handlePaperReset(
+  env: PaperTradeEnv,
+  userId: string,
+): Promise<Response> {
   try {
-    const account = await ensurePaperAccount(env)
+    const account = await ensurePaperAccount(env, userId)
     const updatedAt = nowIso()
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
@@ -360,8 +416,8 @@ async function handlePaperReset(env: PaperTradeEnv): Promise<Response> {
     ])
 
     const [summary, trades] = await Promise.all([
-      getPaperAccountSummary(env),
-      listPaperTrades(env),
+      getPaperAccountSummary(env, userId),
+      listPaperTrades(env, userId),
     ])
     return Response.json({ ...summary, trades })
   } catch (error) {
@@ -375,6 +431,7 @@ async function handlePaperReset(env: PaperTradeEnv): Promise<Response> {
 async function handlePaperTradeEnter(
   request: Request,
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<Response> {
   let body: {
     instrumentKey?: string
@@ -408,7 +465,7 @@ async function handlePaperTradeEnter(
   }
 
   try {
-    const account = await ensurePaperAccount(env)
+    const account = await ensurePaperAccount(env, userId)
     const entryValue = Number((entryPrice * quantity).toFixed(2))
     const metadataObj = body.metadata as {
       tradeType?: 'buying' | 'selling'
@@ -492,7 +549,7 @@ async function handlePaperTradeEnter(
     )
       .bind(tradeId)
       .first<PaperTradeRow>()
-    const summary = await getPaperAccountSummary(env)
+    const summary = await getPaperAccountSummary(env, userId)
     return Response.json({ trade, ...summary })
   } catch (error) {
     return Response.json(
@@ -505,6 +562,7 @@ async function handlePaperTradeEnter(
 async function handlePaperTradeExit(
   request: Request,
   env: PaperTradeEnv,
+  userId: string,
 ): Promise<Response> {
   let body: { tradeId?: string; exitPrice?: number; metadata?: unknown }
   try {
@@ -522,7 +580,7 @@ async function handlePaperTradeExit(
   }
 
   try {
-    const account = await ensurePaperAccount(env)
+    const account = await ensurePaperAccount(env, userId)
     const trade = await env.PAPER_TRADING_DB.prepare(
       'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE id = ? AND account_id = ?',
     )
@@ -602,7 +660,7 @@ async function handlePaperTradeExit(
     )
       .bind(trade.id)
       .first<PaperTradeRow>()
-    const summary = await getPaperAccountSummary(env)
+    const summary = await getPaperAccountSummary(env, userId)
     return Response.json({ trade: updatedTrade, ...summary })
   } catch (error) {
     return Response.json(
@@ -1521,39 +1579,55 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
+    let userId = 'local-dev-user'
+
+    if (url.pathname.startsWith('/api/')) {
+      const tokenUser = await verifyAuth0Token(request, env)
+      if (!tokenUser) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized. Invalid or missing token.' }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+      userId = tokenUser
+    }
+
     if (url.pathname === '/api/client-state' && request.method === 'GET') {
-      return handleClientStateGet(request, env)
+      return handleClientStateGet(request, env, userId)
     }
     if (url.pathname === '/api/client-state' && request.method === 'PUT') {
-      return handleClientStatePut(request, env)
+      return handleClientStatePut(request, env, userId)
     }
 
     if (url.pathname === '/api/paper/account' && request.method === 'GET') {
-      return handlePaperAccount(env)
+      return handlePaperAccount(env, userId)
     }
     if (url.pathname === '/api/paper/history' && request.method === 'GET') {
-      return handlePaperHistory(env)
+      return handlePaperHistory(env, userId)
     }
     if (
       url.pathname === '/api/paper/account/adjust' &&
       request.method === 'POST'
     ) {
-      return handlePaperAccountAdjust(request, env)
+      return handlePaperAccountAdjust(request, env, userId)
     }
     if (
       url.pathname === '/api/paper/trades/enter' &&
       request.method === 'POST'
     ) {
-      return handlePaperTradeEnter(request, env)
+      return handlePaperTradeEnter(request, env, userId)
     }
     if (
       url.pathname === '/api/paper/trades/exit' &&
       request.method === 'POST'
     ) {
-      return handlePaperTradeExit(request, env)
+      return handlePaperTradeExit(request, env, userId)
     }
     if (url.pathname === '/api/paper/reset' && request.method === 'POST') {
-      return handlePaperReset(env)
+      return handlePaperReset(env, userId)
     }
 
     if (

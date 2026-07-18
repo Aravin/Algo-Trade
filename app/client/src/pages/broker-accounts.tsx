@@ -1,5 +1,5 @@
 import type { BrokerAccount, BrokerPurpose } from '@/lib/types'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   BarChart2,
   Bot,
@@ -25,12 +25,25 @@ import { cn } from '@/lib/utils'
 import {
   addAccount,
   getAccounts,
+  getAccountConnectionState,
   removeAccount,
   updateAccount,
 } from '@/lib/accounts'
 
 function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
+function openAuthPopup(url: string) {
+  const w = Math.round(window.screen.width * 0.9)
+  const h = Math.round(window.screen.height * 0.9)
+  const left = Math.round((window.screen.width - w) / 2)
+  const top = Math.round((window.screen.height - h) / 2)
+  window.open(
+    url,
+    'BrokerAuth',
+    `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`,
+  )
 }
 
 const MCP_CONFIG = JSON.stringify(
@@ -157,7 +170,7 @@ function ReauthorizeInline({ account }: { account: BrokerAccount }) {
       analyticsToken: account.analyticsToken,
       mode: 'reauth' as const,
     }
-    sessionStorage.setItem(
+    localStorage.setItem(
       `upstox-pending-${account.id}`,
       JSON.stringify(pending),
     )
@@ -168,7 +181,7 @@ function ReauthorizeInline({ account }: { account: BrokerAccount }) {
     oauthUrl.searchParams.set('client_id', account.apiKey)
     oauthUrl.searchParams.set('redirect_uri', redirectUri)
     oauthUrl.searchParams.set('state', account.id)
-    window.location.href = oauthUrl.toString()
+    openAuthPopup(oauthUrl.toString())
   }
 
   if (!account.apiKey) return null
@@ -368,10 +381,18 @@ function AccountCard({
                 </span>
                 <Badge
                   variant={
-                    account.status === 'connected' ? 'success' : 'secondary'
+                    getAccountConnectionState(account) === 'connected'
+                      ? 'success'
+                      : getAccountConnectionState(account) === 'expired'
+                        ? 'destructive'
+                        : 'warning'
                   }
                 >
-                  {account.status}
+                  {getAccountConnectionState(account) === 'connected'
+                    ? 'connected'
+                    : getAccountConnectionState(account) === 'expired'
+                      ? 'expired'
+                      : 'need auth'}
                 </Badge>
               </div>
               {account.apiKey && (
@@ -557,7 +578,7 @@ function UpstoxForm({
           analyticsToken: analyticsToken.trim() || undefined,
           mode: 'reauth' as const,
         }
-        sessionStorage.setItem(
+        localStorage.setItem(
           `upstox-pending-${existing.id}`,
           JSON.stringify(pending),
         )
@@ -568,7 +589,7 @@ function UpstoxForm({
         oauthUrl.searchParams.set('client_id', apiKey.trim())
         oauthUrl.searchParams.set('redirect_uri', redirectUri.trim())
         oauthUrl.searchParams.set('state', existing.id)
-        window.location.href = oauthUrl.toString()
+        openAuthPopup(oauthUrl.toString())
       } else {
         onClose()
       }
@@ -611,7 +632,7 @@ function UpstoxForm({
         analyticsToken: hasAnalytics ? analyticsToken.trim() : undefined,
         mode: 'create' as const,
       }
-      sessionStorage.setItem(`upstox-pending-${id}`, JSON.stringify(pending))
+      localStorage.setItem(`upstox-pending-${id}`, JSON.stringify(pending))
       const oauthUrl = new URL(
         'https://api.upstox.com/v2/login/authorization/dialog',
       )
@@ -619,7 +640,7 @@ function UpstoxForm({
       oauthUrl.searchParams.set('client_id', apiKey.trim())
       oauthUrl.searchParams.set('redirect_uri', redirectUri.trim())
       oauthUrl.searchParams.set('state', id)
-      window.location.href = oauthUrl.toString()
+      openAuthPopup(oauthUrl.toString())
     } else {
       addAccount({
         id: generateId(),
@@ -964,6 +985,19 @@ export function BrokerAccountsPage() {
   )
 
   const reload = () => setAccounts(getAccounts())
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (e.data === 'upstox-auth-success') {
+        reload()
+        setShowAddPanel(false)
+        setEditingAccount(null)
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
 
   const handleRemove = (id: string) => {
     removeAccount(id)

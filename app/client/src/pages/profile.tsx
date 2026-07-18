@@ -4,7 +4,7 @@ import { Loader2, RefreshCw, Trash2, User, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getAccounts } from '@/lib/accounts'
+import { getAccounts, isAccountConnected } from '@/lib/accounts'
 import {
   adjustPaperAccount,
   fetchPaperAccount,
@@ -505,7 +505,7 @@ function BotResetSection() {
 // ─── Page ─────────────────────────────────────────────────────────
 export function ProfilePage() {
   const [account] = useState<BrokerAccount | null>(
-    () => getAccounts().find((a) => a.accessToken) ?? null,
+    () => getAccounts().find(isAccountConnected) ?? null,
   )
   const [profile, setProfile] = useState<UpstoxProfile | null>(null)
   const [funds, setFunds] = useState<UpstoxFundsV3 | null>(null)

@@ -10,23 +10,36 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
-import { getAccounts } from '@/lib/accounts'
+import { getAccounts, getAccountConnectionState } from '@/lib/accounts'
 
 function useBrokerStatus() {
   const [summary, setSummary] = useState(() => derive())
 
   function derive() {
-    const connected = getAccounts().filter((a) => a.status === 'connected')
-    if (connected.length === 0)
+    const accounts = getAccounts()
+    if (accounts.length === 0) {
       return { dot: 'bg-muted-foreground', text: 'No broker connected' }
-    if (connected.length === 1)
+    }
+
+    const first = accounts[0]
+    const state = getAccountConnectionState(first)
+
+    if (state === 'connected') {
       return {
         dot: 'bg-success animate-pulse',
-        text: `Connected · ${connected[0].label}`,
+        text: `Connected · ${first.label}`,
       }
+    }
+    if (state === 'expired') {
+      return {
+        dot: 'bg-destructive',
+        text: `Expired · ${first.label}`,
+      }
+    }
+    // Need Auth
     return {
-      dot: 'bg-success animate-pulse',
-      text: `${connected.length} brokers connected`,
+      dot: 'bg-amber-500',
+      text: `Need Auth · ${first.label}`,
     }
   }
 
