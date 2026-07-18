@@ -152,3 +152,4 @@ We welcome contributions! If you would like to collaborate:
 #### Trade Logs (stored in AWS for console apps):
 ![Trade Logs Diagram](assets/images/trade-log.png)
 
+
