@@ -1582,57 +1582,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
-    let userId = 'local-dev-user'
-
-    if (url.pathname.startsWith('/api/')) {
-      const tokenUser = await verifyAuth0Token(request, env)
-      if (!tokenUser) {
-        return new Response(
-          JSON.stringify({ error: 'Unauthorized. Invalid or missing token.' }),
-          {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-          },
-        )
-      }
-      userId = tokenUser
-    }
-
-    if (url.pathname === '/api/client-state' && request.method === 'GET') {
-      return handleClientStateGet(request, env, userId)
-    }
-    if (url.pathname === '/api/client-state' && request.method === 'PUT') {
-      return handleClientStatePut(request, env, userId)
-    }
-
-    if (url.pathname === '/api/paper/account' && request.method === 'GET') {
-      return handlePaperAccount(env, userId)
-    }
-    if (url.pathname === '/api/paper/history' && request.method === 'GET') {
-      return handlePaperHistory(env, userId)
-    }
-    if (
-      url.pathname === '/api/paper/account/adjust' &&
-      request.method === 'POST'
-    ) {
-      return handlePaperAccountAdjust(request, env, userId)
-    }
-    if (
-      url.pathname === '/api/paper/trades/enter' &&
-      request.method === 'POST'
-    ) {
-      return handlePaperTradeEnter(request, env, userId)
-    }
-    if (
-      url.pathname === '/api/paper/trades/exit' &&
-      request.method === 'POST'
-    ) {
-      return handlePaperTradeExit(request, env, userId)
-    }
-    if (url.pathname === '/api/paper/reset' && request.method === 'POST') {
-      return handlePaperReset(env, userId)
-    }
-
+    // ── Public proxy routes (no Auth0 token required) ──────────────
+    // These forward requests to Upstox/market APIs on behalf of the browser.
+    // They must remain unauthenticated because the OAuth callback popup does
+    // not have an Auth0 session when it calls /api/broker/upstox/token.
     if (
       url.pathname === '/api/broker/upstox/token' &&
       request.method === 'POST'
@@ -1734,10 +1687,56 @@ export default {
       return handleGlobalIndices()
     }
 
+    // ── Authenticated routes (Auth0 token required) ────────────────
+    let userId = 'local-dev-user'
     if (url.pathname.startsWith('/api/')) {
-      return Response.json({ error: 'Unknown API route' }, { status: 404 })
+      const tokenUser = await verifyAuth0Token(request, env)
+      if (!tokenUser) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized. Invalid or missing token.' }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+      userId = tokenUser
     }
 
-    return new Response(null, { status: 404 })
+    if (url.pathname === '/api/client-state' && request.method === 'GET') {
+      return handleClientStateGet(request, env, userId)
+    }
+    if (url.pathname === '/api/client-state' && request.method === 'PUT') {
+      return handleClientStatePut(request, env, userId)
+    }
+    if (url.pathname === '/api/paper/account' && request.method === 'GET') {
+      return handlePaperAccount(env, userId)
+    }
+    if (url.pathname === '/api/paper/history' && request.method === 'GET') {
+      return handlePaperHistory(env, userId)
+    }
+    if (
+      url.pathname === '/api/paper/account/adjust' &&
+      request.method === 'POST'
+    ) {
+      return handlePaperAccountAdjust(request, env, userId)
+    }
+    if (
+      url.pathname === '/api/paper/trades/enter' &&
+      request.method === 'POST'
+    ) {
+      return handlePaperTradeEnter(request, env, userId)
+    }
+    if (
+      url.pathname === '/api/paper/trades/exit' &&
+      request.method === 'POST'
+    ) {
+      return handlePaperTradeExit(request, env, userId)
+    }
+    if (url.pathname === '/api/paper/reset' && request.method === 'POST') {
+      return handlePaperReset(env, userId)
+    }
+
+    return Response.json({ error: 'Unknown API route' }, { status: 404 })
   },
 } satisfies ExportedHandler<Env>
