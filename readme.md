@@ -89,17 +89,15 @@ Browser Tab (React + Vite)
 │
 ├─ useStrategyBot.ts          ← State machine, 60s polling loop
 │   ├─ fetchMarket()          ← Candles + Option Chain + V3 signals
-│   └─ fetchVrd()             ← 8 VRD Nation data points
+│   └─ fetchMarketSentiment() ← VIX, FII, DII, PCR, Max Pain + synthetic MMI/PE/IV
 │
 ├─ strategyEngine.ts          ← 5-layer scoring → FinalSignal
-│   ├─ scoreBullish()         ← BUY CE score (max ~26 pts)
-│   └─ scoreBearish()         ← BUY PE score (mirror)
+│   ├─ scoreBullish()         ← BUY CE score (max ~27 pts)
+│   └─ scoreBearish()         ← BUY PE score (max ~26 pts)
 │
 ├─ Cloudflare Worker          ← CORS proxy for all external APIs
-│   ├─ Upstox API             ← Candles, option chain, place/exit orders
-│   ├─ MoneyControl API       ← Global indices technical ratings
-│   ├─ NiftyTrader API        ← Nifty50 A/D data
-│   └─ VRD Nation (scrape)    ← 8 pages of institutional data
+│   ├─ Upstox API             ← Candles, option chain, FII/DII, VIX, place/exit orders
+│   └─ MoneyControl API       ← Global indices technical ratings
 │
 └─ UI (strategies page)
     ├─ MarketSetupPanel        ← VIX, FII %, Nifty PE, MMI
@@ -114,10 +112,10 @@ Browser Tab (React + Vite)
 ### The 5 Scoring Layers
 | Layer | Source | Signal & Description |
 |---|---|---|
-| **L0: Hard Stops** | VRD Nation | Blocks trading completely if VIX is out of bounds (<10 or >25) or Nifty PE > 28. |
-| **L1: V3 Macro** | MoneyControl + NiftyTrader | Evaluates global index sentiment (Dow, Nikkei, Hang Seng, FTSE, etc.), Advance/Decline ratios, and Put-Call Ratio (PCR). |
+| **L0: Hard Stops** | Upstox VIX | Blocks trading completely if VIX is out of bounds (< 10 or > 25). Nifty PE is synthetic and penalises score only. |
+| **L1: V3 Macro** | MoneyControl + Upstox breadth | Evaluates global index sentiment (Dow, Nikkei, Hang Seng, FTSE, etc.), Advance/Decline ratios, and Put-Call Ratio (PCR). |
 | **L2: V4 Technicals** | Upstox 1-min candles | Real-time indicators: EMA crossover (10/42), ADX, RSI, Stochastic, Bollinger Bands, and ATR. |
-| **L3: Institutional** | VRD Nation Scraper | Scrapes institutional flow (MMI, FII Long/Short ratio, Net Positioning, Straddle IV). |
+| **L3: Institutional** | Upstox FII/DII API + synthetic computation | Institutional flow: MMI (synthetic), FII Long/Short ratio (bull contrarian + bear momentum), Net Positioning, Straddle IV vs VIX. |
 | **L4: Confluence Gate** | Unified Evaluator | Enforces minimum score gap (bull vs bear) and overall score threshold to generate entry signals. |
 
 ---

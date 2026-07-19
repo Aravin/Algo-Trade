@@ -1519,13 +1519,13 @@ async function handleUpstoxSmartlistFutures(
   return Response.json(data, { status: upstream.status })
 }
 
-// ─── Global Indices via VRD Nation dashboard ─────────────────────────────────
-const VRD_DASHBOARD_URL = 'https://www.vrdnation.com/pulse/api/dashboard'
+// ─── Global Indices (market data feed) ──────────────────────────────────────
+const GLOBAL_INDICES_URL = 'https://www.vrdnation.com/pulse/api/dashboard'
 
 async function handleGlobalIndices(): Promise<Response> {
   let upstream: Response
   try {
-    upstream = await fetch(VRD_DASHBOARD_URL, {
+    upstream = await fetch(GLOBAL_INDICES_URL, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -1534,14 +1534,14 @@ async function handleGlobalIndices(): Promise<Response> {
     })
   } catch (e) {
     return Response.json(
-      { error: `Failed to reach VRD: ${String(e)}` },
+      { error: `Failed to reach global indices feed: ${String(e)}` },
       { status: 502 },
     )
   }
 
   if (!upstream.ok) {
     return Response.json(
-      { error: `VRD returned ${upstream.status}` },
+      { error: `Global indices feed returned ${upstream.status}` },
       { status: 502 },
     )
   }
@@ -1557,7 +1557,7 @@ async function handleGlobalIndices(): Promise<Response> {
   const regions = raw?.globalIndicesByRegion
   if (!regions) {
     return Response.json(
-      { error: 'No globalIndicesByRegion from VRD', raw },
+      { error: 'No globalIndicesByRegion in response', raw },
       { status: 502 },
     )
   }

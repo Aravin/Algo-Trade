@@ -28,20 +28,14 @@ export function runHardStopChecks(vrd: VrdData | null): {
   const reasons: string[] = []
   let blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE' = 'NONE'
 
+  // Only VIX is a reliable hard stop (real Upstox data). Nifty PE is now
+  // synthetic (proxy-computed from indicators) and is penalised through scoring
+  // instead — see scoreNiftyPE() in scoreBearish/scoreBullish.
   if (!vrd) return { blocked: false, blockedDirection: 'NONE', reasons }
   const vixCheck = scoreVix(vrd.vix)
   if (!vixCheck.tradeable) {
     reasons.push(vixCheck.label)
     blockedDirection = 'BOTH'
-  }
-  const pe = vrd.niftyPe?.pe
-  if (pe !== null && pe !== undefined && pe > 28) {
-    reasons.push(`Nifty PE ${pe} > 28 — historically overvalued`)
-    if (blockedDirection === 'NONE') {
-      blockedDirection = 'CE'
-    } else {
-      blockedDirection = 'BOTH'
-    }
   }
   return { blocked: reasons.length > 0, blockedDirection, reasons }
 }
@@ -268,6 +262,43 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         adS.label,
         Math.abs(adS.score),
         adS.max,
+      )
+    }
+
+    // FII L/S — momentum-short scoring (shortPct 60–79%)
+    // shortPct >= 80% is a contrarian BULL signal (short-cover risk) so it is
+    // excluded here to avoid contradicting the bull score.
+    const fiiLs = data.vrd.fiiLongShort
+    if (fiiLs) {
+      const sp = fiiLs.shortPct ?? 0
+      if (sp >= 60 && sp < 80) {
+        max += 2
+        score += addScore(
+          bd,
+          'L2',
+          'FII L/S',
+          `FII ${sp.toFixed(1)}% short — momentum bear`,
+          2,
+          2,
+        )
+      }
+    }
+
+    // FII Net Positioning — negative net = FII net short = bearish confirmation
+    const fiiPos = data.vrd.fiiPositioning
+    const fiiPosS = scoreFiiPositioning(
+      fiiPos?.netPosition ?? null,
+      fiiPos?.consecutiveShortDays ?? null,
+    )
+    if (fiiPosS.score < 0) {
+      max += fiiPosS.max
+      score += addScore(
+        bd,
+        'L2',
+        'FII Positioning',
+        fiiPosS.label,
+        Math.abs(fiiPosS.score),
+        fiiPosS.max,
       )
     }
 

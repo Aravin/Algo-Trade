@@ -11,6 +11,7 @@ import type {
   PaperAccountSummary,
   PaperTrade,
   VrdData,
+  NiftySentiment,
 } from '@/lib/types'
 import {
   useState,
@@ -22,7 +23,6 @@ import {
 import { computeAllIndicators, getOtmStrike } from '@/lib/indicators'
 import {
   evaluateGlobalSentiment,
-  evaluateNiftySentiment,
   evaluatePCR,
   getV3Signal,
 } from '@/lib/v3Sentiment'
@@ -322,7 +322,7 @@ function clamp(value: number, min: number, max: number): number {
 
 function evaluateNiftySentimentFromAdvanceCount(
   advances: number | null,
-): ReturnType<typeof evaluateNiftySentiment> {
+): NiftySentiment {
   if (advances === null || Number.isNaN(advances)) return 'neutral'
   if (advances >= 39) return 'very bullish'
   if (advances >= 29) return 'bullish'
@@ -874,7 +874,7 @@ async function fetchMarketSentiment(
         : null,
     straddleIv: {
       elevated:
-        straddleIv.percentAboveAvg !== null && straddleIv.percentAboveAvg > 20,
+        straddleIv.percentAboveAvg !== null && straddleIv.percentAboveAvg > 30,
       percentAboveAvg: straddleIv.percentAboveAvg,
     },
     niftyPe: niftyPe,
@@ -1087,7 +1087,7 @@ async function fetchMarket(
 
   // V3
   let v3: V3OrderType = 'hold'
-  let niftySentiment: ReturnType<typeof evaluateNiftySentiment> = 'neutral'
+  let niftySentiment: NiftySentiment = 'neutral'
   let pcrZone: ReturnType<typeof evaluatePCR> = 'neutral'
   let niftySentimentFetched = false
   let pcrZoneFetched = false

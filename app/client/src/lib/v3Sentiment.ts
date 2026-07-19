@@ -21,7 +21,7 @@ export function evaluateGlobalSentiment(
   let score = 0
   for (const item of marketData) {
     if (SKIP_SYMBOLS.includes(item.symbol)) continue
-    // VRD does not include Gift Nifty in globalIndicesByRegion — no SGX double-weight needed
+    // Global indices feed does not double-weight GIFT Nifty
     const isSgx = false
     const m = isSgx ? 2 : 1
 

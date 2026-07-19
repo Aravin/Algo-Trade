@@ -246,8 +246,8 @@ export interface AppNotification {
 
 // Constants & Config Values
 export const DEFAULT_CONFIG: StrategyConfig = {
-  strongThreshold: 8,
-  moderateThreshold: 6,
+  strongThreshold: 16,
+  moderateThreshold: 10,
   maxProfitPct: 10,
   maxLossPct: 5,
   maxTradesPerDay: 3,
