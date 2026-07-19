@@ -1,4 +1,8 @@
-import type { ExecutionMode, PaperAccountSummary } from '@/lib/types'
+import type {
+  ExecutionMode,
+  PaperAccountSummary,
+  TradeRowStatus,
+} from '@/lib/types'
 import { useEffect, useState } from 'react'
 import {
   ArrowDownRight,
@@ -27,20 +31,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
-import { cn } from '@/lib/utils'
+import { cn, isNseMarketOpen, isToday, normalizeLiveStatus } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TradeMode = ExecutionMode
-
-type TradeRowStatus =
-  | 'ACTIVE'
-  | 'CLOSED'
-  | 'SL_HIT'
-  | 'TARGET_HIT'
-  | 'COMPLETED'
-  | 'CANCELLED'
-  | 'REJECTED'
 
 interface LiveOrder {
   order_id?: string
@@ -136,11 +131,6 @@ function fmtPct(value: number) {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
 }
 
-function isToday(isoLike: string | null | undefined) {
-  if (!isoLike) return false
-  return isoLike.slice(0, 10) === new Date().toISOString().slice(0, 10)
-}
-
 function timeLabel(isoLike: string | null | undefined) {
   if (!isoLike) return '—'
   const d = new Date(isoLike)
@@ -167,14 +157,6 @@ function inferType(symbol: string): TradeRow['type'] {
   if (u.includes(' PE')) return 'PE'
   if (u.includes(' FUT')) return 'FUT'
   return 'EQ'
-}
-
-function normalizeLiveStatus(s: string | undefined): TradeRowStatus {
-  const u = String(s ?? '').toUpperCase()
-  if (u.includes('REJECT')) return 'REJECTED'
-  if (u.includes('CANCEL')) return 'CANCELLED'
-  if (u.includes('COMPLETE')) return 'COMPLETED'
-  return 'ACTIVE'
 }
 
 const typeVariant: Record<
@@ -530,6 +512,33 @@ function buildLiveDataset(funds: UpstoxFundsV3, orders: LiveOrder[]): Dataset {
   }
 }
 
+/**
+ * Returns an empty dataset shown when the NSE market is closed.
+ * Prevents unnecessary API calls to Upstox outside trading hours.
+ */
+function buildMarketClosedDataset(): Dataset {
+  return {
+    mode: 'live',
+    stats: [
+      {
+        title: 'Market Status',
+        value: 'Closed',
+        subValue: 'NSE trading hours: 09:15 – 15:30 IST, Mon–Fri',
+        change: 'Live data unavailable outside market hours',
+        changeUp: false,
+        icon: <ShieldAlert size={18} />,
+        iconClassName: 'text-muted-foreground bg-muted/30',
+      },
+    ],
+    openRows: [],
+    closedRows: [],
+    pnlTotal: 0,
+    tradesTodayLabel: 'Market closed',
+    sourceNote:
+      'Live order data is only fetched during NSE market hours (09:15–15:30 IST).',
+  }
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCards({ stats }: { stats: StatCard[] }) {
@@ -764,8 +773,14 @@ export function LiveTradesPage() {
         const summary = await fetchPaperHistory()
         setDataset(buildPaperDataset(summary))
       } else {
+        // Guard 1: no broker token
         if (!token)
           throw new Error('No active broker token — connect Upstox first.')
+        // Guard 2: outside NSE market hours — skip live API calls
+        if (!isNseMarketOpen()) {
+          setDataset(buildMarketClosedDataset())
+          return
+        }
         const [funds, orders] = await Promise.all([
           fetchFunds(token),
           fetchOrders(token),

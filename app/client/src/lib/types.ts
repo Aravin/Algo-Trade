@@ -336,3 +336,12 @@ export const marketStrategyMapping: {
     orderType: 'sell',
   },
 ]
+
+export type TradeRowStatus =
+  | 'ACTIVE'
+  | 'CLOSED'
+  | 'SL_HIT'
+  | 'TARGET_HIT'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'REJECTED'
