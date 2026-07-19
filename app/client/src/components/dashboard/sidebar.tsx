@@ -8,7 +8,7 @@ import {
   TrendingUp,
   User,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, isNseMarketOpen, isToday, normalizeLiveStatus } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import { getAccounts, getAccountConnectionState } from '@/lib/accounts'
 
@@ -105,19 +105,6 @@ function useActiveTradesCount() {
       return 'paper'
     }
 
-    function isToday(isoLike: string | null | undefined) {
-      if (!isoLike) return false
-      return isoLike.slice(0, 10) === new Date().toISOString().slice(0, 10)
-    }
-
-    function normalizeLiveStatus(s: string | undefined): string {
-      const u = String(s ?? '').toUpperCase()
-      if (u.includes('REJECT')) return 'REJECTED'
-      if (u.includes('CANCEL')) return 'CANCELLED'
-      if (u.includes('COMPLETE')) return 'COMPLETED'
-      return 'ACTIVE'
-    }
-
     async function updateCount() {
       try {
         const mode = getCurrentMode()
@@ -129,6 +116,13 @@ function useActiveTradesCount() {
             setCount(summary.openTradeCount)
           }
         } else {
+          // If NSE market is closed, there can be no active live trades.
+          // Set to 0 and skip calling Upstox to avoid rate limits / errors.
+          if (!isNseMarketOpen()) {
+            if (active) setCount(0)
+            return
+          }
+
           const token =
             getAccounts().find((a) => a.accessToken)?.accessToken ?? null
           if (!token) {

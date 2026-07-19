@@ -1,4 +1,4 @@
-// VRD Nation data scoring — each function converts live data into points
+// Institutional signal scoring — converts live Upstox + synthetic data into scored points
 
 import type { VrdScore } from './types'
 

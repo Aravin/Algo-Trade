@@ -42,7 +42,8 @@ Browser Tab (React + Vite)
 |-----------|--------|
 | VIX > 25 | Extreme volatility, options too expensive |
 | VIX < 10 | No volatility, options have no premium |
-| Nifty PE > 28 | Historically overvalued, high correction risk |
+
+> **Note:** Nifty PE is a synthetic proxy (computed from indicators, not real NSE PE) and now penalises the score via `scoreNiftyPE()` instead of triggering a hard block.
 
 ### Layer 1 — V3 Macro Sentiment (4 pts)
 Combines three free data sources into a single `buy / sell / hold` signal:
@@ -68,18 +69,19 @@ All computed from **1-minute Upstox intraday candles** (oldest-first, `slice(-pe
 - 3 of 4 agree → relaxed `Buy` or `Sell`
 - Otherwise → `Hold`
 
-### Layer 3 — Institutional Sentiment (VRD Nation)
-8 data points scraped from vrdnation.com (Next.js SSR, regex extraction):
+### Layer 3 — Institutional Sentiment (Upstox + Synthetic)
+All institutional signals are sourced from the **Upstox API** directly or computed
+synthetically from live candle/option-chain data. VRD Nation scraping has been retired.
 
-| Signal | Scoring |
-|--------|---------|
-| **MMI** (Market Mood Index) | Extreme Fear < 30 → contrarian +3; Extreme Greed > 70 → −3 |
-| **A/D Ratio** | Breadth thrust ≥ 2.0 → +3; Weakness < 0.5 → −3 |
-| **FII Long/Short %** | Short ≥ 80% → contrarian +3 (short-covering risk) |
-| **FII Net Positioning** | ≥ 15 consecutive short days → +1 bonus |
-| **Nifty PE** | < 18 undervalued → +2 CE bias; > 28 overvalued → hard stop |
-| **Straddle IV** | > 30% above average → prefer sell (−1); below average → buy cheap (+1) |
-| **VIX** | > 25 or < 10 → hard stop; ≥ 18 → prefer sell |
+| Signal | Source | Scoring |
+|--------|--------|---------|
+| **MMI** (Market Mood Index) | Synthetic: VIX×0.4 + RSI×0.3 + PCR×0.3 | Extreme Fear < 30 → contrarian +3; Extreme Greed > 70 → −3 |
+| **A/D Ratio** | Upstox breadth API | Breadth thrust ≥ 2.0 → +3; Weakness < 0.5 → −3 |
+| **FII Long/Short %** | Upstox FII futures data | Short ≥ 80% → contrarian bull +3; Short 60–79% → momentum bear +2 |
+| **FII Net Positioning** | Upstox FII futures data | Net long > +50k → +1 bull; Net short < −50k → +1 bear; ≥15 consecutive short days → +1 bull |
+| **Nifty PE** | Synthetic: RSI/BB/VIX/A-D/PCR composite | < 18 undervalued → +2 CE bias; > 28 overvalued → −2 CE penalty (scoring only, not hard stop) |
+| **Straddle IV** | Upstox option chain ATM Greeks vs VIX | > 30% above VIX avg → prefer sell (−1); below avg → buy cheap (+1) |
+| **VIX** | Upstox market data | > 25 or < 10 → hard stop; ≥ 18 → prefer sell |
 
 ### Layer 4 — Confluence Gate
 Final signal only fires when:
@@ -92,19 +94,19 @@ Final signal only fires when:
 
 ## Scoring Table (max ~26 pts per direction)
 
-| Layer | Indicator | Max pts (bullish) |
-|-------|-----------|:-----------------:|
-| V3 | Macro sentiment | 4 |
-| V4 | Price action composite | 5 |
-| V4 | EMA Crossover | 3 |
-| V4 | RSI | 2 |
-| L2 | MMI | 3 |
-| L3 | A/D Ratio | 3 |
-| L2 | FII Long/Short | 3 |
-| L2 | FII Positioning | 1 |
-| L2 | Nifty PE | 2 |
-| L3 | Straddle IV | 1 |
-| **Total** | | **~27** |
+| Layer | Indicator | Max pts (bullish) | Max pts (bearish) |
+|-------|-----------|:-----------------:|:-----------------:|
+| V3 | Macro sentiment | 4 | 4 |
+| V4 | Price action composite | 5 | 5 |
+| V4 | EMA Crossover | 3 | 3 |
+| V4 | RSI | 2 | 2 |
+| L2 | MMI | 3 | 3 |
+| L3 | A/D Ratio | 3 | 3 |
+| L2 | FII Long/Short | 3 (contrarian) | 2 (momentum) |
+| L2 | FII Positioning | 1 | 1 |
+| L2 | Nifty PE | 2 | 2 |
+| L3 | Straddle IV | 1 | 1 |
+| **Total** | | **~27** | **~26** |
 
 ---
 
