@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
-import { cn, isNseMarketOpen, isToday, normalizeLiveStatus } from '@/lib/utils'
+import { cn, isToday, normalizeLiveStatus } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -512,33 +512,6 @@ function buildLiveDataset(funds: UpstoxFundsV3, orders: LiveOrder[]): Dataset {
   }
 }
 
-/**
- * Returns an empty dataset shown when the NSE market is closed.
- * Prevents unnecessary API calls to Upstox outside trading hours.
- */
-function buildMarketClosedDataset(): Dataset {
-  return {
-    mode: 'live',
-    stats: [
-      {
-        title: 'Market Status',
-        value: 'Closed',
-        subValue: 'NSE trading hours: 09:15 – 15:30 IST, Mon–Fri',
-        change: 'Live data unavailable outside market hours',
-        changeUp: false,
-        icon: <ShieldAlert size={18} />,
-        iconClassName: 'text-muted-foreground bg-muted/30',
-      },
-    ],
-    openRows: [],
-    closedRows: [],
-    pnlTotal: 0,
-    tradesTodayLabel: 'Market closed',
-    sourceNote:
-      'Live order data is only fetched during NSE market hours (09:15–15:30 IST).',
-  }
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCards({ stats }: { stats: StatCard[] }) {
@@ -776,11 +749,6 @@ export function LiveTradesPage() {
         // Guard 1: no broker token
         if (!token)
           throw new Error('No active broker token — connect Upstox first.')
-        // Guard 2: outside NSE market hours — skip live API calls
-        if (!isNseMarketOpen()) {
-          setDataset(buildMarketClosedDataset())
-          return
-        }
         const [funds, orders] = await Promise.all([
           fetchFunds(token),
           fetchOrders(token),

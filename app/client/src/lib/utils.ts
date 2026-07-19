@@ -30,7 +30,13 @@ export function isNseMarketOpen(): boolean {
  */
 export function isToday(isoLike: string | null | undefined): boolean {
   if (!isoLike) return false
-  return isoLike.slice(0, 10) === new Date().toISOString().slice(0, 10)
+  const nowUtc = Date.now()
+  const istOffsetMs = 5.5 * 60 * 60 * 1000
+  const todayIst = new Date(nowUtc + istOffsetMs)
+  const yyyy = todayIst.getUTCFullYear()
+  const mm = String(todayIst.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(todayIst.getUTCDate()).padStart(2, '0')
+  return isoLike.slice(0, 10) === `${yyyy}-${mm}-${dd}`
 }
 
 /**
