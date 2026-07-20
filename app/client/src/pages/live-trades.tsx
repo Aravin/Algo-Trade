@@ -301,7 +301,7 @@ function buildPaperDataset(
       pnl = isSelling
         ? (t.entry_price - ltp) * t.quantity
         : (ltp - t.entry_price) * t.quantity
-      pnlPct = (pnl / t.entry_value) * 100
+      pnlPct = t.entry_value > 0 ? (pnl / t.entry_value) * 100 : 0
       unrealizedToday += pnl
     }
 

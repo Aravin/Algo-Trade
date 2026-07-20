@@ -1679,18 +1679,23 @@ async function handleGlobalIndices(): Promise<Response> {
       openingSignal,
     }
   } else {
-    // If not found in upstream API, fallback to calculated value based on Dow Futures
+    // If not found in upstream API, fallback to signal derived from Dow Futures only.
+    // Price is intentionally null so the UI renders "—" instead of a stale invented level.
     const dowFuture = regions.US?.find((item) =>
       item.displayName.toLowerCase().includes('future'),
     )
-    const changePct = dowFuture ? Number(dowFuture.change ?? 0) : -0.15
-    const price = 24312.5
-    const changePts = parseFloat((price * (changePct / 100)).toFixed(1))
+    const changePct = dowFuture ? Number(dowFuture.change ?? 0) : null
     const openingSignal =
-      changePct > 0.1 ? 'Gap Up' : changePct < -0.1 ? 'Gap Down' : 'Flat'
+      changePct !== null
+        ? changePct > 0.1
+          ? 'Gap Up'
+          : changePct < -0.1
+            ? 'Gap Down'
+            : 'Flat'
+        : null
     giftNifty = {
-      price,
-      changePts,
+      price: null,
+      changePts: null,
       changePct,
       openingSignal,
     }

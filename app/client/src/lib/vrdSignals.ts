@@ -276,12 +276,6 @@ export function classifyNews(items: UpstoxNewsItem[]): NewsAlert[] {
 
   for (const item of items) {
     const headline = item.headline || ''
-    if (headline) {
-      if (seenHeadlines.has(headline)) {
-        continue
-      }
-      seenHeadlines.add(headline)
-    }
 
     // 1. Time filter: skip items older than 24 hours or missing timestamp
     if (
@@ -289,6 +283,13 @@ export function classifyNews(items: UpstoxNewsItem[]): NewsAlert[] {
       now - item.published_timestamp > ONE_DAY_MS
     ) {
       continue
+    }
+
+    if (headline) {
+      if (seenHeadlines.has(headline)) {
+        continue
+      }
+      seenHeadlines.add(headline)
     }
 
     // 2. Defensive checks for headline/summary
