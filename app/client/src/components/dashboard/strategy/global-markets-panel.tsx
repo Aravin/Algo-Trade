@@ -2,6 +2,7 @@ import { Globe } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { GlobalIndexItem } from '@/hooks/useStrategyBot'
 import { evaluateGlobalSentiment } from '@/lib/v3Sentiment'
+import { InfoTooltip } from '@/components/ui/tooltip'
 
 interface MarketConfig {
   key: string | null
@@ -133,6 +134,7 @@ export function GlobalMarketsPanel({
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Globe size={15} className="text-primary animate-pulse" />
           Global Markets & Indicators
+          <InfoTooltip content="Monitors major US and Asian market benchmark indices, crude oil, currency, and gold to establish global market trend alignment." />
           {globalSentiment && (
             <span
               className={`ml-auto text-[11px] font-mono px-2 py-0.5 rounded-full border ${sentimentColor}`}

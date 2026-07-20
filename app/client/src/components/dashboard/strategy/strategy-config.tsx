@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { InfoTooltip } from '@/components/ui/tooltip'
 import { saveStrategyConfig } from '@/lib/strategyConfig'
 
 function Field({
@@ -14,6 +15,7 @@ function Field({
   step,
   min,
   max,
+  tooltip,
 }: {
   label: string
   value: string | number
@@ -22,10 +24,14 @@ function Field({
   step?: number
   min?: number
   max?: number
+  tooltip?: string
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs text-muted-foreground">{label}</label>
+      <label className="text-xs text-muted-foreground flex items-center gap-1">
+        {label}
+        {tooltip && <InfoTooltip content={tooltip} />}
+      </label>
       <input
         type={type}
         value={value}
@@ -70,6 +76,7 @@ export function StrategyConfig({
         <CardTitle className="text-sm flex items-center gap-2">
           <Settings size={14} className="text-primary" />
           Strategy Config
+          <InfoTooltip content="Adjust algorithmic strategy signal thresholds, risk management parameters, trade cutoffs, and execution mode." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
@@ -79,12 +86,14 @@ export function StrategyConfig({
             value={local.strongThreshold}
             min={1}
             onChange={(v) => set('strongThreshold', Number(v))}
+            tooltip="Minimum total score points needed to trigger a Strong signal (executes 100% position size)."
           />
           <Field
             label="Moderate Threshold"
             value={local.moderateThreshold}
             min={1}
             onChange={(v) => set('moderateThreshold', Number(v))}
+            tooltip="Minimum total score points needed to trigger a Moderate signal (executes 50% position size)."
           />
           <Field
             label="Max Profit %"
@@ -92,6 +101,7 @@ export function StrategyConfig({
             min={1}
             step={0.5}
             onChange={(v) => set('maxProfitPct', Number(v))}
+            tooltip="Take-profit percentage target to trigger order exit or trailing stop initialization."
           />
           <Field
             label="Max Loss %"
@@ -99,6 +109,7 @@ export function StrategyConfig({
             min={1}
             step={0.5}
             onChange={(v) => set('maxLossPct', Number(v))}
+            tooltip="Hard stop-loss percentage limit to close trade and prevent catastrophic loss."
           />
           <Field
             label="Max Trades/Day"
@@ -106,18 +117,21 @@ export function StrategyConfig({
             min={1}
             max={10}
             onChange={(v) => set('maxTradesPerDay', Number(v))}
+            tooltip="Maximum trade executions allowed per trading day to control overtrading."
           />
           <Field
             label="Last Entry Time"
             value={local.lastEntryTime}
             type="text"
             onChange={(v) => set('lastEntryTime', v)}
+            tooltip="Daily trading cutoff time (HH:MM). No new positions will be taken after this time."
           />
           <Field
             label="Polling Interval (s)"
             value={local.pollingIntervalSec}
             min={30}
             onChange={(v) => set('pollingIntervalSec', Number(v))}
+            tooltip="Refresh frequency in seconds for strategy ticks, technical indicators, and market breadth updates."
           />
           <Field
             label="OTM Skip Strikes"
@@ -125,11 +139,13 @@ export function StrategyConfig({
             min={0}
             max={10}
             onChange={(v) => set('otmSkip', Number(v))}
+            tooltip="Number of Out-of-the-Money strikes away from ATM to select when generating orders."
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">
+          <label className="text-xs text-muted-foreground flex items-center gap-1">
             Minimum Confidence
+            <InfoTooltip content="Minimum signal confidence required before executing automated orders." />
           </label>
           <select
             value={local.minConfidence}
@@ -146,8 +162,9 @@ export function StrategyConfig({
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">
+          <label className="text-xs text-muted-foreground flex items-center gap-1">
             Execution Mode
+            <InfoTooltip content="Switch between real Upstox broker order placement (Live) and virtual simulated execution (Paper)." />
           </label>
           <select
             value={local.executionMode}
@@ -164,7 +181,10 @@ export function StrategyConfig({
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Trade Type</label>
+          <label className="text-xs text-muted-foreground flex items-center gap-1">
+            Trade Type
+            <InfoTooltip content="Configure whether the strategy algorithm enters Option Buying, Option Selling, or Both." />
+          </label>
           <select
             value={local.tradeType}
             onChange={(e) =>

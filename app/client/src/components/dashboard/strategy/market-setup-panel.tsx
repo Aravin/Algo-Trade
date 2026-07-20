@@ -1,15 +1,18 @@
 import type { VrdData } from '@/lib/types'
 import { Globe } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InfoTooltip } from '@/components/ui/tooltip'
 
 function Item({
   label,
   value,
   positive,
+  tooltip,
 }: {
   label: string
   value: string | null
   positive?: boolean | null
+  tooltip?: string
 }) {
   const color =
     positive === true
@@ -19,7 +22,10 @@ function Item({
         : 'text-foreground'
   return (
     <div className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground flex items-center gap-1">
+        {label}
+        {tooltip && <InfoTooltip content={tooltip} />}
+      </span>
       <span className={`text-xs font-medium tabular-nums ${color}`}>
         {value ?? '—'}
       </span>
@@ -39,6 +45,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
         <CardTitle className="flex items-center gap-2 text-sm">
           <Globe size={14} className="text-primary" />
           Market Setup
+          <InfoTooltip content="Macro & sentiment setup (V3 engine) including India VIX volatility, FII derivatives positioning, Nifty PE valuation, and Market Mood Index." />
           {vrdData && (
             <span className="ml-auto text-xs text-muted-foreground font-normal">
               {new Date(vrdData.fetchedAt).toLocaleTimeString('en-IN', {
@@ -55,7 +62,12 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Volatility
             </p>
-            <Item label="India VIX" value={vixLabel} positive={vixOk} />
+            <Item
+              label="India VIX"
+              value={vixLabel}
+              positive={vixOk}
+              tooltip="India Volatility Index. Measures 30-day expected market volatility from option prices. 10-25 is normal; >25 signals high volatility/fear; <10 signals low volatility."
+            />
           </div>
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">
@@ -73,6 +85,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
                 fii?.longPct !== undefined &&
                 fii.longPct > 50
               }
+              tooltip="Percentage of Index Futures contracts held long by Foreign Institutional Investors. >50% indicates bullish institutional bias."
             />
             <Item
               label="Short %"
@@ -82,6 +95,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
                   : null
               }
               positive={null}
+              tooltip="Percentage of Index Futures contracts held short by FIIs. >70-90% signals extreme short overhang with potential for short-covering rallies."
             />
           </div>
           <div>
@@ -101,11 +115,13 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
                 vrdData?.niftyPe?.pe !== undefined &&
                 vrdData.niftyPe.pe < 24
               }
+              tooltip="Nifty 50 Price-to-Earnings Ratio. Indicates overall market valuation relative to trailing earnings."
             />
             <Item
               label="PE Label"
               value={vrdData?.niftyPe?.label ?? null}
               positive={null}
+              tooltip="Qualitative market valuation regime (e.g., Fair Valuation, Overvalued, Synthetic Overvaluation)."
             />
           </div>
           <div>
@@ -125,11 +141,13 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
                 vrdData?.mmi?.score !== undefined &&
                 vrdData.mmi.score < 50
               }
+              tooltip="Market Mood Index score (0-100). Aggregates sentiment indicators. <30 = Fear/Extreme Fear; >70 = Greed/Extreme Greed."
             />
             <Item
               label="MMI Label"
               value={vrdData?.mmi?.label ?? null}
               positive={null}
+              tooltip="Current Market Mood Index sentiment classification."
             />
           </div>
         </div>

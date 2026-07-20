@@ -2,6 +2,7 @@ import type { VrdData } from '@/lib/types'
 import { Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { InfoTooltip } from '@/components/ui/tooltip'
 import { scoreADRatio, scoreStraddleIV } from '@/lib/vrdSignals'
 
 function PcrZoneBadge({ zone }: { zone: string | null | undefined }) {
@@ -29,6 +30,7 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
           <CardTitle className="text-sm flex items-center gap-2">
             <Activity size={14} className="text-primary" />
             Market Breadth
+            <InfoTooltip content="Market participation, Put-Call Ratio (PCR), and Straddle Implied Volatility (IV) regime." />
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -63,14 +65,16 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         <CardTitle className="text-sm flex items-center gap-2">
           <Activity size={14} className="text-primary" />
           Market Breadth
+          <InfoTooltip content="Measures stock participation in Nifty 50 (Advances/Declines), option market sentiment (PCR), and option premium volatility (Straddle IV)." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
         {/* A/D Ratio */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
               Advances / Declines
+              <InfoTooltip content="Ratio of advancing vs declining Nifty 50 stocks. Ratio > 1.5 indicates broad-based healthy rally; < 0.6 indicates broad market weakness." />
             </span>
             <span className="text-xs font-medium tabular-nums">
               {ad?.advances ?? '—'}↑ {ad?.declines ?? '—'}↓
@@ -88,7 +92,10 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         {/* PCR Zone */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Put Call Ratio</p>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              Put Call Ratio
+              <InfoTooltip content="Ratio of Total Put OI to Total Call OI. > 1.3 indicates Bullish market support (high put writing); < 0.7 indicates Bearish overhead resistance." />
+            </span>
             <p className="text-sm font-semibold mt-0.5">
               {vrdData.pcr?.value ?? '—'}
             </p>
@@ -99,7 +106,10 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         {/* Straddle IV */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Straddle IV</p>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              Straddle IV
+              <InfoTooltip content="ATM Straddle Implied Volatility. Elevated IV indicates high option premiums favoring option sellers; lower IV favors option buyers." />
+            </span>
             <p className="text-xs text-muted-foreground/70 mt-0.5">
               {ivS.label}
             </p>
