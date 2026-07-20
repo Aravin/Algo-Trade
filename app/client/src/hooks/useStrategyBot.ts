@@ -12,6 +12,8 @@ import type {
   PaperTrade,
   VrdData,
   NiftySentiment,
+  UpstoxNewsItem,
+  NewsAlert,
 } from '@/lib/types'
 import {
   useState,
@@ -34,7 +36,7 @@ import {
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
-import { scoreStraddleIV } from '@/lib/vrdSignals'
+import { scoreStraddleIV, classifyNews } from '@/lib/vrdSignals'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
@@ -547,6 +549,7 @@ async function fetchMarketSentiment(
     ratio: number
     total: number
   } | null,
+  giftNifty: VrdData['giftNifty'],
 ): Promise<VrdData> {
   sourceUpdate('vix', 'pending')
   sourceUpdate('upstox/fii', 'pending')
@@ -554,11 +557,12 @@ async function fetchMarketSentiment(
   sourceUpdate('upstox/pcr', 'pending')
   sourceUpdate('upstox/max-pain', 'pending')
   sourceUpdate('synthetic/value', 'pending')
+  sourceUpdate('upstox/news', 'pending')
 
   const latestExpiry = optionChain[0]?.expiry ?? ''
 
-  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes] = await Promise.allSettled(
-    [
+  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes, newsRes] =
+    await Promise.allSettled([
       safeFetch<{ vix: number | null }>('/api/market/vix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -613,8 +617,19 @@ async function fetchMarketSentiment(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, expiry: latestExpiry }),
       }),
-    ],
-  )
+      safeFetch<{
+        status: string
+        data?: Record<string, UpstoxNewsItem[]>
+      }>('/api/market/upstox/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          category: 'instrument_keys',
+          instrumentKeys: 'NSE_INDEX|Nifty 50',
+        }),
+      }),
+    ])
 
   // VIX
   let vix: number | null = null
@@ -638,8 +653,11 @@ async function fetchMarketSentiment(
   }
 
   // FII
-  let fiiLongShort: { longPct: number | null; shortPct: number | null } | null =
-    null
+  let fiiLongShort: {
+    longPct: number | null
+    shortPct: number | null
+    shortPctTrend: 'Rising' | 'Falling' | 'Stable' | null
+  } | null = null
   let fiiPositioning: {
     netPosition: number | null
     consecutiveShortDays: number | null
@@ -663,9 +681,30 @@ async function fetchMarketSentiment(
       const total = long + short
 
       if (total > 0) {
+        let shortPctTrend: 'Rising' | 'Falling' | 'Stable' | null = null
+        if (sortedFii.length >= 2) {
+          const getShortPct = (entry: (typeof sortedFii)[0]) => {
+            const l = entry.total_long_contracts ?? 0
+            const s = entry.total_short_contracts ?? 0
+            return l + s > 0 ? (s / (l + s)) * 100 : 0
+          }
+          const todayShortPct = getShortPct(sortedFii[0])
+          const comparisonEntry = sortedFii[Math.min(sortedFii.length - 1, 3)]
+          const pastShortPct = getShortPct(comparisonEntry)
+
+          if (todayShortPct - pastShortPct > 1.5) {
+            shortPctTrend = 'Rising'
+          } else if (pastShortPct - todayShortPct > 1.5) {
+            shortPctTrend = 'Falling'
+          } else {
+            shortPctTrend = 'Stable'
+          }
+        }
+
         fiiLongShort = {
           longPct: parseFloat(((long / total) * 100).toFixed(1)),
           shortPct: parseFloat(((short / total) * 100).toFixed(1)),
+          shortPctTrend,
         }
         fiiPositioning = {
           netPosition: long - short,
@@ -689,7 +728,7 @@ async function fetchMarketSentiment(
           mkLog(
             'info',
             'fii',
-            `FII Futures: L=${fiiLongShort.longPct}% S=${fiiLongShort.shortPct}% Net=${fiiPositioning.netPosition}`,
+            `FII Futures: L=${fiiLongShort.longPct}% S=${fiiLongShort.shortPct}% (${fiiLongShort.shortPctTrend}) Net=${fiiPositioning.netPosition}`,
           ),
         )
         sourceUpdate('upstox/fii', 'ok')
@@ -709,7 +748,11 @@ async function fetchMarketSentiment(
     const proxyFlow = computeProxyFlow(optionChain, niftyLtp)
     fiiLongShort =
       proxyFlow.longPct !== null && proxyFlow.shortPct !== null
-        ? { longPct: proxyFlow.longPct, shortPct: proxyFlow.shortPct }
+        ? {
+            longPct: proxyFlow.longPct,
+            shortPct: proxyFlow.shortPct,
+            shortPctTrend: 'Stable',
+          }
         : null
     fiiPositioning =
       proxyFlow.netPosition !== null
@@ -776,8 +819,9 @@ async function fetchMarketSentiment(
   addLog(mkLog('info', 'pcr', 'Option PCR=' + effectivePcr.toFixed(3)))
 
   // Max Pain
+  let maxPain: number | null = null
   if (maxPainRes.status === 'fulfilled' && !maxPainRes.value[1]) {
-    const maxPain = maxPainRes.value[0]?.data?.max_pain ?? null
+    maxPain = maxPainRes.value[0]?.data?.max_pain ?? null
     if (maxPain !== null) {
       addLog(
         mkLog('info', 'upstox/max-pain', `Upstox Max Pain Strike=${maxPain}`),
@@ -788,6 +832,26 @@ async function fetchMarketSentiment(
     }
   } else {
     sourceUpdate('upstox/max-pain', 'error')
+  }
+
+  // Support and Resistance walls from optionChain Open Interest
+  let supportWall: number | null = null
+  let resistanceWall: number | null = null
+  if (optionChain.length > 0) {
+    let maxPutOi = -1
+    let maxCallOi = -1
+    for (const strike of optionChain) {
+      const putOi = strike.put_options?.market_data?.oi ?? 0
+      const callOi = strike.call_options?.market_data?.oi ?? 0
+      if (putOi > maxPutOi) {
+        maxPutOi = putOi
+        supportWall = strike.strike_price
+      }
+      if (callOi > maxCallOi) {
+        maxCallOi = callOi
+        resistanceWall = strike.strike_price
+      }
+    }
   }
 
   // Compute straddle IV from option chain
@@ -845,6 +909,33 @@ async function fetchMarketSentiment(
     ),
   )
 
+  // News Alerts
+  let newsAlerts: NewsAlert[] = []
+  if (newsRes.status === 'fulfilled' && !newsRes.value[1]) {
+    const rawNews = newsRes.value[0]?.data ?? {}
+    const newsItems = Array.isArray(rawNews)
+      ? rawNews
+      : Object.values(rawNews).flat()
+    try {
+      newsAlerts = classifyNews(newsItems)
+      addLog(
+        mkLog(
+          'info',
+          'upstox/news',
+          `Fetched ${newsItems.length} news articles; classified ${newsAlerts.length} event alerts.`,
+        ),
+      )
+      sourceUpdate('upstox/news', 'ok')
+    } catch (e) {
+      addLog(
+        mkLog('error', 'upstox/news', 'classification failed: ' + String(e)),
+      )
+      sourceUpdate('upstox/news', 'error')
+    }
+  } else {
+    sourceUpdate('upstox/news', 'error')
+  }
+
   return {
     mmi: { score: mmi.score, label: mmi.label },
     advancesDeclines:
@@ -879,6 +970,11 @@ async function fetchMarketSentiment(
     },
     niftyPe: niftyPe,
     vix,
+    giftNifty,
+    supportWall,
+    resistanceWall,
+    maxPain,
+    newsAlerts,
     fetchedAt: new Date().toISOString(),
   }
 }
@@ -899,6 +995,7 @@ async function fetchMarket(
     total: number
   } | null
   globalIndices: GlobalIndexItem[]
+  giftNifty: VrdData['giftNifty']
 }> {
   addLog(
     mkLog('debug', 'market', 'fetching candles + breadth + option contracts'),
@@ -943,6 +1040,7 @@ async function fetchMarket(
       safeFetch<{
         status: string
         data?: GlobalIndexItem[]
+        giftNifty: VrdData['giftNifty']
       }>('/api/market/upstox/global-indices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1063,11 +1161,13 @@ async function fetchMarket(
   let globalSentiment: ReturnType<typeof evaluateGlobalSentiment> = 'neutral'
   let globalSentimentFetched = false
   let globalIndices: GlobalIndexItem[] = []
+  let giftNifty: VrdData['giftNifty'] = null
   if (globalRes.status === 'fulfilled' && !globalRes.value[1]) {
     const gData = globalRes.value[0]?.data ?? []
     globalIndices = gData
     globalSentiment = evaluateGlobalSentiment(gData)
     globalSentimentFetched = true
+    giftNifty = globalRes.value[0]?.giftNifty ?? null
     addLog(
       mkLog(
         'info',
@@ -1132,7 +1232,7 @@ async function fetchMarket(
     addLog(mkLog('error', 'v3', 'compute failed: ' + (e as Error).message))
   }
 
-  return { candles, optionChain, v3, breadth, globalIndices }
+  return { candles, optionChain, v3, breadth, globalIndices, giftNifty }
 }
 
 const LOT_SIZE = 25
@@ -1234,7 +1334,8 @@ export function useStrategyBot(token: string | null) {
 
       // Step 1: fetch candles + option chain + V3 signal in parallel
       const market = await fetchMarket(token, (e) => tickLogs.push(e), srcUpd)
-      const { candles, optionChain, v3, breadth, globalIndices } = market
+      const { candles, optionChain, v3, breadth, globalIndices, giftNifty } =
+        market
 
       if (!candles.length) {
         const canUseSnapshot = Boolean(
@@ -1279,6 +1380,7 @@ export function useStrategyBot(token: string | null) {
         optionChain,
         indicators,
         breadth,
+        giftNifty,
       )
       saveVrdCache(vrdData)
       log(
@@ -1286,8 +1388,13 @@ export function useStrategyBot(token: string | null) {
         'sentiment',
         `mmi=${vrdData.mmi?.score} vix=${vrdData.vix} pe=${vrdData.niftyPe?.pe} A/D=${vrdData.advancesDeclines?.advances}↑${vrdData.advancesDeclines?.declines}↓`,
       )
-      const hardStop = runHardStopChecks(vrdData)
-      const allSignalData: AllSignalData = { v3, indicators, vrd: vrdData }
+      const hardStop = runHardStopChecks(vrdData, globalIndices)
+      const allSignalData: AllSignalData = {
+        v3,
+        indicators,
+        vrd: vrdData,
+        globalIndices,
+      }
       const finalSignal = getFinalSignal(allSignalData, config)
 
       log(
@@ -1326,8 +1433,10 @@ export function useStrategyBot(token: string | null) {
       })
 
       if (hardStop.blocked && hardStop.blockedDirection === 'BOTH') {
-        updateStatus({ state: 'STOPPED' })
-        return
+        if (!cur.position) {
+          updateStatus({ state: 'STOPPED' })
+          return
+        }
       }
 
       // Entry cutoff check
@@ -1370,8 +1479,9 @@ export function useStrategyBot(token: string | null) {
         ) {
           if (
             hardStop.blocked &&
-            ((hardStop.blockedDirection === 'CE' &&
-              finalSignal.signal === 'BUY_CE') ||
+            (hardStop.blockedDirection === 'BOTH' ||
+              (hardStop.blockedDirection === 'CE' &&
+                finalSignal.signal === 'BUY_CE') ||
               (hardStop.blockedDirection === 'PE' &&
                 finalSignal.signal === 'BUY_PE'))
           ) {
@@ -1670,10 +1780,11 @@ export function useStrategyBot(token: string | null) {
           )
         }
       } else if (cur.state === 'ORDERED' && cur.position) {
+        const posKey = cur.position.instrumentKey
         const match = optionChain.find(
           (o) =>
-            o.call_options.instrument_key === cur.position!.instrumentKey ||
-            o.put_options.instrument_key === cur.position!.instrumentKey,
+            o.call_options.instrument_key === posKey ||
+            o.put_options.instrument_key === posKey,
         )
         const currentPrice = match
           ? cur.position.direction === 'CE'
@@ -1684,11 +1795,19 @@ export function useStrategyBot(token: string | null) {
         let updatedLegs: PositionLeg[] | undefined
         if (cur.position.legs && cur.position.legs.length > 0) {
           updatedLegs = cur.position.legs.map((leg) => {
+            const legKey = leg.instrumentKey
             const legMatch = optionChain.find(
               (o) =>
-                o.call_options.instrument_key === leg.instrumentKey ||
-                o.put_options.instrument_key === leg.instrumentKey,
+                o.call_options.instrument_key === legKey ||
+                o.put_options.instrument_key === legKey,
             )
+            if (!legMatch && legKey) {
+              log(
+                'warn',
+                'position',
+                `leg instrument ${legKey} not found in chain`,
+              )
+            }
             const legCurrentPrice = legMatch
               ? leg.direction === 'CE'
                 ? legMatch.call_options.market_data.ltp
@@ -1724,10 +1843,15 @@ export function useStrategyBot(token: string | null) {
           currentPrice,
           config,
         )
-        const exit = signalExit || afterCutoff
+        const exit =
+          signalExit ||
+          afterCutoff ||
+          (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
         const reason = afterCutoff
           ? `EOD forced exit — after ${config.lastEntryTime}`
-          : signalReason
+          : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
+            ? `Hard Stop triggered — ${hardStop.reasons.join(', ')}`
+            : signalReason
         if (exit) {
           const legsToExit =
             cur.position.legs && cur.position.legs.length > 0
@@ -1845,7 +1969,10 @@ export function useStrategyBot(token: string | null) {
             }
           }
           const nextState: BotState =
-            cur.tradesCount >= config.maxTradesPerDay ? 'STOPPED' : 'RUNNING'
+            cur.tradesCount >= config.maxTradesPerDay ||
+            (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
+              ? 'STOPPED'
+              : 'RUNNING'
           updateStatus({
             state: nextState,
             position: null,

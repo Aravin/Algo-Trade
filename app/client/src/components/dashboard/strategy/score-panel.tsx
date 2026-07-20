@@ -1,6 +1,7 @@
 import type { AllSignalData, FinalSignal, StrategyConfig } from '@/lib/types'
 import { TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { InfoTooltip } from '@/components/ui/tooltip'
 import { scoreBullish, scoreBearish } from '@/lib/strategyEngine'
 
 function ScoreBar({
@@ -8,17 +9,22 @@ function ScoreBar({
   score,
   max,
   color,
+  tooltip,
 }: {
   label: string
   score: number
   max: number
   color: string
+  tooltip?: string
 }) {
   const pct = max > 0 ? Math.min(100, (score / max) * 100) : 0
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          {label}
+          {tooltip && <InfoTooltip content={tooltip} />}
+        </span>
         <span className="text-xs font-semibold tabular-nums">
           {score} / {max}
         </span>
@@ -86,6 +92,7 @@ export function ScorePanel({
         <CardTitle className="text-sm flex items-center gap-2">
           <TrendingUp size={14} className="text-primary" />
           Signal Scores
+          <InfoTooltip content="Aggregated quantitative scoring engine combining V3 Macro/Institutional setup and V4 1-min Technical indicators into actionable trades." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
@@ -97,20 +104,31 @@ export function ScorePanel({
                 score={finalSignal.bullScore}
                 max={finalSignal.scoreMax}
                 color="bg-success"
+                tooltip="Combined bullish score points across Macro, FII positioning, Advances/Declines, and Technical indicators for Buying Call Options (CE)."
               />
               <ScoreBar
                 label="Bearish (PE)"
                 score={finalSignal.bearScore}
                 max={finalSignal.scoreMax}
                 color="bg-destructive"
+                tooltip="Combined bearish score points across Macro, FII positioning, Advances/Declines, and Technical indicators for Buying Put Options (PE)."
               />
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>Strong ≥ {config.strongThreshold}</span>
-              <span>Moderate ≥ {config.moderateThreshold}</span>
+              <span className="flex items-center gap-1">
+                Strong ≥ {config.strongThreshold}
+                <InfoTooltip content="Score threshold required for a Strong confidence trade trigger (executes full position size)." />
+              </span>
+              <span className="flex items-center gap-1">
+                Moderate ≥ {config.moderateThreshold}
+                <InfoTooltip content="Score threshold required for a Moderate confidence trade trigger (executes half position size)." />
+              </span>
             </div>
             <div className={`rounded-lg border p-4 text-center ${style.bg}`}>
-              <p className="text-xs text-muted-foreground mb-1">Final Signal</p>
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <p className="text-xs text-muted-foreground">Final Signal</p>
+                <InfoTooltip content="Final automated trading decision after scoring threshold validation, confidence calculation, and hard-stop safety checks." />
+              </div>
               <p className={`text-2xl font-bold ${style.color}`}>
                 {style.label}
               </p>
@@ -122,17 +140,19 @@ export function ScorePanel({
                   ` · ${finalSignal.positionSize} position`}
               </p>
               <div className="flex items-center justify-center gap-3 mt-2 text-xs text-muted-foreground">
-                <span>
+                <span className="flex items-center gap-1">
                   V3:{' '}
                   <span className="font-medium text-foreground">
                     {finalSignal.v3}
                   </span>
+                  <InfoTooltip content="V3 Macro & Institutional layer bias signal (Hold, Bullish, or Bearish)." />
                 </span>
-                <span>
+                <span className="flex items-center gap-1">
                   V4:{' '}
                   <span className="font-medium text-foreground">
                     {finalSignal.v4}
                   </span>
+                  <InfoTooltip content="V4 1-minute Technical Indicator layer bias signal (Hold, Bullish, or Bearish)." />
                 </span>
               </div>
             </div>

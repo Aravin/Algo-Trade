@@ -1,6 +1,6 @@
 // Institutional signal scoring — converts live Upstox + synthetic data into scored points
 
-import type { VrdScore } from './types'
+import type { VrdScore, UpstoxNewsItem, NewsAlert } from './types'
 
 // ─── MMI ─────────────────────────────────────────────────────────────────────
 export function scoreMMI(
@@ -90,6 +90,7 @@ export function scoreADRatio(
 export function scoreFiiLongShort(
   longPct: number | null,
   shortPct: number | null,
+  shortPctTrend?: 'Rising' | 'Falling' | 'Stable' | null,
 ): VrdScore & { contrarian: boolean; direction: 'BULL' | 'BEAR' | 'NEUTRAL' } {
   if (longPct === null || shortPct === null) {
     return {
@@ -105,10 +106,13 @@ export function scoreFiiLongShort(
   let contrarian = false
   let direction: 'BULL' | 'BEAR' | 'NEUTRAL'
   if (shortPct >= 80) {
-    points = 3
+    points = shortPctTrend === 'Falling' ? 4 : 3
     contrarian = true
     direction = 'BULL'
-    label = `FII ${shortPct.toFixed(1)}% short — short-cover risk`
+    label =
+      shortPctTrend === 'Falling'
+        ? `FII ${shortPct.toFixed(1)}% short — ACTIVE short covering rally`
+        : `FII ${shortPct.toFixed(1)}% short — short-cover risk`
   } else if (shortPct >= 60) {
     points = 2
     direction = 'BULL'
@@ -228,4 +232,122 @@ export function scoreStraddleIV(
     label: 'IV below avg — buying cheap',
     preferBuy: true,
   }
+}
+
+const MACRO_KEYWORDS = [
+  'fed',
+  'fomc',
+  'rbi',
+  'interest rate',
+  'inflation',
+  'cpi',
+  'gdp',
+  'war',
+  'geopolitical',
+  'budget',
+  'crude oil',
+  'brent',
+]
+
+const EARNINGS_KEYWORDS = [
+  'earnings',
+  'q1',
+  'q2',
+  'q3',
+  'q4',
+  'net profit',
+  'dividend',
+  'quarterly results',
+  'earnings results',
+  'financial results',
+]
+
+function matchesKeyword(content: string, kw: string): boolean {
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`\\b${escaped}s?\\b`, 'i')
+  return regex.test(content)
+}
+
+export function classifyNews(items: UpstoxNewsItem[]): NewsAlert[] {
+  const alerts: NewsAlert[] = []
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000
+  const now = Date.now()
+  const seenHeadlines = new Set<string>()
+
+  for (const item of items) {
+    const headline = item.headline || ''
+
+    // 1. Time filter: skip items older than 24 hours or missing timestamp
+    if (
+      !item.published_timestamp ||
+      now - item.published_timestamp > ONE_DAY_MS
+    ) {
+      continue
+    }
+
+    if (headline) {
+      if (seenHeadlines.has(headline)) {
+        continue
+      }
+      seenHeadlines.add(headline)
+    }
+
+    // 2. Defensive checks for headline/summary
+    const summary = item.summary || ''
+    const content = `${headline} ${summary}`.toLowerCase()
+
+    const matchedMacro = MACRO_KEYWORDS.filter((kw) =>
+      matchesKeyword(content, kw),
+    )
+    const matchedEarnings = EARNINGS_KEYWORDS.filter((kw) =>
+      matchesKeyword(content, kw),
+    )
+
+    if (matchedMacro.length > 0 || matchedEarnings.length > 0) {
+      const type = matchedMacro.length > 0 ? 'MACRO' : 'EARNINGS'
+      let severity: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW'
+
+      if (
+        (matchesKeyword(content, 'war') &&
+          !content.includes('price war') &&
+          !content.includes('trade war')) ||
+        matchesKeyword(content, 'escalate') ||
+        (matchesKeyword(content, 'rate hike') &&
+          !content.includes('no rate hike') &&
+          !content.includes('no interest rate hike')) ||
+        matchesKeyword(content, 'shock') ||
+        matchesKeyword(content, 'crash') ||
+        matchedMacro.length + matchedEarnings.length >= 3
+      ) {
+        severity = 'HIGH'
+      } else if (
+        matchesKeyword(content, 'earnings') ||
+        matchesKeyword(content, 'profit') ||
+        matchesKeyword(content, 'quarterly results') ||
+        matchedMacro.length + matchedEarnings.length >= 2
+      ) {
+        severity = 'MEDIUM'
+      }
+
+      // 3. Deterministic ID generation based on published_timestamp and headline slug
+      const cleanHeadline = headline
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 20)
+        .replace(/^-+|-+$/g, '') // trim leading/trailing dashes
+      const id = `${item.published_timestamp}-${cleanHeadline || 'news'}`
+
+      alerts.push({
+        id,
+        headline,
+        summary: item.summary,
+        type,
+        severity,
+        timestamp: item.published_timestamp,
+        matchedKeywords: [...matchedMacro, ...matchedEarnings],
+      })
+    }
+  }
+
+  return alerts
 }

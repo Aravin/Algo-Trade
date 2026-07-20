@@ -2,6 +2,7 @@ import type { VrdData } from '@/lib/types'
 import { Activity } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { InfoTooltip } from '@/components/ui/tooltip'
 import { scoreADRatio, scoreStraddleIV } from '@/lib/vrdSignals'
 
 function PcrZoneBadge({ zone }: { zone: string | null | undefined }) {
@@ -29,6 +30,7 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
           <CardTitle className="text-sm flex items-center gap-2">
             <Activity size={14} className="text-primary" />
             Market Breadth
+            <InfoTooltip content="Market participation, Put-Call Ratio (PCR), and Straddle Implied Volatility (IV) regime." />
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -63,14 +65,16 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         <CardTitle className="text-sm flex items-center gap-2">
           <Activity size={14} className="text-primary" />
           Market Breadth
+          <InfoTooltip content="Measures stock participation in Nifty 50 (Advances/Declines), option market sentiment (PCR), and option premium volatility (Straddle IV)." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
         {/* A/D Ratio */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
               Advances / Declines
+              <InfoTooltip content="Ratio of advancing vs declining Nifty 50 stocks. Ratio > 1.5 indicates broad-based healthy rally; < 0.6 indicates broad market weakness." />
             </span>
             <span className="text-xs font-medium tabular-nums">
               {ad?.advances ?? '—'}↑ {ad?.declines ?? '—'}↓
@@ -88,7 +92,10 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         {/* PCR Zone */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Put Call Ratio</p>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              Put Call Ratio
+              <InfoTooltip content="Ratio of Total Put OI to Total Call OI. > 1.3 indicates Bullish market support (high put writing); < 0.7 indicates Bearish overhead resistance." />
+            </span>
             <p className="text-sm font-semibold mt-0.5">
               {vrdData.pcr?.value ?? '—'}
             </p>
@@ -99,7 +106,10 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
         {/* Straddle IV */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">Straddle IV</p>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              Straddle IV
+              <InfoTooltip content="ATM Straddle Implied Volatility. Elevated IV indicates high option premiums favoring option sellers; lower IV favors option buyers." />
+            </span>
             <p className="text-xs text-muted-foreground/70 mt-0.5">
               {ivS.label}
             </p>
@@ -111,6 +121,44 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
             {ivS.preferBuy ? 'Buy Options' : 'Sell Options'}
           </Badge>
         </div>
+
+        {/* Support, Resistance and Max Pain range */}
+        {(vrdData.supportWall !== null ||
+          vrdData.resistanceWall !== null ||
+          vrdData.maxPain !== null) && (
+          <div className="border-t border-border/40 pt-3 mt-3">
+            <span className="text-xs font-semibold text-foreground flex items-center gap-1 mb-2">
+              OI Range Walls & Max Pain
+              <InfoTooltip content="Support Wall (highest Put OI strike), Resistance Wall (highest Call OI strike), and Max Pain strike derived from option chain OI profile." />
+            </span>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-success/5 border border-success/15 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Support Wall
+                </p>
+                <p className="text-xs font-bold text-success mt-0.5">
+                  {vrdData.supportWall ?? '—'}
+                </p>
+              </div>
+              <div className="bg-accent/40 border border-border/40 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Max Pain
+                </p>
+                <p className="text-xs font-bold text-foreground mt-0.5">
+                  {vrdData.maxPain ?? '—'}
+                </p>
+              </div>
+              <div className="bg-destructive/5 border border-destructive/15 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Resistance Wall
+                </p>
+                <p className="text-xs font-bold text-destructive mt-0.5">
+                  {vrdData.resistanceWall ?? '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

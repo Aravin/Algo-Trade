@@ -956,6 +956,39 @@ async function handleOptionContracts(request: Request): Promise<Response> {
   )
 }
 
+async function handleMarketQuotes(request: Request): Promise<Response> {
+  let body: { token: string; instrumentKeys: string }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  if (!body.token || !body.instrumentKeys)
+    return Response.json(
+      { error: 'Missing token or instrumentKeys' },
+      { status: 400 },
+    )
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(body.instrumentKeys)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch {
+    return Response.json(
+      { error: 'Failed to reach Upstox API' },
+      { status: 502 },
+    )
+  }
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
 // ─── Option chain ──────────────────────────────────────────────────────────────
 async function handleOptionChain(request: Request): Promise<Response> {
   let body: { token: string; expiryDate: string }
@@ -1392,6 +1425,49 @@ async function handleUpstoxMaxPain(request: Request): Promise<Response> {
   return Response.json(data, { status: upstream.status })
 }
 
+async function handleUpstoxNews(request: Request): Promise<Response> {
+  let body: {
+    token: string
+    category: string
+    instrumentKeys?: string
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.category)
+    return Response.json(
+      { error: 'Missing token or category' },
+      { status: 400 },
+    )
+
+  const qs = new URLSearchParams({
+    category: body.category,
+  })
+  if (body.instrumentKeys) {
+    qs.append('instrument_keys', body.instrumentKeys)
+  }
+
+  let upstream: Response
+  try {
+    upstream = await fetch(`https://api.upstox.com/v2/news?${qs.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${body.token}`,
+        Accept: 'application/json',
+      },
+    })
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox news: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
 async function handleUpstoxOi(request: Request): Promise<Response> {
   let body: { token: string; expiry: string; date?: string }
   try {
@@ -1577,7 +1653,59 @@ async function handleGlobalIndices(): Promise<Response> {
     change_per: item.change ?? 0,
   }))
 
-  return Response.json({ status: 'success', data: normalized })
+  const rawGift = regions.ASIA?.find(
+    (item) =>
+      item.displayName.toLowerCase().includes('gift') ||
+      item.displayName.toLowerCase().includes('sgx'),
+  )
+
+  let giftNifty: {
+    price: number | null
+    changePts: number | null
+    changePct: number | null
+    openingSignal: 'Gap Up' | 'Gap Down' | 'Flat' | null
+  } | null
+
+  if (rawGift) {
+    const price = Number(rawGift.price ?? 0)
+    const changePct = Number(rawGift.change ?? 0)
+    const changePts = parseFloat((price * (changePct / 100)).toFixed(2))
+    const openingSignal =
+      changePct > 0.1 ? 'Gap Up' : changePct < -0.1 ? 'Gap Down' : 'Flat'
+    giftNifty = {
+      price,
+      changePts,
+      changePct,
+      openingSignal,
+    }
+  } else {
+    // If not found in upstream API, fallback to signal derived from Dow Futures only.
+    // Price is intentionally null so the UI renders "—" instead of a stale invented level.
+    const dowFuture = regions.US?.find((item) =>
+      item.displayName.toLowerCase().includes('future'),
+    )
+    const changePct = dowFuture ? Number(dowFuture.change ?? 0) : null
+    const openingSignal =
+      changePct !== null
+        ? changePct > 0.1
+          ? 'Gap Up'
+          : changePct < -0.1
+            ? 'Gap Down'
+            : 'Flat'
+        : null
+    giftNifty = {
+      price: null,
+      changePts: null,
+      changePct,
+      openingSignal,
+    }
+  }
+
+  return Response.json({
+    status: 'success',
+    data: normalized,
+    giftNifty,
+  })
 }
 
 export default {
@@ -1602,6 +1730,9 @@ export default {
     }
     if (url.pathname === '/api/market/indices' && request.method === 'POST') {
       return handleMarketIndices(request)
+    }
+    if (url.pathname === '/api/market/quotes' && request.method === 'POST') {
+      return handleMarketQuotes(request)
     }
     if (
       url.pathname === '/api/broker/upstox/funds' &&
@@ -1680,6 +1811,12 @@ export default {
       request.method === 'POST'
     ) {
       return handleUpstoxSmartlistFutures(request)
+    }
+    if (
+      url.pathname === '/api/market/upstox/news' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxNews(request)
     }
     if (
       (url.pathname === '/api/market/upstox/global-indices' ||
