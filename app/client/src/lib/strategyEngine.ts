@@ -53,6 +53,16 @@ export function runHardStopChecks(
     }
   }
 
+  if (vrd.newsAlerts) {
+    const highMacro = vrd.newsAlerts.find(
+      (alert) => alert.type === 'MACRO' && alert.severity === 'HIGH',
+    )
+    if (highMacro) {
+      reasons.push(`Macro Guard: High Risk Event - ${highMacro.headline}`)
+      blockedDirection = 'BOTH'
+    }
+  }
+
   return { blocked: reasons.length > 0, blockedDirection, reasons }
 }
 
@@ -230,6 +240,40 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
     }
   }
 
+  // News Alerts Macro / Earnings Guard Penalty
+  if (data.vrd?.newsAlerts) {
+    const macroAlerts = data.vrd.newsAlerts.filter(
+      (alert) =>
+        alert.type === 'MACRO' &&
+        (alert.severity === 'HIGH' || alert.severity === 'MEDIUM'),
+    )
+    const earningsAlerts = data.vrd.newsAlerts.filter(
+      (alert) =>
+        alert.type === 'EARNINGS' &&
+        (alert.severity === 'HIGH' || alert.severity === 'MEDIUM'),
+    )
+    if (macroAlerts.length > 0) {
+      score += addScore(
+        bd,
+        'Macro',
+        'Macro News Penalty',
+        `Classified ${macroAlerts.length} risk events (penalty)`,
+        -2 * macroAlerts.length,
+        0,
+      )
+    }
+    if (earningsAlerts.length > 0) {
+      score += addScore(
+        bd,
+        'Macro',
+        'Earnings News Penalty',
+        `Classified ${earningsAlerts.length} earnings events (penalty)`,
+        -1 * earningsAlerts.length,
+        0,
+      )
+    }
+  }
+
   return { score: Math.max(0, score), max, breakdown: bd }
 }
 
@@ -378,6 +422,41 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         `Oil at $${brentPrice} >= $88 (bearish catalyst)`,
         1,
         1,
+      )
+    }
+  }
+
+  // News Alerts Macro / Earnings Guard confirmation & penalty
+  if (data.vrd?.newsAlerts) {
+    const macroAlerts = data.vrd.newsAlerts.filter(
+      (alert) =>
+        alert.type === 'MACRO' &&
+        (alert.severity === 'HIGH' || alert.severity === 'MEDIUM'),
+    )
+    const earningsAlerts = data.vrd.newsAlerts.filter(
+      (alert) =>
+        alert.type === 'EARNINGS' &&
+        (alert.severity === 'HIGH' || alert.severity === 'MEDIUM'),
+    )
+    if (macroAlerts.length > 0) {
+      max += macroAlerts.length
+      score += addScore(
+        bd,
+        'Macro',
+        'Macro News Confirmation',
+        `Classified ${macroAlerts.length} risk events (bearish catalyst)`,
+        1 * macroAlerts.length,
+        macroAlerts.length,
+      )
+    }
+    if (earningsAlerts.length > 0) {
+      score += addScore(
+        bd,
+        'Macro',
+        'Earnings News Penalty',
+        `Classified ${earningsAlerts.length} earnings events (penalty)`,
+        -1 * earningsAlerts.length,
+        0,
       )
     }
   }

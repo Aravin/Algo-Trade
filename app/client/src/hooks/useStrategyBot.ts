@@ -12,6 +12,8 @@ import type {
   PaperTrade,
   VrdData,
   NiftySentiment,
+  UpstoxNewsItem,
+  NewsAlert,
 } from '@/lib/types'
 import {
   useState,
@@ -34,7 +36,7 @@ import {
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
-import { scoreStraddleIV } from '@/lib/vrdSignals'
+import { scoreStraddleIV, classifyNews } from '@/lib/vrdSignals'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
@@ -555,11 +557,12 @@ async function fetchMarketSentiment(
   sourceUpdate('upstox/pcr', 'pending')
   sourceUpdate('upstox/max-pain', 'pending')
   sourceUpdate('synthetic/value', 'pending')
+  sourceUpdate('upstox/news', 'pending')
 
   const latestExpiry = optionChain[0]?.expiry ?? ''
 
-  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes] = await Promise.allSettled(
-    [
+  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes, newsRes] =
+    await Promise.allSettled([
       safeFetch<{ vix: number | null }>('/api/market/vix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -614,8 +617,19 @@ async function fetchMarketSentiment(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, expiry: latestExpiry }),
       }),
-    ],
-  )
+      safeFetch<{
+        status: string
+        data?: Record<string, UpstoxNewsItem[]>
+      }>('/api/market/upstox/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          category: 'instrument_keys',
+          instrumentKeys: 'NSE_INDEX|Nifty 50',
+        }),
+      }),
+    ])
 
   // VIX
   let vix: number | null = null
@@ -895,6 +909,33 @@ async function fetchMarketSentiment(
     ),
   )
 
+  // News Alerts
+  let newsAlerts: NewsAlert[] = []
+  if (newsRes.status === 'fulfilled' && !newsRes.value[1]) {
+    const rawNews = newsRes.value[0]?.data ?? {}
+    const newsItems = Array.isArray(rawNews)
+      ? rawNews
+      : Object.values(rawNews).flat()
+    try {
+      newsAlerts = classifyNews(newsItems)
+      addLog(
+        mkLog(
+          'info',
+          'upstox/news',
+          `Fetched ${newsItems.length} news articles; classified ${newsAlerts.length} event alerts.`,
+        ),
+      )
+      sourceUpdate('upstox/news', 'ok')
+    } catch (e) {
+      addLog(
+        mkLog('error', 'upstox/news', 'classification failed: ' + String(e)),
+      )
+      sourceUpdate('upstox/news', 'error')
+    }
+  } else {
+    sourceUpdate('upstox/news', 'error')
+  }
+
   return {
     mmi: { score: mmi.score, label: mmi.label },
     advancesDeclines:
@@ -933,6 +974,7 @@ async function fetchMarketSentiment(
     supportWall,
     resistanceWall,
     maxPain,
+    newsAlerts,
     fetchedAt: new Date().toISOString(),
   }
 }
@@ -1391,8 +1433,10 @@ export function useStrategyBot(token: string | null) {
       })
 
       if (hardStop.blocked && hardStop.blockedDirection === 'BOTH') {
-        updateStatus({ state: 'STOPPED' })
-        return
+        if (!cur.position) {
+          updateStatus({ state: 'STOPPED' })
+          return
+        }
       }
 
       // Entry cutoff check
@@ -1435,8 +1479,9 @@ export function useStrategyBot(token: string | null) {
         ) {
           if (
             hardStop.blocked &&
-            ((hardStop.blockedDirection === 'CE' &&
-              finalSignal.signal === 'BUY_CE') ||
+            (hardStop.blockedDirection === 'BOTH' ||
+              (hardStop.blockedDirection === 'CE' &&
+                finalSignal.signal === 'BUY_CE') ||
               (hardStop.blockedDirection === 'PE' &&
                 finalSignal.signal === 'BUY_PE'))
           ) {
@@ -1789,10 +1834,15 @@ export function useStrategyBot(token: string | null) {
           currentPrice,
           config,
         )
-        const exit = signalExit || afterCutoff
+        const exit =
+          signalExit ||
+          afterCutoff ||
+          (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
         const reason = afterCutoff
           ? `EOD forced exit — after ${config.lastEntryTime}`
-          : signalReason
+          : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
+            ? `Hard Stop triggered — ${hardStop.reasons.join(', ')}`
+            : signalReason
         if (exit) {
           const legsToExit =
             cur.position.legs && cur.position.legs.length > 0
@@ -1910,7 +1960,10 @@ export function useStrategyBot(token: string | null) {
             }
           }
           const nextState: BotState =
-            cur.tradesCount >= config.maxTradesPerDay ? 'STOPPED' : 'RUNNING'
+            cur.tradesCount >= config.maxTradesPerDay ||
+            (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
+              ? 'STOPPED'
+              : 'RUNNING'
           updateStatus({
             state: nextState,
             position: null,

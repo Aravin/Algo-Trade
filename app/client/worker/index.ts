@@ -1392,6 +1392,49 @@ async function handleUpstoxMaxPain(request: Request): Promise<Response> {
   return Response.json(data, { status: upstream.status })
 }
 
+async function handleUpstoxNews(request: Request): Promise<Response> {
+  let body: {
+    token: string
+    category: string
+    instrumentKeys?: string
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.category)
+    return Response.json(
+      { error: 'Missing token or category' },
+      { status: 400 },
+    )
+
+  const qs = new URLSearchParams({
+    category: body.category,
+  })
+  if (body.instrumentKeys) {
+    qs.append('instrument_keys', body.instrumentKeys)
+  }
+
+  let upstream: Response
+  try {
+    upstream = await fetch(`https://api.upstox.com/v2/news?${qs.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${body.token}`,
+        Accept: 'application/json',
+      },
+    })
+  } catch (e) {
+    return Response.json(
+      { error: `Failed to reach Upstox news: ${String(e)}` },
+      { status: 502 },
+    )
+  }
+
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
 async function handleUpstoxOi(request: Request): Promise<Response> {
   let body: { token: string; expiry: string; date?: string }
   try {
@@ -1727,6 +1770,12 @@ export default {
       request.method === 'POST'
     ) {
       return handleUpstoxSmartlistFutures(request)
+    }
+    if (
+      url.pathname === '/api/market/upstox/news' &&
+      request.method === 'POST'
+    ) {
+      return handleUpstoxNews(request)
     }
     if (
       (url.pathname === '/api/market/upstox/global-indices' ||

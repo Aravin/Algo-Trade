@@ -16,6 +16,7 @@ import { BotControls } from '@/components/dashboard/strategy/bot-controls'
 import { StrategyConfig as StrategyConfigPanel } from '@/components/dashboard/strategy/strategy-config'
 import { LogPanel } from '@/components/dashboard/strategy/log-panel'
 import { SourceStatusBar } from '@/components/dashboard/strategy/source-status-bar'
+import { NewsAlertsPanel } from '@/components/dashboard/strategy/news-alerts-panel'
 
 export function StrategiesPage() {
   const token = getAccounts().find((a) => a.accessToken)?.accessToken ?? null
@@ -73,6 +74,9 @@ export function StrategiesPage() {
 
       {/* Global Markets & Indicators */}
       <GlobalMarketsPanel globalIndices={bot.globalIndices} />
+
+      {/* News & Macro Alerts */}
+      <NewsAlertsPanel alerts={bot.vrdData?.newsAlerts} />
 
       {/* Institutional + Breadth */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

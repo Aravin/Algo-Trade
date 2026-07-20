@@ -102,6 +102,7 @@ export interface VrdData {
   supportWall: number | null
   resistanceWall: number | null
   maxPain: number | null
+  newsAlerts?: NewsAlert[]
   fetchedAt: string
 }
 
@@ -359,3 +360,21 @@ export type TradeRowStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'REJECTED'
+
+export interface UpstoxNewsItem {
+  headline: string
+  summary: string
+  thumbnail_url?: string
+  article_link?: string
+  published_timestamp: number // unix ms
+}
+
+export interface NewsAlert {
+  id: string
+  headline: string
+  summary: string
+  type: 'MACRO' | 'EARNINGS' | 'GENERAL'
+  severity: 'HIGH' | 'MEDIUM' | 'LOW'
+  timestamp: number
+  matchedKeywords: string[]
+}
