@@ -77,7 +77,11 @@ export interface VrdData {
     ratio: number | null
     label: string | null
   } | null
-  fiiLongShort: { longPct: number | null; shortPct: number | null } | null
+  fiiLongShort: {
+    longPct: number | null
+    shortPct: number | null
+    shortPctTrend: 'Rising' | 'Falling' | 'Stable' | null
+  } | null
   fiiPositioning: {
     netPosition: number | null
     consecutiveShortDays: number | null
@@ -89,6 +93,15 @@ export interface VrdData {
   } | null
   niftyPe: { pe: number | null; label: string | null } | null
   vix: number | null
+  giftNifty: {
+    price: number | null
+    changePts: number | null
+    changePct: number | null
+    openingSignal: 'Gap Up' | 'Gap Down' | 'Flat' | null
+  } | null
+  supportWall: number | null
+  resistanceWall: number | null
+  maxPain: number | null
   fetchedAt: string
 }
 
@@ -136,6 +149,7 @@ export interface AllSignalData {
   v3: V3OrderType
   indicators: IndicatorsResult
   vrd: VrdData | null
+  globalIndices?: McMarketItem[]
 }
 
 export interface PositionLeg {

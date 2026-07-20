@@ -121,6 +121,44 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
             {ivS.preferBuy ? 'Buy Options' : 'Sell Options'}
           </Badge>
         </div>
+
+        {/* Support, Resistance and Max Pain range */}
+        {(vrdData.supportWall !== null ||
+          vrdData.resistanceWall !== null ||
+          vrdData.maxPain !== null) && (
+          <div className="border-t border-border/40 pt-3 mt-3">
+            <span className="text-xs font-semibold text-foreground flex items-center gap-1 mb-2">
+              OI Range Walls & Max Pain
+              <InfoTooltip content="Support Wall (highest Put OI strike), Resistance Wall (highest Call OI strike), and Max Pain strike derived from option chain OI profile." />
+            </span>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-success/5 border border-success/15 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Support Wall
+                </p>
+                <p className="text-xs font-bold text-success mt-0.5">
+                  {vrdData.supportWall ?? '—'}
+                </p>
+              </div>
+              <div className="bg-accent/40 border border-border/40 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Max Pain
+                </p>
+                <p className="text-xs font-bold text-foreground mt-0.5">
+                  {vrdData.maxPain ?? '—'}
+                </p>
+              </div>
+              <div className="bg-destructive/5 border border-destructive/15 rounded-md p-1.5">
+                <p className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  Resistance Wall
+                </p>
+                <p className="text-xs font-bold text-destructive mt-0.5">
+                  {vrdData.resistanceWall ?? '—'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

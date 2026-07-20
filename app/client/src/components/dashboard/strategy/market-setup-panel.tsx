@@ -57,7 +57,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Volatility
@@ -148,6 +148,41 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
               value={vrdData?.mmi?.label ?? null}
               positive={null}
               tooltip="Current Market Mood Index sentiment classification."
+            />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              Pre-Market
+            </p>
+            <Item
+              label="Gift Nifty"
+              value={
+                vrdData?.giftNifty?.price !== null &&
+                vrdData?.giftNifty?.price !== undefined
+                  ? vrdData.giftNifty.price.toLocaleString('en-IN', {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 2,
+                    })
+                  : null
+              }
+              positive={null}
+              tooltip="Gift Nifty spot/future index price traded on NSE IX."
+            />
+            <Item
+              label="Gap Points"
+              value={
+                vrdData?.giftNifty?.changePts !== null &&
+                vrdData?.giftNifty?.changePts !== undefined
+                  ? `${vrdData.giftNifty.changePts > 0 ? '+' : ''}${vrdData.giftNifty.changePts} (${vrdData.giftNifty.changePct?.toFixed(2)}%)`
+                  : null
+              }
+              positive={
+                vrdData?.giftNifty?.changePts !== null &&
+                vrdData?.giftNifty?.changePts !== undefined
+                  ? vrdData.giftNifty.changePts > 0
+                  : null
+              }
+              tooltip="Expected index opening gap points and percentage based on Gift Nifty index premium/discount."
             />
           </div>
         </div>

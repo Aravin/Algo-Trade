@@ -75,6 +75,7 @@ export function InstitutionalPanel({ vrdData }: { vrdData: VrdData | null }) {
   const fiiLS = scoreFiiLongShort(
     vrdData.fiiLongShort?.longPct ?? null,
     vrdData.fiiLongShort?.shortPct ?? null,
+    vrdData.fiiLongShort?.shortPctTrend ?? null,
   )
   const fiiPos = scoreFiiPositioning(
     vrdData.fiiPositioning?.netPosition ?? null,

@@ -90,6 +90,7 @@ export function scoreADRatio(
 export function scoreFiiLongShort(
   longPct: number | null,
   shortPct: number | null,
+  shortPctTrend?: 'Rising' | 'Falling' | 'Stable' | null,
 ): VrdScore & { contrarian: boolean; direction: 'BULL' | 'BEAR' | 'NEUTRAL' } {
   if (longPct === null || shortPct === null) {
     return {
@@ -105,10 +106,13 @@ export function scoreFiiLongShort(
   let contrarian = false
   let direction: 'BULL' | 'BEAR' | 'NEUTRAL'
   if (shortPct >= 80) {
-    points = 3
+    points = shortPctTrend === 'Falling' ? 4 : 3
     contrarian = true
     direction = 'BULL'
-    label = `FII ${shortPct.toFixed(1)}% short — short-cover risk`
+    label =
+      shortPctTrend === 'Falling'
+        ? `FII ${shortPct.toFixed(1)}% short — ACTIVE short covering rally`
+        : `FII ${shortPct.toFixed(1)}% short — short-cover risk`
   } else if (shortPct >= 60) {
     points = 2
     direction = 'BULL'

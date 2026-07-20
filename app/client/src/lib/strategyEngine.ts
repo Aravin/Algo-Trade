@@ -17,10 +17,14 @@ import type {
   FinalSignal,
   AllSignalData,
   ActivePosition,
+  McMarketItem,
 } from './types'
 
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
-export function runHardStopChecks(vrd: VrdData | null): {
+export function runHardStopChecks(
+  vrd: VrdData | null,
+  globalIndices?: McMarketItem[] | null,
+): {
   blocked: boolean
   blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
   reasons: string[]
@@ -37,6 +41,18 @@ export function runHardStopChecks(vrd: VrdData | null): {
     reasons.push(vixCheck.label)
     blockedDirection = 'BOTH'
   }
+
+  if (globalIndices) {
+    const brent = globalIndices.find(
+      (item) => item.symbol.toLowerCase() === 'brent oil',
+    )
+    const brentPrice = brent?.last_price ? Number(brent.last_price) : null
+    if (brentPrice !== null && brentPrice >= 95) {
+      reasons.push(`Brent Crude $${brentPrice} >= $95 (Extreme Global Risk)`)
+      blockedDirection = 'BOTH'
+    }
+  }
+
   return { blocked: reasons.length > 0, blockedDirection, reasons }
 }
 
@@ -196,6 +212,24 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
     }
   }
 
+  // Brent Crude Overhang Penalty (Commodities)
+  if (data.globalIndices) {
+    const brent = data.globalIndices.find(
+      (item) => item.symbol.toLowerCase() === 'brent oil',
+    )
+    const brentPrice = brent?.last_price ? Number(brent.last_price) : null
+    if (brentPrice !== null && brentPrice >= 88) {
+      score += addScore(
+        bd,
+        'Macro',
+        'Brent Crude Overhang',
+        `Oil at $${brentPrice} >= $88 (penalty)`,
+        -2,
+        0,
+      )
+    }
+  }
+
   return { score: Math.max(0, score), max, breakdown: bd }
 }
 
@@ -325,6 +359,25 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         iv.label,
         Math.abs(iv.score),
         iv.max,
+      )
+    }
+  }
+
+  // Brent Crude Overhang Bonus (Commodities)
+  if (data.globalIndices) {
+    const brent = data.globalIndices.find(
+      (item) => item.symbol.toLowerCase() === 'brent oil',
+    )
+    const brentPrice = brent?.last_price ? Number(brent.last_price) : null
+    if (brentPrice !== null && brentPrice >= 88) {
+      max += 1
+      score += addScore(
+        bd,
+        'Macro',
+        'Brent Crude Overhang',
+        `Oil at $${brentPrice} >= $88 (bearish catalyst)`,
+        1,
+        1,
       )
     }
   }
