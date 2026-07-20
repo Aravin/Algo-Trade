@@ -1780,10 +1780,11 @@ export function useStrategyBot(token: string | null) {
           )
         }
       } else if (cur.state === 'ORDERED' && cur.position) {
+        const posKey = cur.position.instrumentKey
         const match = optionChain.find(
           (o) =>
-            o.call_options.instrument_key === cur.position!.instrumentKey ||
-            o.put_options.instrument_key === cur.position!.instrumentKey,
+            o.call_options.instrument_key === posKey ||
+            o.put_options.instrument_key === posKey,
         )
         const currentPrice = match
           ? cur.position.direction === 'CE'
@@ -1794,11 +1795,19 @@ export function useStrategyBot(token: string | null) {
         let updatedLegs: PositionLeg[] | undefined
         if (cur.position.legs && cur.position.legs.length > 0) {
           updatedLegs = cur.position.legs.map((leg) => {
+            const legKey = leg.instrumentKey
             const legMatch = optionChain.find(
               (o) =>
-                o.call_options.instrument_key === leg.instrumentKey ||
-                o.put_options.instrument_key === leg.instrumentKey,
+                o.call_options.instrument_key === legKey ||
+                o.put_options.instrument_key === legKey,
             )
+            if (!legMatch && legKey) {
+              log(
+                'warn',
+                'position',
+                `leg instrument ${legKey} not found in chain`,
+              )
+            }
             const legCurrentPrice = legMatch
               ? leg.direction === 'CE'
                 ? legMatch.call_options.market_data.ltp

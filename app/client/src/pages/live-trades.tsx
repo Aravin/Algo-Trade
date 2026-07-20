@@ -237,9 +237,35 @@ async function fetchOrders(token: string): Promise<LiveOrder[]> {
   return rows as LiveOrder[]
 }
 
+async function fetchQuotes(
+  token: string,
+  instrumentKeys: string,
+): Promise<Record<string, { last_price?: number }>> {
+  const res = await fetch('/api/market/quotes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, instrumentKeys }),
+  })
+  const payload = (await res.json()) as {
+    status?: string
+    data?: Record<string, { last_price?: number }>
+    errors?: { message?: string }[]
+    error?: string
+  }
+  if (!res.ok || payload.status !== 'success' || !payload.data) {
+    throw new Error(
+      payload.errors?.[0]?.message ?? payload.error ?? 'Failed to load quotes',
+    )
+  }
+  return payload.data
+}
+
 // ─── Dataset builders ─────────────────────────────────────────────────────────
 
-function buildPaperDataset(summary: PaperAccountSummary): Dataset {
+function buildPaperDataset(
+  summary: PaperAccountSummary,
+  quotes?: Record<string, { last_price?: number }>,
+): Dataset {
   const trades = summary.trades ?? []
   const openTrades = trades.filter((t) => t.status === 'OPEN')
   const closedTrades = trades.filter(
@@ -249,8 +275,56 @@ function buildPaperDataset(summary: PaperAccountSummary): Dataset {
     (s, t) => s + (t.realized_pnl ?? 0),
     0,
   )
+
+  let unrealizedToday = 0
+
+  const openRows: TradeRow[] = openTrades.map((t) => {
+    let tradeType = 'buying'
+    try {
+      const meta = JSON.parse(t.metadata_json ?? '{}') as {
+        tradeType?: string
+      } | null
+      if (meta?.tradeType) {
+        tradeType = meta.tradeType
+      }
+    } catch {
+      // ignore
+    }
+    const isSelling = tradeType === 'selling'
+
+    const quote = quotes ? quotes[t.instrument_key] : undefined
+    const ltp = quote?.last_price ?? null
+    let pnl: number | null = null
+    let pnlPct: number | null = null
+
+    if (ltp !== null) {
+      pnl = isSelling
+        ? (t.entry_price - ltp) * t.quantity
+        : (ltp - t.entry_price) * t.quantity
+      pnlPct = (pnl / t.entry_value) * 100
+      unrealizedToday += pnl
+    }
+
+    return {
+      id: t.id,
+      symbol: t.instrument_key,
+      type: inferType(t.instrument_key),
+      side: isSelling ? 'SELL' : 'BUY',
+      qty: t.quantity,
+      entryPrice: t.entry_price,
+      ltp,
+      pnl,
+      pnlPct,
+      status: 'ACTIVE',
+      entryTime: timeLabel(t.opened_at),
+    }
+  })
+
   const committedCapital = openTrades.reduce((s, t) => s + t.entry_value, 0)
-  const portfolioValue = summary.account.balance + committedCapital
+  const portfolioValue =
+    summary.account.balance + committedCapital + unrealizedToday
+  const totalPaperPnl = realizedToday + unrealizedToday
+
   const wins = closedTrades.filter((t) => (t.realized_pnl ?? 0) > 0).length
   const losses = closedTrades.filter((t) => (t.realized_pnl ?? 0) < 0).length
   const winRate =
@@ -259,20 +333,6 @@ function buildPaperDataset(summary: PaperAccountSummary): Dataset {
     acc[t.direction] = (acc[t.direction] ?? 0) + 1
     return acc
   }, {})
-
-  const openRows: TradeRow[] = openTrades.map((t) => ({
-    id: t.id,
-    symbol: t.instrument_key,
-    type: inferType(t.instrument_key),
-    side: 'BUY',
-    qty: t.quantity,
-    entryPrice: t.entry_price,
-    ltp: null,
-    pnl: null,
-    pnlPct: null,
-    status: 'ACTIVE',
-    entryTime: timeLabel(t.opened_at),
-  }))
 
   const closedRows: TradeRow[] = closedTrades.map((t) => {
     const pnl = t.realized_pnl ?? 0
@@ -309,16 +369,16 @@ function buildPaperDataset(summary: PaperAccountSummary): Dataset {
       },
       {
         title: 'Day P&L',
-        value: fmtCurrency(realizedToday, true),
+        value: fmtCurrency(totalPaperPnl, true),
         subValue: `Realised: ${fmtCurrency(realizedToday, true)}`,
         change:
           portfolioValue > 0
-            ? `${fmtPct((realizedToday / portfolioValue) * 100)} of portfolio`
+            ? `${fmtPct((totalPaperPnl / portfolioValue) * 100)} of portfolio`
             : '',
-        changeUp: realizedToday >= 0,
+        changeUp: totalPaperPnl >= 0,
         icon: <TrendingUp size={18} />,
         iconClassName:
-          realizedToday >= 0
+          totalPaperPnl >= 0
             ? 'text-success bg-success/15'
             : 'text-destructive bg-destructive/15',
       },
@@ -351,10 +411,11 @@ function buildPaperDataset(summary: PaperAccountSummary): Dataset {
     ],
     openRows,
     closedRows,
-    pnlTotal: realizedToday,
+    pnlTotal: totalPaperPnl,
     tradesTodayLabel: `${openTrades.length + closedTrades.length} paper trades`,
-    sourceNote:
-      'Paper mode uses D1-backed simulated account. LTP is not marked-to-market.',
+    sourceNote: quotes
+      ? 'Paper mode uses D1-backed simulated account. Marked-to-market using live quotes.'
+      : 'Paper mode uses D1-backed simulated account. LTP is not marked-to-market.',
   }
 }
 
@@ -744,7 +805,21 @@ export function LiveTradesPage() {
     try {
       if (m === 'paper') {
         const summary = await fetchPaperHistory()
-        setDataset(buildPaperDataset(summary))
+        const openTrades = (summary.trades ?? []).filter(
+          (t) => t.status === 'OPEN',
+        )
+        let quotes: Record<string, { last_price?: number }> | undefined
+        if (openTrades.length > 0 && token) {
+          const keys = Array.from(
+            new Set(openTrades.map((t) => t.instrument_key)),
+          ).join(',')
+          try {
+            quotes = await fetchQuotes(token, keys)
+          } catch (e) {
+            console.error('Failed to fetch quotes for open paper trades:', e)
+          }
+        }
+        setDataset(buildPaperDataset(summary, quotes))
       } else {
         // Guard 1: no broker token
         if (!token)

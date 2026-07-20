@@ -956,6 +956,39 @@ async function handleOptionContracts(request: Request): Promise<Response> {
   )
 }
 
+async function handleMarketQuotes(request: Request): Promise<Response> {
+  let body: { token: string; instrumentKeys: string }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+  if (!body.token || !body.instrumentKeys)
+    return Response.json(
+      { error: 'Missing token or instrumentKeys' },
+      { status: 400 },
+    )
+  let upstream: Response
+  try {
+    upstream = await fetch(
+      `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(body.instrumentKeys)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch {
+    return Response.json(
+      { error: 'Failed to reach Upstox API' },
+      { status: 502 },
+    )
+  }
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
 // ─── Option chain ──────────────────────────────────────────────────────────────
 async function handleOptionChain(request: Request): Promise<Response> {
   let body: { token: string; expiryDate: string }
@@ -1692,6 +1725,9 @@ export default {
     }
     if (url.pathname === '/api/market/indices' && request.method === 'POST') {
       return handleMarketIndices(request)
+    }
+    if (url.pathname === '/api/market/quotes' && request.method === 'POST') {
+      return handleMarketQuotes(request)
     }
     if (
       url.pathname === '/api/broker/upstox/funds' &&
