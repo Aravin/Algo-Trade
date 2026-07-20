@@ -189,6 +189,8 @@ const bottomItems: NavItem[] = [
   { icon: <Settings size={16} />, label: 'Settings', id: 'settings' },
 ]
 
+import { AppLogo } from '@/components/ui/app-logo'
+
 interface SidebarProps {
   activeItem: string
   onSelect: (id: string) => void
@@ -200,13 +202,8 @@ export function Sidebar({ activeItem, onSelect }: SidebarProps) {
   return (
     <aside className="flex flex-col w-[220px] min-h-dvh bg-sidebar border-r border-sidebar-border shrink-0">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-4 h-14">
-        <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary">
-          <TrendingUp size={14} className="text-primary-foreground" />
-        </div>
-        <span className="font-semibold text-sm tracking-tight text-sidebar-foreground">
-          AlgoTrade
-        </span>
+      <div className="flex items-center px-4 py-4 h-14">
+        <AppLogo size="sm" showText />
       </div>
 
       <Separator className="bg-sidebar-border" />

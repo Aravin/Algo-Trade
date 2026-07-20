@@ -12,7 +12,8 @@ import { hydrateStrategyConfig } from '@/lib/strategyConfig'
 import { useAuth0 } from '@auth0/auth0-react'
 import { AuthService } from '@/lib/auth'
 import { isAuth0Enabled } from '@/lib/auth0-config'
-import { ArrowRight, Cpu } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
+import { AppLogo } from '@/components/ui/app-logo'
 import './App.css'
 
 function Placeholder({ title }: { title: string }) {
@@ -125,8 +126,8 @@ function App() {
       <div className="relative flex flex-col items-center justify-center min-h-dvh bg-zinc-950 font-sans text-foreground">
         <div className="w-full max-w-sm p-6 flex flex-col items-center text-center">
           {/* Logo / Icon */}
-          <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-500/10 mb-6">
-            <Cpu size={24} />
+          <div className="mb-6">
+            <AppLogo size="lg" />
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
