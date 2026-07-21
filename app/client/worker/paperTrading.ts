@@ -244,6 +244,22 @@ export async function handlePaperReset(
   }
 }
 
+export function calculateOptionCharges(
+  tradeValue: number,
+  isSelling: boolean,
+): { totalCharges: number; brokerage: number; statutoryTaxes: number } {
+  const brokerage = 20
+  const stt = isSelling ? Number((tradeValue * 0.00125).toFixed(2)) : 0
+  const stampDuty = !isSelling ? Number((tradeValue * 0.00003).toFixed(2)) : 0
+  const exchangeFee = Number((tradeValue * 0.0005).toFixed(2))
+  const gst = Number(((brokerage + exchangeFee) * 0.18).toFixed(2))
+  const statutoryTaxes = Number(
+    (stt + stampDuty + exchangeFee + gst).toFixed(2),
+  )
+  const totalCharges = Number((brokerage + statutoryTaxes).toFixed(2))
+  return { totalCharges, brokerage, statutoryTaxes }
+}
+
 export async function handlePaperTradeEnter(
   request: Request,
   env: Env,
@@ -298,22 +314,24 @@ export async function handlePaperTradeEnter(
     } | null
     const tradeType = metadataObj?.tradeType ?? 'buying'
     const isSelling = tradeType === 'selling'
+    const charges = calculateOptionCharges(entryValue, isSelling)
 
     if (isSelling) {
-      const requiredMargin = quantity * 4000
+      const requiredMargin = quantity * 4000 + charges.totalCharges
       if (requiredMargin > account.balance) {
         return Response.json(
           {
-            error: `Insufficient paper credit for margin. Required ${requiredMargin}, available ${account.balance}`,
+            error: `Insufficient paper credit for margin & charges. Required ${requiredMargin}, available ${account.balance}`,
           },
           { status: 400 },
         )
       }
     } else {
-      if (entryValue > account.balance) {
+      const totalNeeded = entryValue + charges.totalCharges
+      if (totalNeeded > account.balance) {
         return Response.json(
           {
-            error: `Insufficient paper credit. Required ${entryValue}, available ${account.balance}`,
+            error: `Insufficient paper credit (including ₹${charges.totalCharges} fees). Required ${totalNeeded}, available ${account.balance}`,
           },
           { status: 400 },
         )
@@ -323,13 +341,22 @@ export async function handlePaperTradeEnter(
     const tradeId = makeId('paper_trade')
     const createdAt = nowIso()
     const balanceAfter = isSelling
-      ? Number((account.balance + entryValue).toFixed(2))
-      : Number((account.balance - entryValue).toFixed(2))
+      ? Number((account.balance + entryValue - charges.totalCharges).toFixed(2))
+      : Number((account.balance - entryValue - charges.totalCharges).toFixed(2))
 
-    const amountChange = isSelling ? entryValue : -entryValue
+    const amountChange = isSelling
+      ? Number((entryValue - charges.totalCharges).toFixed(2))
+      : Number((-entryValue - charges.totalCharges).toFixed(2))
     const noteStr = isSelling
-      ? `Paper SELL ${body.direction}`
-      : `Paper BUY ${body.direction}`
+      ? `Paper SELL ${body.direction} (Fee: ₹${charges.totalCharges})`
+      : `Paper BUY ${body.direction} (Fee: ₹${charges.totalCharges})`
+
+    const tradeMetadata = {
+      ...(typeof body.metadata === 'object' && body.metadata !== null
+        ? body.metadata
+        : {}),
+      entryCharges: charges,
+    }
 
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
@@ -347,7 +374,7 @@ export async function handlePaperTradeEnter(
         entryPrice,
         entryValue,
         createdAt,
-        JSON.stringify(body.metadata ?? null),
+        JSON.stringify(tradeMetadata),
       ),
       env.PAPER_TRADING_DB.prepare(
         'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -365,6 +392,7 @@ export async function handlePaperTradeEnter(
           quantity,
           entryPrice,
           entryValue,
+          charges,
         }),
         createdAt,
       ),
@@ -422,11 +450,18 @@ export async function handlePaperTradeExit(
       )
 
     let tradeType = 'buying'
+    let entryCharges = { totalCharges: 0 }
     if (trade.metadata_json) {
       try {
-        const meta = JSON.parse(trade.metadata_json) as { tradeType?: string }
+        const meta = JSON.parse(trade.metadata_json) as {
+          tradeType?: string
+          entryCharges?: { totalCharges: number }
+        }
         if (meta?.tradeType === 'selling') {
           tradeType = 'selling'
+        }
+        if (meta?.entryCharges) {
+          entryCharges = meta.entryCharges
         }
       } catch {
         /* ignore invalid metadata */
@@ -436,13 +471,38 @@ export async function handlePaperTradeExit(
 
     const closedAt = nowIso()
     const exitValue = Number((exitPrice * trade.quantity).toFixed(2))
-    const realizedPnl = isSelling
+    const exitCharges = calculateOptionCharges(exitValue, !isSelling)
+    const totalTradeFees = Number(
+      (entryCharges.totalCharges + exitCharges.totalCharges).toFixed(2),
+    )
+
+    const grossPnl = isSelling
       ? Number((trade.entry_value - exitValue).toFixed(2))
       : Number((exitValue - trade.entry_value).toFixed(2))
+    const realizedPnl = Number((grossPnl - totalTradeFees).toFixed(2))
+
     const balanceAfter = isSelling
-      ? Number((account.balance - exitValue).toFixed(2))
-      : Number((account.balance + exitValue).toFixed(2))
-    const amountChange = isSelling ? -exitValue : exitValue
+      ? Number(
+          (account.balance - exitValue - exitCharges.totalCharges).toFixed(2),
+        )
+      : Number(
+          (account.balance + exitValue - exitCharges.totalCharges).toFixed(2),
+        )
+    const amountChange = isSelling
+      ? Number((-exitValue - exitCharges.totalCharges).toFixed(2))
+      : Number((exitValue - exitCharges.totalCharges).toFixed(2))
+
+    const mergedMetadata = {
+      ...(trade.metadata_json
+        ? (JSON.parse(trade.metadata_json) as Record<string, unknown>)
+        : {}),
+      ...(typeof body.metadata === 'object' && body.metadata !== null
+        ? body.metadata
+        : {}),
+      exitCharges,
+      totalTradeFees,
+      grossPnl,
+    }
 
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
@@ -456,7 +516,7 @@ export async function handlePaperTradeExit(
         exitValue,
         realizedPnl,
         closedAt,
-        JSON.stringify(body.metadata ?? trade.metadata_json ?? null),
+        JSON.stringify(mergedMetadata),
         trade.id,
       ),
       env.PAPER_TRADING_DB.prepare(
@@ -468,14 +528,17 @@ export async function handlePaperTradeExit(
         amountChange,
         account.balance,
         balanceAfter,
-        `Paper EXIT ${trade.direction}`,
+        `Paper EXIT ${trade.direction} (Fee: ₹${exitCharges.totalCharges})`,
         JSON.stringify({
           tradeId: trade.id,
           instrumentKey: trade.instrument_key,
           quantity: trade.quantity,
           exitPrice,
           exitValue,
+          grossPnl,
+          totalTradeFees,
           realizedPnl,
+          exitCharges,
         }),
         closedAt,
       ),
