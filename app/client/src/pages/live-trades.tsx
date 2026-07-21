@@ -159,6 +159,14 @@ function inferType(symbol: string): TradeRow['type'] {
   return 'EQ'
 }
 
+function getLotSizeForSymbol(symbol: string): number {
+  const upper = symbol.toUpperCase()
+  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
+  if (upper.includes('FINNIFTY')) return 40
+  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
+  return 1
+}
+
 const typeVariant: Record<
   TradeRow['type'],
   'default' | 'destructive' | 'secondary' | 'warning'
@@ -663,7 +671,18 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
               <Badge variant={typeVariant[row.type]}>{row.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
-              {row.qty}
+              <div>
+                <span>{row.qty}</span>
+                {row.type !== 'EQ' && (
+                  <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                    ({Math.round(row.qty / getLotSizeForSymbol(row.symbol))}{' '}
+                    {Math.round(row.qty / getLotSizeForSymbol(row.symbol)) > 1
+                      ? 'lots'
+                      : 'lot'}
+                    )
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
               {row.entryPrice === null ? '—' : fmtCurrency(row.entryPrice)}
