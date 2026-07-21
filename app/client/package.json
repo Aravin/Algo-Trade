@@ -11,7 +11,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "validate": "yarn typecheck && yarn lint && yarn format:check",
+    "validate": "yarn typecheck && yarn lint && yarn format:check && yarn test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "yarn run build && vite preview",
     "deploy": "yarn run build && wrangler deploy",
     "cf-typegen": "wrangler types",
@@ -63,6 +65,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
+    "vitest": "^3.0.7",
     "wrangler": "^4.99.0"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"

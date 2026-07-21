@@ -153,7 +153,9 @@ function useActiveTradesCount() {
     }
 
     void updateCount()
-    const interval = setInterval(updateCount, 5000)
+    const interval = setInterval(() => {
+      void updateCount()
+    }, 5000)
 
     const onStorageChange = () => {
       void updateCount()

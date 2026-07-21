@@ -89,12 +89,6 @@ export default {
     ) {
       return handleUpstoxPcr(request)
     }
-    if (url.pathname === '/api/order/place' && request.method === 'POST') {
-      return handlePlaceOrder(request)
-    }
-    if (url.pathname === '/api/order/list' && request.method === 'POST') {
-      return handleOrderList(request)
-    }
 
     // ── New Upstox-based market data ──────────────────────────────────────────
     if (url.pathname === '/api/market/vix' && request.method === 'POST') {
@@ -165,6 +159,13 @@ export default {
         )
       }
       userId = tokenUser
+    }
+
+    if (url.pathname === '/api/order/place' && request.method === 'POST') {
+      return handlePlaceOrder(request)
+    }
+    if (url.pathname === '/api/order/list' && request.method === 'POST') {
+      return handleOrderList(request)
     }
 
     if (url.pathname === '/api/client-state' && request.method === 'GET') {
