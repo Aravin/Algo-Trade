@@ -188,6 +188,72 @@ export function StrategyConfig({
           </div>
         </div>
 
+        {/* ── Underlying Execution Mode ────────────────────────────────────────── */}
+        <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
+          <p className="text-xs text-foreground font-semibold flex items-center gap-1.5">
+            <Zap size={13} className="text-primary" />
+            Underlying Symbol & Parallel Execution Mode
+            <InfoTooltip content="Select which index to trade or run all major indices (NIFTY 50, BANKNIFTY, FINNIFTY) concurrently in parallel cycles." />
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button
+              type="button"
+              onClick={() => set('underlyingMode', 'ALL_PARALLEL')}
+              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                (local.underlyingMode ?? 'ALL_PARALLEL') === 'ALL_PARALLEL'
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold flex items-center gap-1">
+                🚀 All Parallel
+              </div>
+              <div className="text-[10px] opacity-80">
+                NIFTY + BANKNIFTY + FINNIFTY
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => set('underlyingMode', 'NIFTY 50')}
+              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                local.underlyingMode === 'NIFTY 50'
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold">NIFTY 50</div>
+              <div className="text-[10px] opacity-80">Lot size: 25</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => set('underlyingMode', 'BANKNIFTY')}
+              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                local.underlyingMode === 'BANKNIFTY'
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold">BANKNIFTY</div>
+              <div className="text-[10px] opacity-80">Lot size: 15</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => set('underlyingMode', 'FINNIFTY')}
+              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                local.underlyingMode === 'FINNIFTY'
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold">FINNIFTY</div>
+              <div className="text-[10px] opacity-80">Lot size: 40</div>
+            </button>
+          </div>
+        </div>
+
         {/* ── Squeeze Specific Config ────────────────────────────────────── */}
         {local.strategyMode === 'bollinger_squeeze' && (
           <div className="space-y-2 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">

@@ -16,6 +16,15 @@ export type ExecutionMode = 'live' | 'paper'
 export type BrokerPurpose = 'analytics' | 'market-data' | 'orders'
 export type NotificationType = 'info' | 'success' | 'warn' | 'error'
 
+export type UnderlyingSymbol = 'NIFTY 50' | 'BANKNIFTY' | 'FINNIFTY'
+export type UnderlyingMode = UnderlyingSymbol | 'ALL_PARALLEL'
+
+export const UNDERLYING_INSTRUMENT_KEYS: Record<UnderlyingSymbol, string> = {
+  'NIFTY 50': 'NSE_INDEX|Nifty 50',
+  BANKNIFTY: 'NSE_INDEX|Nifty Bank',
+  FINNIFTY: 'NSE_INDEX|Nifty Fin Service',
+}
+
 // Indicators & Options
 export type Candle = [
   string,
@@ -175,6 +184,7 @@ export interface ActivePosition {
   tradeType?: 'buying' | 'selling' | 'both'
   currentPrice?: number
   legs?: PositionLeg[]
+  underlyingSymbol?: UnderlyingSymbol
 }
 
 export type StrategyMode = 'v5_scorecard' | 'bollinger_squeeze'
@@ -191,6 +201,7 @@ export interface BollingerSqueezeMetrics {
 // Strategy Config
 export interface StrategyConfig {
   strategyMode: StrategyMode
+  underlyingMode: UnderlyingMode
   squeezeThresholdPct: number
   minSqueezeCandles: number
   adxMinThreshold: number
@@ -281,6 +292,7 @@ export interface AppNotification {
 // Constants & Config Values
 export const DEFAULT_CONFIG: StrategyConfig = {
   strategyMode: 'v5_scorecard',
+  underlyingMode: 'ALL_PARALLEL',
   squeezeThresholdPct: 1.2,
   minSqueezeCandles: 3,
   adxMinThreshold: 20,

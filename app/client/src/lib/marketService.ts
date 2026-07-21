@@ -7,7 +7,9 @@ import type {
   UpstoxNewsItem,
   NewsAlert,
   NiftySentiment,
+  UnderlyingSymbol,
 } from '@/lib/types'
+import { UNDERLYING_INSTRUMENT_KEYS } from '@/lib/types'
 import {
   evaluateGlobalSentiment,
   evaluatePCR,
@@ -554,7 +556,9 @@ export async function fetchMarket(
   token: string,
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
+  underlyingSymbol: UnderlyingSymbol = 'NIFTY 50',
 ): Promise<{
+  underlyingSymbol: UnderlyingSymbol
   candles: Candle[]
   optionChain: OptionData[]
   v3: V3OrderType
@@ -567,8 +571,15 @@ export async function fetchMarket(
   globalIndices: GlobalIndexItem[]
   giftNifty: VrdData['giftNifty']
 }> {
+  const targetInstrumentKey =
+    UNDERLYING_INSTRUMENT_KEYS[underlyingSymbol] ?? 'NSE_INDEX|Nifty 50'
+
   addLog(
-    mkLog('debug', 'market', 'fetching candles + breadth + option contracts'),
+    mkLog(
+      'debug',
+      'market',
+      `fetching candles + breadth + option contracts for ${underlyingSymbol} (${targetInstrumentKey})`,
+    ),
   )
 
   sourceUpdate('candles', 'pending')
@@ -585,7 +596,7 @@ export async function fetchMarket(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             token,
-            instrumentKey: 'NSE_INDEX|Nifty 50',
+            instrumentKey: targetInstrumentKey,
             interval: '1minute',
           }),
         },
@@ -605,7 +616,7 @@ export async function fetchMarket(
       }>('/api/market/option-contracts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, instrumentKey: targetInstrumentKey }),
       }),
       safeFetch<{
         status: string
@@ -623,15 +634,21 @@ export async function fetchMarket(
   if (candleRes.status === 'fulfilled') {
     const [data, err] = candleRes.value
     if (err) {
-      addLog(mkLog('error', 'candles', err))
+      addLog(mkLog('error', 'candles', `${underlyingSymbol}: ${err}`))
       sourceUpdate('candles', 'error')
     } else {
       candles = data?.data?.candles ?? []
-      addLog(mkLog('info', 'candles', candles.length + ' candles loaded'))
+      addLog(
+        mkLog(
+          'info',
+          'candles',
+          `${underlyingSymbol}: ${candles.length} candles loaded`,
+        ),
+      )
       sourceUpdate('candles', candles.length > 0 ? 'ok' : 'error')
     }
   } else {
-    addLog(mkLog('error', 'candles', 'fetch failed'))
+    addLog(mkLog('error', 'candles', `${underlyingSymbol}: fetch failed`))
     sourceUpdate('candles', 'error')
   }
 
@@ -677,14 +694,19 @@ export async function fetchMarket(
 
   let optionChain: OptionData[] = []
   let optionChainError =
-    contractsErr ?? 'No live expiry returned from Upstox option contracts'
+    contractsErr ??
+    `No live expiry returned for ${underlyingSymbol} from Upstox option contracts`
   for (const candidate of expiryCandidates) {
     const [data, err] = await safeFetch<{ data?: OptionData[] }>(
       '/api/market/option-chain',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, expiryDate: candidate }),
+        body: JSON.stringify({
+          token,
+          expiryDate: candidate,
+          instrumentKey: targetInstrumentKey,
+        }),
       },
     )
     if (err) {
@@ -715,7 +737,7 @@ export async function fetchMarket(
       mkLog(
         'info',
         'option-chain',
-        optionChain.length + ' strikes loaded (expiry: ' + candidate + ')',
+        `${underlyingSymbol}: ${optionChain.length} strikes loaded (expiry: ${candidate})`,
       ),
     )
     sourceUpdate('option-chain', 'ok')
@@ -803,6 +825,7 @@ export async function fetchMarket(
   }
 
   return {
+    underlyingSymbol,
     candles,
     optionChain,
     v3,
@@ -810,6 +833,28 @@ export async function fetchMarket(
     globalIndices,
     giftNifty,
   }
+}
+
+export async function fetchMarketForSymbols(
+  token: string,
+  addLog: (l: BotLog) => void,
+  sourceUpdate: (k: string, s: SourceStatus) => void,
+  symbols: UnderlyingSymbol[],
+): Promise<Record<UnderlyingSymbol, Awaited<ReturnType<typeof fetchMarket>>>> {
+  const results = await Promise.allSettled(
+    symbols.map((sym) => fetchMarket(token, addLog, sourceUpdate, sym)),
+  )
+  const map = {} as Record<
+    UnderlyingSymbol,
+    Awaited<ReturnType<typeof fetchMarket>>
+  >
+  results.forEach((res, idx) => {
+    const sym = symbols[idx]
+    if (res.status === 'fulfilled') {
+      map[sym] = res.value
+    }
+  })
+  return map
 }
 
 // ─── WebSocket Stream Utility ───────────────────────────────────────────────

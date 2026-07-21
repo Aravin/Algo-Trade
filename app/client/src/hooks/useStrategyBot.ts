@@ -10,6 +10,7 @@ import type {
   PaperTrade,
   PaperAccountSummary,
   BollingerSqueezeMetrics,
+  UnderlyingSymbol,
 } from '@/lib/types'
 import {
   useState,
@@ -42,7 +43,7 @@ import type { SourceStatus, BotLog, GlobalIndexItem } from '@/lib/marketService'
 import {
   mkLog,
   safeFetch,
-  fetchMarket,
+  fetchMarketForSymbols,
   fetchMarketSentiment,
 } from '@/lib/marketService'
 
@@ -312,12 +313,26 @@ export function useStrategyBot(token: string | null) {
       const config = getStrategyConfig()
       let positionUpdate: Partial<BotStatus> = {}
 
-      // Step 1: fetch candles + option chain + V3 signal in parallel (from marketService)
-      const market = await fetchMarket(token, (e) => tickLogs.push(e), srcUpd)
-      const { candles, optionChain, v3, breadth, globalIndices, giftNifty } =
-        market
+      // Step 1: Determine target active underlying symbols (Single or ALL_PARALLEL)
+      const targetSymbols: UnderlyingSymbol[] =
+        (config.underlyingMode ?? 'ALL_PARALLEL') === 'ALL_PARALLEL'
+          ? ['NIFTY 50', 'BANKNIFTY', 'FINNIFTY']
+          : [config.underlyingMode as UnderlyingSymbol]
 
-      if (!candles.length) {
+      // Step 1b: Fetch candles + option chains for all target symbols concurrently
+      const marketMap = await fetchMarketForSymbols(
+        token,
+        (e) => tickLogs.push(e),
+        srcUpd,
+        targetSymbols,
+      )
+
+      const primaryMarket =
+        marketMap['NIFTY 50'] ??
+        marketMap[targetSymbols[0]] ??
+        Object.values(marketMap)[0]
+
+      if (!primaryMarket?.candles.length) {
         const canUseSnapshot = Boolean(
           cur.indicators && cur.vrdData && cur.allSignalData && cur.finalSignal,
         )
@@ -349,10 +364,13 @@ export function useStrategyBot(token: string | null) {
         return
       }
 
-      // Step 2: compute indicators first (needed by fetchMarketSentiment for MMI)
+      const { candles, optionChain, v3, breadth, globalIndices, giftNifty } =
+        primaryMarket
+
+      // Step 2: compute indicators for primary market
       const indicators = computeAllIndicators(candles, optionChain)
 
-      // Step 3: fetch market sentiment (VIX, breadth, NSE PE, FII) using indicator values (from marketService)
+      // Step 3: fetch market sentiment (VIX, breadth, NSE PE, FII)
       const vrdData = await fetchMarketSentiment(
         token,
         (e) => tickLogs.push(e),
@@ -383,6 +401,32 @@ export function useStrategyBot(token: string | null) {
       )
       const finalSignal = getFinalSignal(allSignalData, config, candles)
 
+      // Evaluate & Log signals for all active target symbols in parallel
+      for (const sym of targetSymbols) {
+        const symMarket = marketMap[sym]
+        if (!symMarket?.candles.length) continue
+        const symIndicators = computeAllIndicators(
+          symMarket.candles,
+          symMarket.optionChain,
+        )
+        const symSignalData: AllSignalData = {
+          v3: symMarket.v3,
+          indicators: symIndicators,
+          vrd: vrdData,
+          globalIndices,
+        }
+        const symSignal = getFinalSignal(
+          symSignalData,
+          config,
+          symMarket.candles,
+        )
+        log(
+          'info',
+          'engine',
+          `[${sym}] bull=${symSignal.bullScore} bear=${symSignal.bearScore} → ${symSignal.signal} (${symSignal.confidence})`,
+        )
+      }
+
       // ── Tick log (threshold backtesting) ────────────────────────────────────
       appendTick({
         ts: Date.now(),
@@ -398,11 +442,6 @@ export function useStrategyBot(token: string | null) {
         moderateGap: config.moderateGap,
       })
 
-      log(
-        'info',
-        'engine',
-        `bull=${finalSignal.bullScore} bear=${finalSignal.bearScore} → ${finalSignal.signal} (${finalSignal.confidence})`,
-      )
       if (hardStop.blocked)
         log('warn', 'engine', `HARD STOP: ${hardStop.reasons.join(', ')}`)
 

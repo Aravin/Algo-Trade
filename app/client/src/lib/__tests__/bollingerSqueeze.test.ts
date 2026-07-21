@@ -81,6 +81,7 @@ describe('Bollinger Volatility Squeeze Strategy', () => {
 
     const dummyConfig: StrategyConfig = {
       strategyMode: 'bollinger_squeeze',
+      underlyingMode: 'ALL_PARALLEL',
       squeezeThresholdPct: 2.0,
       minSqueezeCandles: 2,
       adxMinThreshold: 0, // relaxed for test

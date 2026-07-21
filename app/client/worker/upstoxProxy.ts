@@ -149,6 +149,7 @@ export async function handleUpstoxProfile(request: Request): Promise<Response> {
 const INSTRUMENT_KEYS = [
   'NSE_INDEX|Nifty 50',
   'NSE_INDEX|Nifty Bank',
+  'NSE_INDEX|Nifty Fin Service',
   'BSE_INDEX|SENSEX',
   'NSE_INDEX|India VIX',
 ].join(',')
@@ -252,7 +253,7 @@ export async function handleIntraday(request: Request): Promise<Response> {
 export async function handleOptionContracts(
   request: Request,
 ): Promise<Response> {
-  let body: { token: string }
+  let body: { token: string; instrumentKey?: string }
   try {
     body = await request.json()
   } catch {
@@ -261,10 +262,12 @@ export async function handleOptionContracts(
   if (!body.token)
     return Response.json({ error: 'Missing token' }, { status: 400 })
 
+  const instrumentKey = body.instrumentKey ?? 'NSE_INDEX|Nifty 50'
+
   let upstream: Response
   try {
     upstream = await fetchWithTimeout(
-      'https://api.upstox.com/v2/option/contract?instrument_key=NSE_INDEX|Nifty 50',
+      `https://api.upstox.com/v2/option/contract?instrument_key=${encodeURIComponent(instrumentKey)}`,
       {
         headers: {
           Authorization: `Bearer ${body.token}`,
@@ -331,7 +334,7 @@ export async function handleMarketQuotes(request: Request): Promise<Response> {
 }
 
 export async function handleOptionChain(request: Request): Promise<Response> {
-  let body: { token: string; expiryDate: string }
+  let body: { token: string; expiryDate: string; instrumentKey?: string }
   try {
     body = await request.json()
   } catch {
@@ -342,8 +345,9 @@ export async function handleOptionChain(request: Request): Promise<Response> {
       { error: 'Missing token or expiryDate' },
       { status: 400 },
     )
+  const instrumentKey = body.instrumentKey ?? 'NSE_INDEX|Nifty 50'
   const qs = new URLSearchParams({
-    instrument_key: 'NSE_INDEX|Nifty 50',
+    instrument_key: instrumentKey,
     expiry_date: body.expiryDate,
   })
   let upstream: Response
