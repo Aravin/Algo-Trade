@@ -666,15 +666,18 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
             <TableCell className="text-right font-mono text-sm">
               <div>
                 <span>{row.qty}</span>
-                {row.type !== 'EQ' && (
-                  <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
-                    ({Math.round(row.qty / getLotSizeForSymbol(row.symbol))}{' '}
-                    {Math.round(row.qty / getLotSizeForSymbol(row.symbol)) > 1
-                      ? 'lots'
-                      : 'lot'}
+                {(() => {
+                  const lotSize = getLotSizeForSymbol(row.symbol)
+                  if (lotSize > 1 && row.type !== 'EQ') {
+                    const lots = Math.round(row.qty / lotSize)
+                    return (
+                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                        ({lots} {lots > 1 ? 'lots' : 'lot'})
+                      </span>
                     )
-                  </span>
-                )}
+                  }
+                  return null
+                })()}
               </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">

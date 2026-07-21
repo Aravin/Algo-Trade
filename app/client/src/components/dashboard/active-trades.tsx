@@ -194,16 +194,18 @@ function TradesTable({ trades }: { trades: Trade[] }) {
             <TableCell className="text-right font-mono text-sm">
               <div>
                 <span>{trade.qty}</span>
-                {trade.type !== 'EQ' && (
-                  <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
-                    ({Math.round(trade.qty / getLotSizeForSymbol(trade.symbol))}{' '}
-                    {Math.round(trade.qty / getLotSizeForSymbol(trade.symbol)) >
-                    1
-                      ? 'lots'
-                      : 'lot'}
+                {(() => {
+                  const lotSize = getLotSizeForSymbol(trade.symbol)
+                  if (lotSize > 1 && trade.type !== 'EQ') {
+                    const lots = Math.round(trade.qty / lotSize)
+                    return (
+                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                        ({lots} {lots > 1 ? 'lots' : 'lot'})
+                      </span>
                     )
-                  </span>
-                )}
+                  }
+                  return null
+                })()}
               </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
