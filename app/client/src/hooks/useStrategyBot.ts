@@ -37,6 +37,7 @@ import {
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
 import { scoreStraddleIV, classifyNews } from '@/lib/vrdSignals'
+import { appendTick } from '@/lib/tickLog'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
@@ -1396,6 +1397,21 @@ export function useStrategyBot(token: string | null) {
         globalIndices,
       }
       const finalSignal = getFinalSignal(allSignalData, config)
+
+      // ── Tick log (threshold backtesting) ────────────────────────────────────
+      appendTick({
+        ts: Date.now(),
+        bullScore: finalSignal.bullScore,
+        bearScore: finalSignal.bearScore,
+        scoreMax: finalSignal.scoreMax,
+        confidence: finalSignal.confidence,
+        signal: finalSignal.signal,
+        vix: vrdData.vix,
+        strongThreshold: config.strongThreshold,
+        moderateThreshold: config.moderateThreshold,
+        strongGap: config.strongGap,
+        moderateGap: config.moderateGap,
+      })
 
       log(
         'info',

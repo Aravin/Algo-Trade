@@ -181,6 +181,10 @@ export interface ActivePosition {
 export interface StrategyConfig {
   strongThreshold: number
   moderateThreshold: number
+  /** Minimum bull−bear gap required for Strong confidence (default 6) */
+  strongGap: number
+  /** Minimum bull−bear gap required for Moderate confidence (default 3) */
+  moderateGap: number
   maxProfitPct: number
   maxLossPct: number
   maxTradesPerDay: number
@@ -261,8 +265,10 @@ export interface AppNotification {
 
 // Constants & Config Values
 export const DEFAULT_CONFIG: StrategyConfig = {
-  strongThreshold: 16,
+  strongThreshold: 14,
   moderateThreshold: 10,
+  strongGap: 6,
+  moderateGap: 3,
   maxProfitPct: 10,
   maxLossPct: 5,
   maxTradesPerDay: 3,

@@ -17,6 +17,8 @@ import { StrategyConfig as StrategyConfigPanel } from '@/components/dashboard/st
 import { LogPanel } from '@/components/dashboard/strategy/log-panel'
 import { SourceStatusBar } from '@/components/dashboard/strategy/source-status-bar'
 import { NewsAlertsPanel } from '@/components/dashboard/strategy/news-alerts-panel'
+import { ThresholdOptimizer } from '@/components/dashboard/strategy/threshold-optimizer'
+import { saveStrategyConfig } from '@/lib/strategyConfig'
 
 export function StrategiesPage() {
   const token = getAccounts().find((a) => a.accessToken)?.accessToken ?? null
@@ -112,6 +114,16 @@ export function StrategiesPage() {
 
       {/* Logs */}
       <LogPanel logs={bot.logs} onClear={bot.clearLogs} />
+
+      {/* Threshold optimizer */}
+      <ThresholdOptimizer
+        config={config}
+        onApply={(values) => {
+          const next = { ...config, ...values }
+          saveStrategyConfig(next)
+          setConfig(next)
+        }}
+      />
 
       {/* Config */}
       <StrategyConfigPanel config={config} onSave={setConfig} />

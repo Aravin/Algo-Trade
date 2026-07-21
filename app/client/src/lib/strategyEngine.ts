@@ -469,7 +469,11 @@ export function getFinalSignal(
   data: AllSignalData,
   config: Pick<
     StrategyConfig,
-    'strongThreshold' | 'moderateThreshold' | 'minConfidence'
+    | 'strongThreshold'
+    | 'moderateThreshold'
+    | 'minConfidence'
+    | 'strongGap'
+    | 'moderateGap'
   >,
 ): FinalSignal {
   const bull = scoreBullish(data)
@@ -487,8 +491,10 @@ export function getFinalSignal(
         : Math.max(bull.max, bear.max, 1)
 
   let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
-  if (top >= config.strongThreshold && gap >= 6) confidence = 'strong'
-  else if (top >= config.moderateThreshold && gap >= 3) confidence = 'moderate'
+  if (top >= config.strongThreshold && gap >= config.strongGap)
+    confidence = 'strong'
+  else if (top >= config.moderateThreshold && gap >= config.moderateGap)
+    confidence = 'moderate'
   else if (top >= config.moderateThreshold) confidence = 'weak'
 
   const minConf = config.minConfidence

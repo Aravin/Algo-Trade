@@ -71,6 +71,116 @@ const CONF_STYLES: Record<string, string> = {
   none: 'text-muted-foreground',
 }
 
+/** Renders a colour-coded distance-to-threshold pill */
+function ThresholdPill({
+  label,
+  threshold,
+  gap,
+  gapNeeded,
+  top,
+  tooltip,
+}: {
+  label: string
+  threshold: number
+  gap: number
+  gapNeeded: number
+  top: number
+  tooltip: string
+}) {
+  const scoreOk = top >= threshold
+  const gapOk = gap >= gapNeeded
+  const wouldFire = scoreOk && gapOk
+  const ptsMissing = Math.max(0, threshold - top)
+  const gapMissing = Math.max(0, gapNeeded - gap)
+
+  let badgeClass = 'bg-muted text-muted-foreground'
+  let icon = '–'
+  if (wouldFire) {
+    badgeClass = 'bg-success/15 text-success border border-success/30'
+    icon = '✓'
+  } else if (scoreOk && !gapOk) {
+    badgeClass = 'bg-warning/15 text-warning border border-warning/30'
+    icon = '~'
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-muted-foreground flex items-center gap-1">
+        {label} ≥ {threshold}
+        <InfoTooltip content={tooltip} />
+      </span>
+      <span
+        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums ${badgeClass}`}
+      >
+        {icon}{' '}
+        {wouldFire
+          ? 'fires'
+          : scoreOk
+            ? `gap −${gapMissing}`
+            : `−${ptsMissing} pts`}
+      </span>
+    </div>
+  )
+}
+
+/** Progress bar showing top score vs Strong threshold */
+function ThresholdProgress({
+  top,
+  scoreMax,
+  strongThreshold,
+  moderateThreshold,
+}: {
+  top: number
+  scoreMax: number
+  strongThreshold: number
+  moderateThreshold: number
+}) {
+  const cappedMax = Math.max(scoreMax, strongThreshold)
+  const topPct = Math.min(100, (top / cappedMax) * 100)
+  const strongPct = Math.min(100, (strongThreshold / cappedMax) * 100)
+  const modPct = Math.min(100, (moderateThreshold / cappedMax) * 100)
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <span>Score progress to Strong</span>
+        <span className="tabular-nums font-medium">
+          {top} / {cappedMax} ({Math.round(topPct)}%)
+        </span>
+      </div>
+      <div className="relative h-2 w-full rounded-full bg-muted overflow-visible">
+        {/* Score fill */}
+        <div
+          className="h-full rounded-full bg-primary/70 transition-all duration-500"
+          style={{ width: `${topPct}%` }}
+        />
+        {/* Moderate threshold marker */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-warning/80"
+          style={{ left: `${modPct}%` }}
+          title={`Moderate threshold: ${moderateThreshold}`}
+        />
+        {/* Strong threshold marker */}
+        <div
+          className="absolute top-0 bottom-0 w-px bg-success/80"
+          style={{ left: `${strongPct}%` }}
+          title={`Strong threshold: ${strongThreshold}`}
+        />
+      </div>
+      <div className="flex gap-3 text-[9px] text-muted-foreground">
+        <span className="flex items-center gap-0.5">
+          <span className="inline-block w-2 h-0.5 bg-warning/80 rounded-full" />
+          Mod {moderateThreshold}
+        </span>
+        <span className="flex items-center gap-0.5">
+          <span className="inline-block w-2 h-0.5 bg-success/80 rounded-full" />
+          Strong {strongThreshold}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function ScorePanel({
   allSignalData,
   finalSignal,
@@ -85,6 +195,13 @@ export function ScorePanel({
     : SIGNAL_STYLES.NO_TRADE
   const bull = allSignalData ? scoreBullish(allSignalData) : null
   const bear = allSignalData ? scoreBearish(allSignalData) : null
+
+  const top = finalSignal
+    ? Math.max(finalSignal.bullScore, finalSignal.bearScore)
+    : 0
+  const gap = finalSignal
+    ? Math.abs(finalSignal.bullScore - finalSignal.bearScore)
+    : 0
 
   return (
     <Card>
@@ -114,16 +231,43 @@ export function ScorePanel({
                 tooltip="Combined bearish score points across Macro, FII positioning, Advances/Declines, and Technical indicators for Buying Put Options (PE)."
               />
             </div>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                Strong ≥ {config.strongThreshold}
-                <InfoTooltip content="Score threshold required for a Strong confidence trade trigger (executes full position size)." />
-              </span>
-              <span className="flex items-center gap-1">
-                Moderate ≥ {config.moderateThreshold}
-                <InfoTooltip content="Score threshold required for a Moderate confidence trade trigger (executes half position size)." />
+
+            {/* Score-to-threshold progress */}
+            <ThresholdProgress
+              top={top}
+              scoreMax={finalSignal.scoreMax}
+              strongThreshold={config.strongThreshold}
+              moderateThreshold={config.moderateThreshold}
+            />
+
+            {/* Threshold fire indicators */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              <ThresholdPill
+                label="Strong"
+                threshold={config.strongThreshold}
+                gap={gap}
+                gapNeeded={config.strongGap}
+                top={top}
+                tooltip={`Score ≥ ${config.strongThreshold} AND bull−bear gap ≥ ${config.strongGap} → Strong signal (full position).`}
+              />
+              <ThresholdPill
+                label="Moderate"
+                threshold={config.moderateThreshold}
+                gap={gap}
+                gapNeeded={config.moderateGap}
+                top={top}
+                tooltip={`Score ≥ ${config.moderateThreshold} AND bull−bear gap ≥ ${config.moderateGap} → Moderate signal (half position).`}
+              />
+              <span
+                className="flex items-center gap-1 ml-auto text-[10px] tabular-nums"
+                title="Current bull−bear score gap"
+              >
+                Gap:{' '}
+                <span className="font-semibold text-foreground">{gap}</span>
+                <InfoTooltip content="Absolute difference between Bullish and Bearish scores. Must exceed the gap threshold for a trade to fire — prevents close-contest signals." />
               </span>
             </div>
+
             <div className={`rounded-lg border p-4 text-center ${style.bg}`}>
               <div className="flex items-center justify-center gap-1 mb-1">
                 <p className="text-xs text-muted-foreground">Final Signal</p>
