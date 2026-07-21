@@ -121,9 +121,15 @@ export function ThresholdOptimizer({
         // More strong signals = better quality
         const aS = a.tradeTicks > 0 ? a.strongTicks / a.tradeTicks : 0
         const bS = b.tradeTicks > 0 ? b.strongTicks / b.tradeTicks : 0
+        // If strong percentages are equal, break tie by trade volume
+        if (bS === aS) return b.tradeTicks - a.tradeTicks
         return bS - aS
       }
-      // Fewest trades (least noisy) first
+
+      // Fewest trades (least noisy) first, BUT ignore 0-trade setups (push to bottom)
+      if (a.tradeTicks === 0 && b.tradeTicks > 0) return 1
+      if (b.tradeTicks === 0 && a.tradeTicks > 0) return -1
+
       return a.tradeTicks - b.tradeTicks
     })
   }, [results, sortBy])
