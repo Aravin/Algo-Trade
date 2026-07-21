@@ -140,8 +140,7 @@ export function getFinalSignal(
     (ratio >= 0.5 && top >= Math.min(moderateThreshold, 6))
 
   if (satisfiesStrong && gap >= strongGap) confidence = 'strong'
-  else if (satisfiesModerate && gap >= moderateGap)
-    confidence = 'moderate'
+  else if (satisfiesModerate && gap >= moderateGap) confidence = 'moderate'
   else if (satisfiesModerate) confidence = 'weak'
 
   const minConf = config.minConfidence ?? 'moderate'
