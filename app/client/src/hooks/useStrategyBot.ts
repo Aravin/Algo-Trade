@@ -228,6 +228,7 @@ export function useStrategyBot(token: string | null) {
     ...INITIAL,
     ...loadPersisted(),
   }))
+  const isTickingRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const statusRef = useRef<BotStatus>(status)
   useLayoutEffect(() => {
@@ -277,8 +278,13 @@ export function useStrategyBot(token: string | null) {
   // ── Main tick ────────────────────────────────────────────────────────────────
   const tick = useCallback(async () => {
     if (!token) return
+    if (isTickingRef.current) return
+    isTickingRef.current = true
     const cur = statusRef.current
-    if (cur.state === 'STOPPED' || cur.state === 'IDLE') return
+    if (cur.state === 'STOPPED' || cur.state === 'IDLE') {
+      isTickingRef.current = false
+      return
+    }
 
     const tickLogs: BotLog[] = []
     const log = (level: BotLog['level'], source: string, msg: string) => {
@@ -982,6 +988,8 @@ export function useStrategyBot(token: string | null) {
       const msg = (err as Error).message
       addLogs([...tickLogs, mkLog('error', 'tick', `unhandled: ${msg}`)])
       updateStatus({ error: msg })
+    } finally {
+      isTickingRef.current = false
     }
   }, [token, updateStatus, addLogs, addLog])
 

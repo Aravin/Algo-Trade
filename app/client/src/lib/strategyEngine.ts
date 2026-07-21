@@ -68,7 +68,7 @@ export function runHardStopChecks(
 
 // ─── V4 composite signal ──────────────────────────────────────────────────────
 function getV4Signal(ind: IndicatorsResult): SignalType {
-  const { ema, adx, pcr, bollinger, rsi } = ind
+  const { ema, adx, pcr, bollinger } = ind
   let baseSignal: SignalType = 'Hold'
 
   // All 4 agree
@@ -104,8 +104,6 @@ function getV4Signal(ind: IndicatorsResult): SignalType {
     if (sellVotes >= 3) baseSignal = 'Sell'
   }
 
-  if (rsi.signal === 'Overbought' && baseSignal === 'Buy') return 'Hold'
-  if (rsi.signal === 'Oversold' && baseSignal === 'Sell') return 'Hold'
   return baseSignal
 }
 
@@ -438,14 +436,14 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
         (alert.severity === 'HIGH' || alert.severity === 'MEDIUM'),
     )
     if (macroAlerts.length > 0) {
-      max += macroAlerts.length
+      const pts = Math.min(2, macroAlerts.length)
       score += addScore(
         bd,
         'Macro',
         'Macro News Confirmation',
         `Classified ${macroAlerts.length} risk events (bearish catalyst)`,
-        1 * macroAlerts.length,
-        macroAlerts.length,
+        pts,
+        2,
       )
     }
     if (earningsAlerts.length > 0) {

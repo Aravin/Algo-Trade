@@ -160,6 +160,103 @@ describe('strategyEngine', () => {
       expect(res.signal).toBe('BUY_CE')
       expect(['strong', 'moderate']).includes(res.confidence)
     })
+
+    it('allows BUY_CE signal during strong momentum breakouts even when RSI is overbought', () => {
+      const signalData: AllSignalData = {
+        v3: 'buy',
+        indicators: {
+          ema: 'Buy',
+          adx: 'Buy',
+          rsi: { signal: 'Overbought', value: 75 },
+          stochastic: { k: 85, d: 80, signal: 'Buy' },
+          bollinger: {
+            signal: 'Buy',
+            upper: 24200,
+            lower: 23800,
+            middle: 24000,
+            trend: 'Up',
+          },
+          atr: { value: 40, level: 'Neutral' },
+          pcr: 'Buy',
+          pcrValue: 1.4,
+        },
+        vrd: baseVrd,
+      }
+
+      const res = getFinalSignal(signalData, {
+        strongThreshold: 12,
+        moderateThreshold: 8,
+        minConfidence: 'moderate',
+        strongGap: 4,
+        moderateGap: 2,
+      })
+
+      expect(res.signal).toBe('BUY_CE')
+      expect(res.v4).toBe('Buy')
+    })
+
+    it('caps macro news confirmation score contribution to 2 pts in scoreBearish', () => {
+      const newsVrd: VrdData = {
+        ...baseVrd,
+        newsAlerts: [
+          {
+            id: '1',
+            headline: 'Fed Rate Spike 1',
+            summary: '',
+            severity: 'HIGH',
+            type: 'MACRO',
+            timestamp: Date.now(),
+            matchedKeywords: ['fed'],
+          },
+          {
+            id: '2',
+            headline: 'Fed Rate Spike 2',
+            summary: '',
+            severity: 'HIGH',
+            type: 'MACRO',
+            timestamp: Date.now(),
+            matchedKeywords: ['fed'],
+          },
+          {
+            id: '3',
+            headline: 'Fed Rate Spike 3',
+            summary: '',
+            severity: 'HIGH',
+            type: 'MACRO',
+            timestamp: Date.now(),
+            matchedKeywords: ['fed'],
+          },
+        ],
+      }
+      const signalData: AllSignalData = {
+        v3: 'sell',
+        indicators: {
+          ema: 'Sell',
+          adx: 'Sell',
+          rsi: { signal: 'Hold', value: 40 },
+          stochastic: { k: 20, d: 25, signal: 'Sell' },
+          bollinger: {
+            signal: 'Sell',
+            upper: 24200,
+            lower: 23800,
+            middle: 24000,
+            trend: 'Down',
+          },
+          atr: { value: 40, level: 'Neutral' },
+          pcr: 'Sell',
+          pcrValue: 0.6,
+        },
+        vrd: newsVrd,
+      }
+
+      const bearResult = scoreBearish(signalData)
+      const newsItem = bearResult.breakdown.find(
+        (b) => b.indicator === 'Macro News Confirmation',
+      )
+      expect(newsItem).toBeDefined()
+      expect(newsItem?.points).toBe(2)
+      expect(newsItem?.max).toBe(2)
+    })
   })
 
   describe('shouldExit', () => {
