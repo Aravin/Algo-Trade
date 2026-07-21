@@ -92,7 +92,7 @@ export function ScorePanel({
         <CardTitle className="text-sm flex items-center gap-2">
           <TrendingUp size={14} className="text-primary" />
           Signal Scores
-          <InfoTooltip content="Aggregated quantitative scoring engine combining V3 Macro/Institutional setup and V4 1-min Technical indicators into actionable trades." />
+          <InfoTooltip content="Aggregated quantitative scoring engine combining Macro/Institutional setup and 1-min Technical indicators into actionable trades." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
@@ -141,18 +141,18 @@ export function ScorePanel({
               </p>
               <div className="flex items-center justify-center gap-3 mt-2 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  V3:{' '}
+                  Macro:{' '}
                   <span className="font-medium text-foreground">
                     {finalSignal.v3}
                   </span>
-                  <InfoTooltip content="V3 Macro & Institutional layer bias signal (Hold, Bullish, or Bearish)." />
+                  <InfoTooltip content="Macro &amp; Institutional layer bias signal derived from global markets, FII positioning, and market breadth." />
                 </span>
                 <span className="flex items-center gap-1">
-                  V4:{' '}
+                  Technical:{' '}
                   <span className="font-medium text-foreground">
                     {finalSignal.v4}
                   </span>
-                  <InfoTooltip content="V4 1-minute Technical Indicator layer bias signal (Hold, Bullish, or Bearish)." />
+                  <InfoTooltip content="1-minute Technical Indicator layer bias signal (EMA, ADX, RSI, Bollinger, PCR)." />
                 </span>
               </div>
             </div>

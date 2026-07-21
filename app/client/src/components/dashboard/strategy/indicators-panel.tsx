@@ -56,8 +56,8 @@ export function IndicatorsPanel({
       <CardHeader>
         <CardTitle className="text-sm flex items-center gap-2">
           <BarChart2 size={14} className="text-primary" />
-          Technical Indicators (V4 — 1-min OHLC)
-          <InfoTooltip content="Real-time 1-minute OHLC technical analysis engine (V4). Aggregates EMA crossover, ADX trend strength, RSI, Stochastic, Bollinger Bands, ATR, and OI PCR." />
+          Technical Indicators (1-min OHLC)
+          <InfoTooltip content="Real-time 1-minute OHLC technical analysis. Aggregates EMA crossover, ADX trend strength, RSI, Stochastic, Bollinger Bands, ATR, and OI PCR." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">

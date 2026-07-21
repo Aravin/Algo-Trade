@@ -6,26 +6,26 @@ Automated NIFTY50 Options Trading bot based on Global sentiment, institutional f
 
 ---
 
-## 🚀 Latest: Version 5 (Browser-based Full Automation)
+## 🚀 Latest: Browser-based Full Automation
 
-**V5** is a fully browser-based automated trading system for Nifty weekly options. It runs as a React dashboard backed by a Cloudflare Worker proxy and a D1 database for persistence. Order execution and tracking are fully automated via the Upstox API.
+The current version is a fully browser-based automated trading system for Nifty weekly options. It runs as a React dashboard backed by a Cloudflare Worker proxy and a D1 database for persistence. Order execution and tracking are fully automated via the Upstox API.
 
-### Key Features of V5:
+### Key Features:
 - **5-Layer Scoring Engine**: Combines macro sentiments, technical indicators, and institutional flow into a single unified bullish/bearish score.
 - **Web Dashboard**: Modern UI available at `app/client` to control the bot, configure strategies, view signals, and manage positions.
 - **D1 Persistence**: Safely persists broker accounts and strategy configuration via a Cloudflare Worker backed by a SQLite D1 database.
 - **State Machine Polling**: Robust state management (`IDLE` ➔ `RUNNING` ➔ `ORDERED` ➔ `RUNNING/STOPPED`) polling every 60s.
 - **Automated Exit Logic**: Triggered automatically on target profit/loss, indicator/macro reversals, or index breadth flips.
 
-For complete details on the V5 strategy rules, see [docs/v5-strategy.md](docs/v5-strategy.md).
+For complete details on the strategy rules, see [docs/v5-strategy.md](docs/v5-strategy.md).
 
 ---
 
 ## 🛠️ Setup Guide
 
-### V5 Web Client & Worker Setup (Recommended)
+### Web Client & Worker Setup
 
-To run the latest V5 browser dashboard locally and deploy its backend:
+To run the browser dashboard locally and deploy its backend:
 
 1. Navigate to the client directory:
    ```bash
@@ -82,13 +82,13 @@ If you wish to run the legacy CLI/console versions (V1–V4):
 
 ---
 
-## 📐 V5 Architecture & Scoring Engine
+## 📐 Architecture & Scoring Engine
 
 ```
 Browser Tab (React + Vite)
 │
 ├─ useStrategyBot.ts          ← State machine, 60s polling loop
-│   ├─ fetchMarket()          ← Candles + Option Chain + V3 signals
+│   ├─ fetchMarket()          ← Candles + Option Chain + Macro signals
 │   └─ fetchMarketSentiment() ← VIX, FII, DII, PCR, Max Pain + synthetic MMI/PE/IV
 │
 ├─ strategyEngine.ts          ← 5-layer scoring → FinalSignal
@@ -103,7 +103,7 @@ Browser Tab (React + Vite)
     ├─ MarketSetupPanel        ← VIX, FII %, Nifty PE, MMI
     ├─ InstitutionalPanel      ← MMI gauge, FII scores
     ├─ BreadthPanel            ← A/D ratio, PCR zone, Straddle IV
-    ├─ IndicatorsPanel         ← 6 V4 indicator cards
+    ├─ IndicatorsPanel         ← 6 technical indicator cards
     ├─ ScorePanel              ← Bull/bear score bars + final signal
     ├─ BotControls             ← Start/Stop, position card, countdown
     └─ StrategyConfig          ← Config form with localStorage
@@ -113,8 +113,8 @@ Browser Tab (React + Vite)
 | Layer | Source | Signal & Description |
 |---|---|---|
 | **L0: Hard Stops** | Upstox VIX | Blocks trading completely if VIX is out of bounds (< 10 or > 25). Nifty PE is synthetic and penalises score only. |
-| **L1: V3 Macro** | MoneyControl + Upstox breadth | Evaluates global index sentiment (Dow, Nikkei, Hang Seng, FTSE, etc.), Advance/Decline ratios, and Put-Call Ratio (PCR). |
-| **L2: V4 Technicals** | Upstox 1-min candles | Real-time indicators: EMA crossover (10/42), ADX, RSI, Stochastic, Bollinger Bands, and ATR. |
+| **L1: Macro** | MoneyControl + Upstox breadth | Evaluates global index sentiment (Dow, Nikkei, Hang Seng, FTSE, etc.), Advance/Decline ratios, and Put-Call Ratio (PCR). |
+| **L2: Technicals** | Upstox 1-min candles | Real-time indicators: EMA crossover (10/42), ADX, RSI, Stochastic, Bollinger Bands, and ATR. |
 | **L3: Institutional** | Upstox FII/DII API + synthetic computation | Institutional flow: MMI (synthetic), FII Long/Short ratio (bull contrarian + bear momentum), Net Positioning, Straddle IV vs VIX. |
 | **L4: Confluence Gate** | Unified Evaluator | Enforces minimum score gap (bull vs bear) and overall score threshold to generate entry signals. |
 

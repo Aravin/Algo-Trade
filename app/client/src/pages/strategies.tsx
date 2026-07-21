@@ -44,10 +44,10 @@ export function StrategiesPage() {
     <div className="space-y-4 p-4">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold">V5 Nifty Options Strategy</h1>
+        <h1 className="text-xl font-semibold">Nifty Options Strategy</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Macro (V3) + Technical (V4) + Upstox market structure with VRD
-          fallback — auto-executes via Upstox
+          Macro &amp; institutional signals + 1-min technical indicators +
+          Upstox market structure — auto-executes via Upstox
         </p>
         {config.executionMode === 'paper' && paperBalance !== null && (
           <p className="text-xs text-muted-foreground mt-1">

@@ -45,7 +45,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
         <CardTitle className="flex items-center gap-2 text-sm">
           <Globe size={14} className="text-primary" />
           Market Setup
-          <InfoTooltip content="Macro & sentiment setup (V3 engine) including India VIX volatility, FII derivatives positioning, Nifty PE valuation, and Market Mood Index." />
+          <InfoTooltip content="Macro & sentiment setup including India VIX volatility, FII derivatives positioning, Nifty PE valuation, and Market Mood Index." />
           {vrdData && (
             <span className="ml-auto text-xs text-muted-foreground font-normal">
               {new Date(vrdData.fetchedAt).toLocaleTimeString('en-IN', {
