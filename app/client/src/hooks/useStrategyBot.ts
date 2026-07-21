@@ -1237,7 +1237,13 @@ async function fetchMarket(
   return { candles, optionChain, v3, breadth, globalIndices, giftNifty }
 }
 
-const LOT_SIZE = 25
+function getLotSizeForSymbol(symbol: string): number {
+  const upper = symbol.toUpperCase()
+  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
+  if (upper.includes('FINNIFTY')) return 40
+  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
+  return 1
+}
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 const INITIAL: BotStatus = {
@@ -1566,8 +1572,12 @@ export function useStrategyBot(token: string | null) {
             }
 
             const executionMode: ExecutionMode = config.executionMode
+            const lotSize =
+              optionChain.length > 0
+                ? getLotSizeForSymbol(optionChain[0].call_options.instrument_key)
+                : 25
             let qty =
-              finalSignal.positionSize === 'full' ? LOT_SIZE * 2 : LOT_SIZE
+              finalSignal.positionSize === 'full' ? lotSize * 2 : lotSize
 
             let paperBalance: number | null = null
             if (executionMode === 'paper') {
@@ -1585,9 +1595,9 @@ export function useStrategyBot(token: string | null) {
               }
 
               if (paperBalance !== null && totalReq > 0) {
-                const lotReq = totalReq * LOT_SIZE
+                const lotReq = totalReq * lotSize
                 const affordableLots = Math.floor(paperBalance / lotReq)
-                const affordableQty = affordableLots * LOT_SIZE
+                const affordableQty = affordableLots * lotSize
                 if (affordableQty <= 0) {
                   addLog(
                     mkLog(
