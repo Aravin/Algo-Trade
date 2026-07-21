@@ -29,8 +29,8 @@ export function SimpleChartWidget({ candles }: { candles: Candle[] }) {
 
   if (candles.length === 0) {
     return (
-      <Card className="overflow-hidden border-border/40 bg-card/40 flex flex-col">
-        <CardContent className="p-0 h-[400px] flex-1 flex items-center justify-center text-muted-foreground text-sm">
+      <Card className="overflow-hidden border-border/40 bg-card/40 flex flex-col h-full min-h-[200px]">
+        <CardContent className="p-0 flex-1 flex items-center justify-center text-muted-foreground text-sm">
           Waiting for chart data...
         </CardContent>
       </Card>
@@ -45,12 +45,14 @@ export function SimpleChartWidget({ candles }: { candles: Candle[] }) {
   const domain = [Math.floor(minPrice - padding), Math.ceil(maxPrice + padding)]
 
   return (
-    <Card className="overflow-hidden border-border/40 bg-card/40 flex flex-col relative">
-      <div className="absolute top-4 left-4 z-10 flex flex-col">
-        <span className="text-sm font-semibold">NIFTY 50</span>
-        <span className="text-xs text-muted-foreground">Upstox 1-min Data</span>
+    <Card className="overflow-hidden border-border/40 bg-card/40 flex flex-col h-full min-h-[200px] relative">
+      <div className="absolute top-3 left-3 z-10 flex flex-col">
+        <span className="text-xs font-semibold">NIFTY 50</span>
+        <span className="text-[10px] text-muted-foreground">
+          Upstox 1-min Data
+        </span>
       </div>
-      <CardContent className="p-0 h-[400px] flex-1 pt-12 pb-4">
+      <CardContent className="p-0 flex-1 pt-10 pb-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
             <defs>

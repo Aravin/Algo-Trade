@@ -72,10 +72,14 @@ export function StrategiesPage() {
         <HardStopBanner reasons={bot.hardStop.reasons} />
       )}
 
-      {/* Market setup & Chart side-by-side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <MarketSetupPanel vrdData={bot.vrdData} />
-        <SimpleChartWidget candles={bot.candles} />
+      {/* Market setup & Chart side-by-side (3/4 Overview, 1/4 Chart) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        <div className="lg:col-span-9 h-full">
+          <MarketSetupPanel vrdData={bot.vrdData} />
+        </div>
+        <div className="lg:col-span-3 h-full">
+          <SimpleChartWidget candles={bot.candles} />
+        </div>
       </div>
 
       {/* Global Markets & Indicators */}

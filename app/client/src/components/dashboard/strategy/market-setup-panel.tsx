@@ -40,7 +40,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
   const vixOk = vix !== null && vix !== undefined && vix >= 10 && vix <= 25
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm">
           <Globe size={14} className="text-primary" />
@@ -56,8 +56,8 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
-        <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-x-6 gap-y-4">
+      <CardContent className="pt-0 flex-1">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-4">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Volatility
