@@ -1,4 +1,9 @@
-import type { IndicatorsResult, SignalType, MomentumType } from '@/lib/types'
+import type {
+  IndicatorsResult,
+  SignalType,
+  MomentumType,
+  BollingerSqueezeMetrics,
+} from '@/lib/types'
 import { BarChart2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InfoTooltip } from '@/components/ui/tooltip'
@@ -48,16 +53,18 @@ function IndicatorCard({
 
 export function IndicatorsPanel({
   indicators,
+  squeezeMetrics,
 }: {
   indicators: IndicatorsResult | null
+  squeezeMetrics?: BollingerSqueezeMetrics | null
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm flex items-center gap-2">
           <BarChart2 size={14} className="text-primary" />
-          Technical Indicators (1-min OHLC)
-          <InfoTooltip content="Real-time 1-minute OHLC technical analysis. Aggregates EMA crossover, ADX trend strength, RSI, Stochastic, Bollinger Bands, ATR, and OI PCR." />
+          Technical Indicators & Volatility Squeeze (1-min OHLC)
+          <InfoTooltip content="Real-time 1-minute OHLC technical analysis. Aggregates EMA crossover, ADX trend strength, RSI, Stochastic, Bollinger Bands, ATR, OI PCR, and Bollinger Volatility Squeeze telemetry." />
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -109,6 +116,54 @@ export function IndicatorsPanel({
               sub={indicators.atr.level}
               tooltip="Average True Range (14-period). Measures price volatility per 1-min candle in index points. High ATR indicates wider price swings."
             />
+          </div>
+        )}
+        {squeezeMetrics && (
+          <div className="mt-3 p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-amber-500 flex items-center gap-1">
+                🔥 BOLLINGER SQUEEZE TELEMETRY:
+              </span>
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded border ${
+                  squeezeMetrics.breakoutDirection === 'CE'
+                    ? 'bg-success/20 border-success/40 text-success'
+                    : squeezeMetrics.breakoutDirection === 'PE'
+                      ? 'bg-destructive/20 border-destructive/40 text-destructive'
+                      : squeezeMetrics.isSqueezing
+                        ? 'bg-amber-500/20 border-amber-500/40 text-amber-500'
+                        : 'bg-muted border-border text-muted-foreground'
+                }`}
+              >
+                {squeezeMetrics.breakoutDirection === 'CE'
+                  ? '🚀 BREAKOUT (BUY CE)'
+                  : squeezeMetrics.breakoutDirection === 'PE'
+                    ? '🔻 BREAKOUT (BUY PE)'
+                    : squeezeMetrics.isSqueezing
+                      ? `🔥 SQUEEZING (${squeezeMetrics.squeezeCandleCount} candles)`
+                      : '🟢 NORMAL VOLATILITY'}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-xs font-mono">
+              <span>
+                Bandwidth:{' '}
+                <strong className="text-foreground">
+                  {squeezeMetrics.bandwidthPct.toFixed(2)}%
+                </strong>
+              </span>
+              <span>
+                Limit:{' '}
+                <strong className="text-muted-foreground">
+                  ≤{squeezeMetrics.squeezeThresholdPct.toFixed(2)}%
+                </strong>
+              </span>
+              <span>
+                ADX:{' '}
+                <strong className="text-foreground">
+                  {squeezeMetrics.adxValue.toFixed(1)}
+                </strong>
+              </span>
+            </div>
           </div>
         )}
         {indicators && (

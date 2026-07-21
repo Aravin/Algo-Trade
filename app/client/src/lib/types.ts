@@ -177,8 +177,23 @@ export interface ActivePosition {
   legs?: PositionLeg[]
 }
 
+export type StrategyMode = 'v5_scorecard' | 'bollinger_squeeze'
+
+export interface BollingerSqueezeMetrics {
+  isSqueezing: boolean
+  bandwidthPct: number
+  squeezeThresholdPct: number
+  squeezeCandleCount: number
+  breakoutDirection: 'CE' | 'PE' | 'NONE'
+  adxValue: number
+}
+
 // Strategy Config
 export interface StrategyConfig {
+  strategyMode: StrategyMode
+  squeezeThresholdPct: number
+  minSqueezeCandles: number
+  adxMinThreshold: number
   strongThreshold: number
   moderateThreshold: number
   /** Minimum bull−bear gap required for Strong confidence (default 6) */
@@ -265,6 +280,10 @@ export interface AppNotification {
 
 // Constants & Config Values
 export const DEFAULT_CONFIG: StrategyConfig = {
+  strategyMode: 'v5_scorecard',
+  squeezeThresholdPct: 1.2,
+  minSqueezeCandles: 3,
+  adxMinThreshold: 20,
   strongThreshold: 14,
   moderateThreshold: 10,
   strongGap: 6,

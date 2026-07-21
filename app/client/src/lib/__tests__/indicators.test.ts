@@ -49,7 +49,16 @@ describe('indicators', () => {
     })
 
     it('outputs Buy for Bollinger signal in breakout mode when price breaks above upper band', () => {
-      const candles = generateCandles(60, 24000, 20)
+      const candles = generateCandles(60, 24000, 5)
+      const lastPrice = candles[candles.length - 1][4]
+      candles.push([
+        new Date().toISOString(),
+        lastPrice,
+        lastPrice + 150,
+        lastPrice - 5,
+        lastPrice + 140,
+        5000,
+      ])
       const result = computeAllIndicators(candles, [])
       expect(result.bollinger.signal).toBe('Buy')
     })

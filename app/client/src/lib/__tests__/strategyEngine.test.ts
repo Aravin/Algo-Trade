@@ -6,7 +6,7 @@ import {
   getFinalSignal,
   shouldExit,
 } from '../strategyEngine'
-import type { VrdData, AllSignalData, ActivePosition } from '../types'
+import type { VrdData, AllSignalData, ActivePosition, Candle } from '../types'
 
 describe('strategyEngine', () => {
   const baseVrd: VrdData = {
@@ -315,6 +315,73 @@ describe('strategyEngine', () => {
       })
       expect(exitCheck.exit).toBe(true)
       expect(exitCheck.reason).toContain('Stop loss')
+    })
+  })
+
+  describe('getFinalSignal routing with strategyMode', () => {
+    const mockSignalData: AllSignalData = {
+      v3: 'hold',
+      indicators: {
+        ema: 'Hold',
+        adx: 'Hold',
+        rsi: { signal: 'Hold', value: 50 },
+        stochastic: { k: 50, d: 50, signal: 'Hold' },
+        bollinger: {
+          signal: 'Hold',
+          upper: 24050,
+          middle: 24000,
+          lower: 23950,
+          trend: 'Neutral',
+        },
+        atr: { value: 20, level: 'Neutral' },
+        pcr: 'Hold',
+        pcrValue: 1.0,
+      },
+      vrd: baseVrd,
+    }
+
+    it('evaluates V5 scorecard by default', () => {
+      const res = getFinalSignal(mockSignalData, {
+        strategyMode: 'v5_scorecard',
+        squeezeThresholdPct: 1.2,
+        minSqueezeCandles: 3,
+        adxMinThreshold: 20,
+        strongThreshold: 14,
+        moderateThreshold: 10,
+        strongGap: 6,
+        moderateGap: 3,
+        minConfidence: 'moderate',
+      })
+      expect(res.signal).toBeDefined()
+    })
+
+    it('evaluates Bollinger Squeeze when strategyMode is bollinger_squeeze and candles provided', () => {
+      const dummyCandles: Candle[] = new Array(30)
+        .fill(0)
+        .map((_, i) => [
+          new Date().toISOString(),
+          24000,
+          24005,
+          23995,
+          24000 + (i % 2 === 0 ? 1 : -1),
+          1000,
+        ])
+      const res = getFinalSignal(
+        mockSignalData,
+        {
+          strategyMode: 'bollinger_squeeze',
+          squeezeThresholdPct: 2.0,
+          minSqueezeCandles: 2,
+          adxMinThreshold: 10,
+          strongThreshold: 14,
+          moderateThreshold: 10,
+          strongGap: 6,
+          moderateGap: 3,
+          minConfidence: 'moderate',
+        },
+        dummyCandles,
+      )
+      expect(['WAIT', 'NO_TRADE', 'BUY_CE', 'BUY_PE']).toContain(res.signal)
     })
   })
 })

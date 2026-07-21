@@ -7,6 +7,7 @@ import {
   scoreVix,
   scoreStraddleIV,
 } from './vrdSignals'
+import { calcBollingerSqueezeMetrics } from './indicators'
 import type {
   IndicatorsResult,
   SignalType,
@@ -18,7 +19,223 @@ import type {
   AllSignalData,
   ActivePosition,
   McMarketItem,
+  Candle,
 } from './types'
+
+// ─── Bollinger Squeeze Strategy Evaluator ─────────────────────────────────────
+export function evaluateBollingerSqueezeStrategy(
+  data: AllSignalData,
+  candles: Candle[],
+  config: Partial<StrategyConfig>,
+): FinalSignal {
+  const v4 = getV4Signal(data.indicators)
+  const squeeze = calcBollingerSqueezeMetrics(
+    candles,
+    config.squeezeThresholdPct ?? 1.2,
+    config.minSqueezeCandles ?? 3,
+    config.adxMinThreshold ?? 20,
+  )
+
+  const minConf = config.minConfidence ?? 'moderate'
+
+  if (squeeze.breakoutDirection === 'CE') {
+    const isStrong = squeeze.adxValue >= (config.adxMinThreshold ?? 20) + 5
+    const confidence = isStrong ? 'strong' : 'moderate'
+    const shouldTrade =
+      confidence === 'strong' ||
+      (minConf === 'moderate' && confidence === 'moderate')
+
+    return {
+      signal: shouldTrade ? 'BUY_CE' : 'NO_TRADE',
+      confidence,
+      positionSize: shouldTrade
+        ? confidence === 'strong'
+          ? 'full'
+          : 'half'
+        : 'none',
+      v3: data.v3,
+      v4,
+      bullScore: 15,
+      bearScore: 0,
+      scoreMax: 20,
+    }
+  }
+
+  if (squeeze.breakoutDirection === 'PE') {
+    const isStrong = squeeze.adxValue >= (config.adxMinThreshold ?? 20) + 5
+    const confidence = isStrong ? 'strong' : 'moderate'
+    const shouldTrade =
+      confidence === 'strong' ||
+      (minConf === 'moderate' && confidence === 'moderate')
+
+    return {
+      signal: shouldTrade ? 'BUY_PE' : 'NO_TRADE',
+      confidence,
+      positionSize: shouldTrade
+        ? confidence === 'strong'
+          ? 'full'
+          : 'half'
+        : 'none',
+      v3: data.v3,
+      v4,
+      bullScore: 0,
+      bearScore: 15,
+      scoreMax: 20,
+    }
+  }
+
+  return {
+    signal: squeeze.isSqueezing ? 'WAIT' : 'NO_TRADE',
+    confidence: squeeze.isSqueezing ? 'moderate' : 'none',
+    positionSize: 'none',
+    v3: data.v3,
+    v4,
+    bullScore: squeeze.isSqueezing ? 5 : 0,
+    bearScore: squeeze.isSqueezing ? 5 : 0,
+    scoreMax: 20,
+  }
+}
+
+// ─── Final signal decision ────────────────────────────────────────────────────
+export function getFinalSignal(
+  data: AllSignalData,
+  config: Partial<StrategyConfig>,
+  candles?: Candle[],
+): FinalSignal {
+  if (
+    config.strategyMode === 'bollinger_squeeze' &&
+    candles &&
+    candles.length >= 20
+  ) {
+    return evaluateBollingerSqueezeStrategy(data, candles, config)
+  }
+
+  const bull = scoreBullish(data)
+  const bear = scoreBearish(data)
+  const v4 = getV4Signal(data.indicators)
+  const gap = Math.abs(bull.score - bear.score)
+  const top = Math.max(bull.score, bear.score)
+  const dominant =
+    bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : 'none'
+  const scoreMax =
+    dominant === 'bull'
+      ? Math.max(bull.max, 1)
+      : dominant === 'bear'
+        ? Math.max(bear.max, 1)
+        : Math.max(bull.max, bear.max, 1)
+
+  const ratio = scoreMax > 0 ? top / scoreMax : 0
+  let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
+
+  const strongThreshold = config.strongThreshold ?? 14
+  const moderateThreshold = config.moderateThreshold ?? 10
+  const strongGap = config.strongGap ?? 6
+  const moderateGap = config.moderateGap ?? 3
+
+  const satisfiesStrong =
+    top >= strongThreshold ||
+    (ratio >= 0.7 && top >= Math.min(strongThreshold, 10))
+  const satisfiesModerate =
+    top >= moderateThreshold ||
+    (ratio >= 0.5 && top >= Math.min(moderateThreshold, 6))
+
+  if (satisfiesStrong && gap >= strongGap) confidence = 'strong'
+  else if (satisfiesModerate && gap >= moderateGap)
+    confidence = 'moderate'
+  else if (satisfiesModerate) confidence = 'weak'
+
+  const minConf = config.minConfidence ?? 'moderate'
+  const shouldTrade =
+    confidence === 'strong' ||
+    (minConf === 'moderate' && confidence === 'moderate')
+
+  if (!shouldTrade || dominant === 'none') {
+    return {
+      signal: 'NO_TRADE',
+      confidence,
+      positionSize: 'none',
+      v3: data.v3,
+      v4,
+      bullScore: bull.score,
+      bearScore: bear.score,
+      scoreMax: scoreMax,
+    }
+  }
+
+  const signal = dominant === 'bull' ? 'BUY_CE' : 'BUY_PE'
+  const positionSize = confidence === 'strong' ? 'full' : 'half'
+  return {
+    signal,
+    confidence,
+    positionSize,
+    v3: data.v3,
+    v4,
+    bullScore: bull.score,
+    bearScore: bear.score,
+    scoreMax: scoreMax,
+  }
+}
+
+// ─── Exit decision ────────────────────────────────────────────────────────────
+export function shouldExit(
+  position: ActivePosition,
+  currentData: AllSignalData,
+  currentPrice: number,
+  config: Pick<StrategyConfig, 'maxProfitPct' | 'maxLossPct'>,
+): { exit: boolean; reason: string } {
+  let pct: number
+  if (position.legs && position.legs.length > 0) {
+    let totalPnl = 0
+    let totalEntryValue = 0
+    for (const leg of position.legs) {
+      const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+      const legPnl =
+        leg.tradeType === 'selling'
+          ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+          : (legCurrentPrice - leg.entryPrice) * leg.quantity
+      totalPnl += legPnl
+      totalEntryValue += leg.entryPrice * leg.quantity
+    }
+    pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+  } else {
+    const isSelling = position.tradeType === 'selling'
+    pct = isSelling
+      ? ((position.entryPrice - currentPrice) / position.entryPrice) * 100
+      : ((currentPrice - position.entryPrice) / position.entryPrice) * 100
+  }
+
+  if (pct >= config.maxProfitPct)
+    return { exit: true, reason: `Profit +${pct.toFixed(1)}% reached` }
+  if (pct <= -config.maxLossPct)
+    return {
+      exit: true,
+      reason: `Stop loss -${Math.abs(pct).toFixed(1)}% triggered`,
+    }
+
+  const v4 = getV4Signal(currentData.indicators)
+  const isSellingMode = position.tradeType === 'selling'
+  const isBullishBias = isSellingMode
+    ? position.direction === 'PE'
+    : position.direction === 'CE'
+
+  const reversal = isBullishBias ? 'Sell' : 'Buy'
+  if (v4 === reversal)
+    return { exit: true, reason: `V4 signal reversed to ${v4}` }
+
+  const v3Reversal = isBullishBias ? 'sell' : 'buy'
+  if (currentData.v3 === v3Reversal)
+    return { exit: true, reason: `V3 signal reversed to ${currentData.v3}` }
+
+  const ad = currentData.vrd?.advancesDeclines
+  if (ad?.ratio != null) {
+    if (isBullishBias && ad.ratio < 0.8)
+      return { exit: true, reason: 'Breadth turned bearish' }
+    if (!isBullishBias && ad.ratio > 1.5)
+      return { exit: true, reason: 'Breadth turned bullish' }
+  }
+
+  return { exit: false, reason: '' }
+}
 
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
 export function runHardStopChecks(
@@ -459,138 +676,4 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
   }
 
   return { score: Math.max(0, score), max, breakdown: bd }
-}
-
-// ─── Final signal decision ────────────────────────────────────────────────────
-export function getFinalSignal(
-  data: AllSignalData,
-  config: Pick<
-    StrategyConfig,
-    | 'strongThreshold'
-    | 'moderateThreshold'
-    | 'minConfidence'
-    | 'strongGap'
-    | 'moderateGap'
-  >,
-): FinalSignal {
-  const bull = scoreBullish(data)
-  const bear = scoreBearish(data)
-  const v4 = getV4Signal(data.indicators)
-  const gap = Math.abs(bull.score - bear.score)
-  const top = Math.max(bull.score, bear.score)
-  const dominant =
-    bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : 'none'
-  const scoreMax =
-    dominant === 'bull'
-      ? Math.max(bull.max, 1)
-      : dominant === 'bear'
-        ? Math.max(bear.max, 1)
-        : Math.max(bull.max, bear.max, 1)
-
-  const ratio = scoreMax > 0 ? top / scoreMax : 0
-  let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
-
-  const satisfiesStrong =
-    top >= config.strongThreshold ||
-    (ratio >= 0.7 && top >= Math.min(config.strongThreshold, 10))
-  const satisfiesModerate =
-    top >= config.moderateThreshold ||
-    (ratio >= 0.5 && top >= Math.min(config.moderateThreshold, 6))
-
-  if (satisfiesStrong && gap >= config.strongGap) confidence = 'strong'
-  else if (satisfiesModerate && gap >= config.moderateGap)
-    confidence = 'moderate'
-  else if (satisfiesModerate) confidence = 'weak'
-
-  const minConf = config.minConfidence
-  const shouldTrade =
-    confidence === 'strong' ||
-    (minConf === 'moderate' && confidence === 'moderate')
-
-  if (!shouldTrade || dominant === 'none') {
-    return {
-      signal: 'NO_TRADE',
-      confidence,
-      positionSize: 'none',
-      v3: data.v3,
-      v4,
-      bullScore: bull.score,
-      bearScore: bear.score,
-      scoreMax: scoreMax,
-    }
-  }
-
-  const signal = dominant === 'bull' ? 'BUY_CE' : 'BUY_PE'
-  const positionSize = confidence === 'strong' ? 'full' : 'half'
-  return {
-    signal,
-    confidence,
-    positionSize,
-    v3: data.v3,
-    v4,
-    bullScore: bull.score,
-    bearScore: bear.score,
-    scoreMax: scoreMax,
-  }
-}
-
-// ─── Exit decision ────────────────────────────────────────────────────────────
-export function shouldExit(
-  position: ActivePosition,
-  currentData: AllSignalData,
-  currentPrice: number,
-  config: Pick<StrategyConfig, 'maxProfitPct' | 'maxLossPct'>,
-): { exit: boolean; reason: string } {
-  let pct: number
-  if (position.legs && position.legs.length > 0) {
-    let totalPnl = 0
-    let totalEntryValue = 0
-    for (const leg of position.legs) {
-      const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
-      const legPnl =
-        leg.tradeType === 'selling'
-          ? (leg.entryPrice - legCurrentPrice) * leg.quantity
-          : (legCurrentPrice - leg.entryPrice) * leg.quantity
-      totalPnl += legPnl
-      totalEntryValue += leg.entryPrice * leg.quantity
-    }
-    pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
-  } else {
-    const isSelling = position.tradeType === 'selling'
-    pct = isSelling
-      ? ((position.entryPrice - currentPrice) / position.entryPrice) * 100
-      : ((currentPrice - position.entryPrice) / position.entryPrice) * 100
-  }
-
-  if (pct >= config.maxProfitPct)
-    return { exit: true, reason: `Profit +${pct.toFixed(1)}% reached` }
-  if (pct <= -config.maxLossPct)
-    return {
-      exit: true,
-      reason: `Stop loss -${Math.abs(pct).toFixed(1)}% triggered`,
-    }
-
-  const v4 = getV4Signal(currentData.indicators)
-  const isSellingMode = position.tradeType === 'selling'
-  const isBullishBias = isSellingMode
-    ? position.direction === 'PE'
-    : position.direction === 'CE'
-
-  const reversal = isBullishBias ? 'Sell' : 'Buy'
-  if (v4 === reversal)
-    return { exit: true, reason: `V4 signal reversed to ${v4}` }
-
-  const v3Reversal = isBullishBias ? 'sell' : 'buy'
-  if (currentData.v3 === v3Reversal)
-    return { exit: true, reason: `V3 signal reversed to ${currentData.v3}` }
-
-  const ad = currentData.vrd?.advancesDeclines
-  if (ad?.ratio != null) {
-    if (isBullishBias && ad.ratio < 0.8)
-      return { exit: true, reason: 'Breadth turned bearish' }
-    if (!isBullishBias && ad.ratio > 1.5)
-      return { exit: true, reason: 'Breadth turned bullish' }
-  }
-
-  return { exit: false, reason: '' }
 }

@@ -9,6 +9,7 @@ import type {
   FinalSignal,
   PaperTrade,
   PaperAccountSummary,
+  BollingerSqueezeMetrics,
 } from '@/lib/types'
 import {
   useState,
@@ -17,7 +18,11 @@ import {
   useRef,
   useCallback,
 } from 'react'
-import { computeAllIndicators, getOtmStrike } from '@/lib/indicators'
+import {
+  calcBollingerSqueezeMetrics,
+  computeAllIndicators,
+  getOtmStrike,
+} from '@/lib/indicators'
 import { notify } from '@/lib/notifications'
 import {
   runHardStopChecks,
@@ -53,6 +58,7 @@ export interface BotStatus {
   vrdData: VrdData | null
   allSignalData: AllSignalData | null
   finalSignal: FinalSignal | null
+  squeezeMetrics: BollingerSqueezeMetrics | null
   hardStop: {
     blocked: boolean
     blockedDirection?: 'CE' | 'PE' | 'BOTH' | 'NONE'
@@ -213,6 +219,7 @@ const INITIAL: BotStatus = {
   vrdData: null,
   allSignalData: null,
   finalSignal: null,
+  squeezeMetrics: null,
   hardStop: { blocked: false, blockedDirection: 'NONE', reasons: [] },
   lastUpdated: null,
   error: null,
@@ -368,7 +375,13 @@ export function useStrategyBot(token: string | null) {
         vrd: vrdData,
         globalIndices,
       }
-      const finalSignal = getFinalSignal(allSignalData, config)
+      const squeezeMetrics = calcBollingerSqueezeMetrics(
+        candles,
+        config.squeezeThresholdPct,
+        config.minSqueezeCandles,
+        config.adxMinThreshold,
+      )
+      const finalSignal = getFinalSignal(allSignalData, config, candles)
 
       // ── Tick log (threshold backtesting) ────────────────────────────────────
       appendTick({
@@ -403,6 +416,7 @@ export function useStrategyBot(token: string | null) {
         candles,
         allSignalData,
         finalSignal,
+        squeezeMetrics,
         hardStop,
         globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
