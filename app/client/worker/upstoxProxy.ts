@@ -1,5 +1,18 @@
 import type { UpstoxTokenRequest } from './types'
 
+const DEFAULT_TIMEOUT_MS = 8000
+
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+  })
+}
+
 export function formatIsoDate(date = new Date()): string {
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -80,7 +93,7 @@ export async function handleUpstoxToken(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       'https://api.upstox.com/v2/login/authorization/token',
       {
         method: 'POST',
@@ -114,12 +127,15 @@ export async function handleUpstoxProfile(request: Request): Promise<Response> {
   }
   let upstream: Response
   try {
-    upstream = await fetch('https://api.upstox.com/v2/user/profile', {
-      headers: {
-        Authorization: `Bearer ${body.token}`,
-        Accept: 'application/json',
+    upstream = await fetchWithTimeout(
+      'https://api.upstox.com/v2/user/profile',
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
       },
-    })
+    )
   } catch {
     return Response.json(
       { error: 'Failed to reach Upstox API' },
@@ -148,7 +164,7 @@ export async function handleMarketIndices(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token' }, { status: 400 })
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(INSTRUMENT_KEYS)}`,
       {
         headers: {
@@ -178,7 +194,7 @@ export async function handleUpstoxFunds(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token' }, { status: 400 })
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       'https://api.upstox.com/v3/user/get-funds-and-margin',
       {
         headers: {
@@ -214,7 +230,7 @@ export async function handleIntraday(request: Request): Promise<Response> {
   const key = encodeURIComponent(body.instrumentKey)
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/historical-candle/intraday/${key}/${interval}`,
       {
         headers: {
@@ -247,7 +263,7 @@ export async function handleOptionContracts(
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       'https://api.upstox.com/v2/option/contract?instrument_key=NSE_INDEX|Nifty 50',
       {
         headers: {
@@ -295,7 +311,7 @@ export async function handleMarketQuotes(request: Request): Promise<Response> {
     )
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(body.instrumentKeys)}`,
       {
         headers: {
@@ -332,7 +348,7 @@ export async function handleOptionChain(request: Request): Promise<Response> {
   })
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/option/chain?${qs.toString()}`,
       {
         headers: {
@@ -375,7 +391,7 @@ export async function handleUpstoxPcr(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/pcr?${qs.toString()}`,
       {
         headers: {
@@ -433,7 +449,7 @@ export async function handlePlaceOrder(request: Request): Promise<Response> {
   }
   let upstream: Response
   try {
-    upstream = await fetch('https://api.upstox.com/v2/order/place', {
+    upstream = await fetchWithTimeout('https://api.upstox.com/v2/order/place', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${body.token}`,
@@ -463,12 +479,15 @@ export async function handleOrderList(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token' }, { status: 400 })
   let upstream: Response
   try {
-    upstream = await fetch('https://api.upstox.com/v2/order/retrieve-all', {
-      headers: {
-        Authorization: `Bearer ${body.token}`,
-        Accept: 'application/json',
+    upstream = await fetchWithTimeout(
+      'https://api.upstox.com/v2/order/retrieve-all',
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
       },
-    })
+    )
   } catch {
     return Response.json(
       { error: 'Failed to reach Upstox API' },
@@ -491,7 +510,7 @@ export async function handleVix(request: Request): Promise<Response> {
   const key = encodeURIComponent('NSE_INDEX|India VIX')
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${key}`,
       {
         headers: {
@@ -575,7 +594,7 @@ export async function handleBreadth(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token' }, { status: 400 })
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(NIFTY50_KEYS.join(','))}`,
       {
         headers: {
@@ -635,7 +654,7 @@ export async function handleUpstoxFii(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/fii?${qs.toString()}`,
       {
         headers: {
@@ -679,7 +698,7 @@ export async function handleUpstoxDii(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/dii?${qs.toString()}`,
       {
         headers: {
@@ -723,7 +742,7 @@ export async function handleUpstoxMaxPain(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/max-pain?${qs.toString()}`,
       {
         headers: {
@@ -769,12 +788,15 @@ export async function handleUpstoxNews(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(`https://api.upstox.com/v2/news?${qs.toString()}`, {
-      headers: {
-        Authorization: `Bearer ${body.token}`,
-        Accept: 'application/json',
+    upstream = await fetchWithTimeout(
+      `https://api.upstox.com/v2/news?${qs.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
       },
-    })
+    )
   } catch (e) {
     return Response.json(
       { error: `Failed to reach Upstox news: ${String(e)}` },
@@ -804,7 +826,7 @@ export async function handleUpstoxOi(request: Request): Promise<Response> {
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/oi?${qs.toString()}`,
       {
         headers: {
@@ -850,7 +872,7 @@ export async function handleUpstoxChangeOi(
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/change-oi?${qs.toString()}`,
       {
         headers: {
@@ -897,7 +919,7 @@ export async function handleUpstoxSmartlistFutures(
 
   let upstream: Response
   try {
-    upstream = await fetch(
+    upstream = await fetchWithTimeout(
       `https://api.upstox.com/v2/market/smartlist/futures?${qs.toString()}`,
       {
         headers: {

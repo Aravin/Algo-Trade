@@ -1,12 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
-import { BrokerAccountsPage } from '@/pages/broker-accounts'
-import { BrokerCallbackPage } from '@/pages/broker-callback'
-import { ProfilePage } from '@/pages/profile'
-import { HistoryPage } from '@/pages/history'
-import { StrategiesPage } from '@/pages/strategies'
-import { LiveTradesPage } from '@/pages/live-trades'
 import { hydrateAccounts } from '@/lib/accounts'
 import { hydrateStrategyConfig } from '@/lib/strategyConfig'
 import { useAuth0 } from '@auth0/auth0-react'
@@ -15,6 +9,29 @@ import { isAuth0Enabled } from '@/lib/auth0-config'
 import { ArrowRight } from 'lucide-react'
 import { AppLogo } from '@/components/ui/app-logo'
 import './App.css'
+
+const BrokerAccountsPage = lazy(() =>
+  import('@/pages/broker-accounts').then((m) => ({
+    default: m.BrokerAccountsPage,
+  })),
+)
+const BrokerCallbackPage = lazy(() =>
+  import('@/pages/broker-callback').then((m) => ({
+    default: m.BrokerCallbackPage,
+  })),
+)
+const ProfilePage = lazy(() =>
+  import('@/pages/profile').then((m) => ({ default: m.ProfilePage })),
+)
+const HistoryPage = lazy(() =>
+  import('@/pages/history').then((m) => ({ default: m.HistoryPage })),
+)
+const StrategiesPage = lazy(() =>
+  import('@/pages/strategies').then((m) => ({ default: m.StrategiesPage })),
+)
+const LiveTradesPage = lazy(() =>
+  import('@/pages/live-trades').then((m) => ({ default: m.LiveTradesPage })),
+)
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -108,7 +125,17 @@ function App() {
   }, [isBrokerCallback, auth0Enabled, isAuthenticated, user, isLoading])
 
   if (isBrokerCallback) {
-    return <BrokerCallbackPage />
+    return (
+      <Suspense
+        fallback={
+          <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
+            Loading broker connection…
+          </div>
+        }
+      >
+        <BrokerCallbackPage />
+      </Suspense>
+    )
   }
 
   // Handle Auth0 loading state
@@ -183,7 +210,17 @@ function App() {
       <Sidebar activeItem={activeItem} onSelect={setActiveItem} />
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
-        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
+        <main className="flex-1 overflow-y-auto">
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
+                Loading view…
+              </div>
+            }
+          >
+            {renderPage()}
+          </Suspense>
+        </main>
       </div>
     </div>
   )

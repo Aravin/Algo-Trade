@@ -4,6 +4,7 @@ export async function handleGlobalIndices(): Promise<Response> {
   let upstream: Response
   try {
     upstream = await fetch(GLOBAL_INDICES_URL, {
+      signal: AbortSignal.timeout(8000),
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
