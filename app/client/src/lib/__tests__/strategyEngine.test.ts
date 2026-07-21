@@ -3,6 +3,7 @@ import {
   runHardStopChecks,
   scoreBullish,
   scoreBearish,
+  getFinalSignal,
   shouldExit,
 } from '../strategyEngine'
 import type { VrdData, AllSignalData, ActivePosition } from '../types'
@@ -49,7 +50,7 @@ describe('strategyEngine', () => {
       const check = runHardStopChecks(vrdHighVix, [])
       expect(check.blocked).toBe(true)
       expect(check.blockedDirection).toBe('BOTH')
-      expect(check.reasons[0]).toContain('Extreme Volatility')
+      expect(check.reasons[0]).toContain('VIX')
     })
   })
 
@@ -82,6 +83,82 @@ describe('strategyEngine', () => {
 
       const bearResult = scoreBearish(allSignalData)
       expect(typeof bearResult.score).toBe('number')
+    })
+
+    it('scores FII 65% short as Bearish signal without inflating Bullish score', () => {
+      const fiiBearVrd: VrdData = {
+        ...baseVrd,
+        fiiLongShort: { longPct: 35, shortPct: 65, shortPctTrend: 'Rising' },
+      }
+      const signalData: AllSignalData = {
+        v3: 'sell',
+        indicators: {
+          ema: 'Sell',
+          adx: 'Sell',
+          rsi: { signal: 'Hold', value: 40 },
+          stochastic: { k: 20, d: 25, signal: 'Sell' },
+          bollinger: {
+            signal: 'Sell',
+            upper: 24200,
+            lower: 23800,
+            middle: 24000,
+            trend: 'Down',
+          },
+          atr: { value: 40, level: 'Neutral' },
+          pcr: 'Sell',
+          pcrValue: 0.6,
+        },
+        vrd: fiiBearVrd,
+      }
+
+      const bearResult = scoreBearish(signalData)
+      const fiiBearItem = bearResult.breakdown.find(
+        (b) => b.indicator === 'FII L/S',
+      )
+      expect(fiiBearItem).toBeDefined()
+      expect(fiiBearItem?.points).toBe(2)
+
+      const bullResult = scoreBullish(signalData)
+      const fiiBullItem = bullResult.breakdown.find(
+        (b) => b.indicator === 'FII L/S',
+      )
+      expect(fiiBullItem).toBeUndefined()
+    })
+  })
+
+  describe('getFinalSignal', () => {
+    it('evaluates confidence correctly incorporating score ratio', () => {
+      const signalData: AllSignalData = {
+        v3: 'buy',
+        indicators: {
+          ema: 'Buy',
+          adx: 'Buy',
+          rsi: { signal: 'Hold', value: 55 },
+          stochastic: { k: 70, d: 65, signal: 'Buy' },
+          bollinger: {
+            signal: 'Buy',
+            upper: 24200,
+            lower: 23800,
+            middle: 24000,
+            trend: 'Up',
+          },
+          atr: { value: 40, level: 'Neutral' },
+          pcr: 'Buy',
+          pcrValue: 1.2,
+        },
+        vrd: baseVrd,
+      }
+
+      const res = getFinalSignal(signalData, {
+        strongThreshold: 14,
+        moderateThreshold: 10,
+        minConfidence: 'moderate',
+        strongGap: 4,
+        moderateGap: 2,
+      })
+
+      expect(res.signal).toBe('BUY_CE')
+      expect(['strong', 'moderate']).includes(res.confidence)
     })
   })
 

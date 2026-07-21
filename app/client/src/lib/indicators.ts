@@ -151,6 +151,7 @@ function calcStochastic(
 function calcBollingerBands(
   candles: Candle[],
   period = 20,
+  mode: 'breakout' | 'reversion' = 'breakout',
 ): {
   upper: number
   middle: number
@@ -179,8 +180,13 @@ function calcBollingerBands(
   const middle = parseFloat(sma.toFixed(2))
   const currentPrice = candles[candles.length - 1][4]
   let signal: SignalType = 'Hold'
-  if (currentPrice > upper) signal = 'Sell'
-  else if (currentPrice < lower) signal = 'Buy'
+  if (mode === 'breakout') {
+    if (currentPrice > upper) signal = 'Buy'
+    else if (currentPrice < lower) signal = 'Sell'
+  } else {
+    if (currentPrice > upper) signal = 'Sell'
+    else if (currentPrice < lower) signal = 'Buy'
+  }
   const trend: TrendType =
     currentPrice > middle ? 'Up' : currentPrice < middle ? 'Down' : 'Neutral'
   return { upper, middle, lower, signal, trend }

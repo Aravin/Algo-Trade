@@ -115,8 +115,8 @@ export function scoreFiiLongShort(
         : `FII ${shortPct.toFixed(1)}% short — short-cover risk`
   } else if (shortPct >= 60) {
     points = 2
-    direction = 'BULL'
-    label = `FII mostly short (${shortPct.toFixed(1)}%)`
+    direction = 'BEAR'
+    label = `FII momentum short (${shortPct.toFixed(1)}%)`
   } else if (longPct >= 60) {
     points = 2
     direction = 'BULL'

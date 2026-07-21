@@ -344,22 +344,21 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
     }
 
     // FII L/S — momentum-short scoring (shortPct 60–79%)
-    // shortPct >= 80% is a contrarian BULL signal (short-cover risk) so it is
-    // excluded here to avoid contradicting the bull score.
     const fiiLs = data.vrd.fiiLongShort
-    if (fiiLs) {
-      const sp = fiiLs.shortPct ?? 0
-      if (sp >= 60 && sp < 80) {
-        max += 2
-        score += addScore(
-          bd,
-          'L2',
-          'FII L/S',
-          `FII ${sp.toFixed(1)}% short — momentum bear`,
-          2,
-          2,
-        )
-      }
+    const fiiLsS = scoreFiiLongShort(
+      fiiLs?.longPct ?? null,
+      fiiLs?.shortPct ?? null,
+    )
+    if (fiiLsS.direction === 'BEAR') {
+      max += fiiLsS.max
+      score += addScore(
+        bd,
+        'L2',
+        'FII L/S',
+        fiiLsS.label,
+        Math.abs(fiiLsS.score),
+        fiiLsS.max,
+      )
     }
 
     // FII Net Positioning — negative net = FII net short = bearish confirmation
@@ -490,12 +489,20 @@ export function getFinalSignal(
         ? Math.max(bear.max, 1)
         : Math.max(bull.max, bear.max, 1)
 
+  const ratio = scoreMax > 0 ? top / scoreMax : 0
   let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
-  if (top >= config.strongThreshold && gap >= config.strongGap)
-    confidence = 'strong'
-  else if (top >= config.moderateThreshold && gap >= config.moderateGap)
+
+  const satisfiesStrong =
+    top >= config.strongThreshold ||
+    (ratio >= 0.7 && top >= Math.min(config.strongThreshold, 10))
+  const satisfiesModerate =
+    top >= config.moderateThreshold ||
+    (ratio >= 0.5 && top >= Math.min(config.moderateThreshold, 6))
+
+  if (satisfiesStrong && gap >= config.strongGap) confidence = 'strong'
+  else if (satisfiesModerate && gap >= config.moderateGap)
     confidence = 'moderate'
-  else if (top >= config.moderateThreshold) confidence = 'weak'
+  else if (satisfiesModerate) confidence = 'weak'
 
   const minConf = config.minConfidence
   const shouldTrade =

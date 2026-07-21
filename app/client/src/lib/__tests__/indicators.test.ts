@@ -48,6 +48,12 @@ describe('indicators', () => {
       expect(result.atr.value).toBeGreaterThan(0)
     })
 
+    it('outputs Buy for Bollinger signal in breakout mode when price breaks above upper band', () => {
+      const candles = generateCandles(60, 24000, 20)
+      const result = computeAllIndicators(candles, [])
+      expect(result.bollinger.signal).toBe('Buy')
+    })
+
     it('calculates PCR correctly from option chain', () => {
       const mockOptionChain: OptionData[] = [
         {
