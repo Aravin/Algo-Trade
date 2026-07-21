@@ -354,7 +354,7 @@ export function StrategyConfig({
             >
               <option value="buying">Option Buying (Long CE/PE)</option>
               <option value="selling">Option Selling (Short CE/PE)</option>
-              <option value="both">Both (Long & Short)</option>
+              <option value="both">Both (Long or Short)</option>
             </select>
           </div>
         </div>
