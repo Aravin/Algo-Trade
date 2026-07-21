@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 interface Trade {
   id: string
@@ -191,7 +192,21 @@ function TradesTable({ trades }: { trades: Trade[] }) {
               <Badge variant={typeVariant[trade.type]}>{trade.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
-              {trade.qty}
+              <div>
+                <span>{trade.qty}</span>
+                {(() => {
+                  const lotSize = getLotSizeForSymbol(trade.symbol)
+                  if (lotSize > 1 && trade.type !== 'EQ') {
+                    const lots = Math.round(trade.qty / lotSize)
+                    return (
+                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                        ({lots} {lots > 1 ? 'lots' : 'lot'})
+                      </span>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
               ₹

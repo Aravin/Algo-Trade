@@ -97,6 +97,14 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+function getLotSizeForSymbol(instrumentKey: string): number {
+  const upper = instrumentKey.toUpperCase()
+  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
+  if (upper.includes('FINNIFTY')) return 40
+  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
+  return 1
+}
+
 function makeId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`
 }
@@ -464,6 +472,16 @@ async function handlePaperTradeEnter(
     return Response.json(
       {
         error: 'instrumentKey, direction, quantity and entryPrice are required',
+      },
+      { status: 400 },
+    )
+  }
+
+  const lotSize = getLotSizeForSymbol(body.instrumentKey)
+  if (quantity % lotSize !== 0) {
+    return Response.json(
+      {
+        error: `Quantity must be a multiple of lot size (${lotSize}) for ${body.instrumentKey}`,
       },
       { status: 400 },
     )

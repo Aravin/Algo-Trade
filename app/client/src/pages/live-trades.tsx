@@ -32,6 +32,7 @@ import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { cn, isToday, normalizeLiveStatus } from '@/lib/utils'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -663,7 +664,21 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
               <Badge variant={typeVariant[row.type]}>{row.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
-              {row.qty}
+              <div>
+                <span>{row.qty}</span>
+                {(() => {
+                  const lotSize = getLotSizeForSymbol(row.symbol)
+                  if (lotSize > 1 && row.type !== 'EQ') {
+                    const lots = Math.round(row.qty / lotSize)
+                    return (
+                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                        ({lots} {lots > 1 ? 'lots' : 'lot'})
+                      </span>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
               {row.entryPrice === null ? '—' : fmtCurrency(row.entryPrice)}
