@@ -32,6 +32,7 @@ import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { cn, isToday, normalizeLiveStatus } from '@/lib/utils'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -157,14 +158,6 @@ function inferType(symbol: string): TradeRow['type'] {
   if (u.includes(' PE')) return 'PE'
   if (u.includes(' FUT')) return 'FUT'
   return 'EQ'
-}
-
-function getLotSizeForSymbol(symbol: string): number {
-  const upper = symbol.toUpperCase()
-  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
-  if (upper.includes('FINNIFTY')) return 40
-  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
-  return 1
 }
 
 const typeVariant: Record<

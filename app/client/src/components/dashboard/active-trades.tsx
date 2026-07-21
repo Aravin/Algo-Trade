@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 interface Trade {
   id: string
@@ -160,14 +161,6 @@ const statusLabel: Record<string, string> = {
   CLOSED: 'Closed',
   SL_HIT: 'SL Hit',
   TARGET_HIT: 'Target',
-}
-
-function getLotSizeForSymbol(symbol: string): number {
-  const upper = symbol.toUpperCase()
-  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
-  if (upper.includes('FINNIFTY')) return 40
-  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
-  return 1
 }
 
 function TradesTable({ trades }: { trades: Trade[] }) {
