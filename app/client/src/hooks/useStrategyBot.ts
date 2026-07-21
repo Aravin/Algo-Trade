@@ -1567,9 +1567,7 @@ export function useStrategyBot(token: string | null) {
 
             const executionMode: ExecutionMode = config.executionMode
             let qty =
-              finalSignal.positionSize === 'full'
-                ? LOT_SIZE
-                : Math.floor(LOT_SIZE / 2)
+              finalSignal.positionSize === 'full' ? LOT_SIZE * 2 : LOT_SIZE
 
             let paperBalance: number | null = null
             if (executionMode === 'paper') {
@@ -1587,17 +1585,19 @@ export function useStrategyBot(token: string | null) {
               }
 
               if (paperBalance !== null && totalReq > 0) {
-                const affordableQty = Math.floor(paperBalance / totalReq)
+                const lotReq = totalReq * LOT_SIZE
+                const affordableLots = Math.floor(paperBalance / lotReq)
+                const affordableQty = affordableLots * LOT_SIZE
                 if (affordableQty <= 0) {
                   addLog(
                     mkLog(
                       'warn',
                       'paper',
-                      `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford combo margin/cost ₹${totalReq.toFixed(2)}`,
+                      `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford even 1 lot (cost ₹${lotReq.toFixed(2)})`,
                     ),
                   )
                   updateStatus({
-                    error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost ₹${totalReq.toFixed(2)}`,
+                    error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost per lot ₹${lotReq.toFixed(2)}`,
                   })
                   return
                 }

@@ -469,6 +469,13 @@ async function handlePaperTradeEnter(
     )
   }
 
+  if (quantity % 25 !== 0) {
+    return Response.json(
+      { error: 'Quantity must be a multiple of lot size (25)' },
+      { status: 400 },
+    )
+  }
+
   try {
     const account = await ensurePaperAccount(env, userId)
     const entryValue = Number((entryPrice * quantity).toFixed(2))
