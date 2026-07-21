@@ -1,6 +1,6 @@
 import type { PaperAccountSummary } from '@/lib/types'
 import { useEffect, useState } from 'react'
-import { Clock3, Wallet } from 'lucide-react'
+import { Clock3, Wallet, BarChart3 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -11,14 +11,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchPaperAccount } from '@/lib/paperTrading'
+import { fetchPaperHistory } from '@/lib/paperTrading'
 
-function fmtCurrency(value: number) {
-  return value.toLocaleString('en-IN', {
+function fmtCurrency(value: number, signed = false) {
+  const formatted = Math.abs(value).toLocaleString('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 2,
   })
+  if (!signed) {
+    return value < 0 ? `-${formatted}` : formatted
+  }
+  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
 }
 
 export function HistoryPage() {
@@ -27,7 +31,7 @@ export function HistoryPage() {
 
   useEffect(() => {
     let cancelled = false
-    void fetchPaperAccount()
+    void fetchPaperHistory()
       .then((summary) => {
         if (!cancelled) {
           setData(summary)
@@ -41,6 +45,8 @@ export function HistoryPage() {
       cancelled = true
     }
   }, [])
+
+  const trades = data?.trades ?? []
 
   return (
     <div className="flex flex-col gap-5 p-6 min-w-0">
@@ -109,8 +115,7 @@ export function HistoryPage() {
                     <TableCell
                       className={`text-xs font-mono ${entry.amount >= 0 ? 'text-success' : 'text-destructive'}`}
                     >
-                      {entry.amount >= 0 ? '+' : ''}
-                      {fmtCurrency(entry.amount)}
+                      {fmtCurrency(entry.amount, true)}
                     </TableCell>
                     <TableCell className="text-xs font-mono">
                       {fmtCurrency(entry.balance_after)}
@@ -125,6 +130,120 @@ export function HistoryPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BarChart3 size={14} className="text-primary" />
+              Completed Trades
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {trades.length} trades
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Direction</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Entry</TableHead>
+                <TableHead className="text-right">Exit</TableHead>
+                <TableHead className="text-right">P&amp;L</TableHead>
+                <TableHead className="text-right">Status</TableHead>
+                <TableHead className="text-right">Opened</TableHead>
+                <TableHead className="text-right">Closed</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {trades.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="text-center text-sm text-muted-foreground py-6"
+                  >
+                    No trades found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                trades.map((trade) => {
+                  const pnl = trade.realized_pnl
+                  return (
+                    <TableRow key={trade.id}>
+                      <TableCell className="font-medium text-sm">
+                        {trade.instrument_key}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {trade.direction}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {trade.quantity}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {fmtCurrency(trade.entry_price)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {trade.exit_price !== null
+                          ? fmtCurrency(trade.exit_price)
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {pnl === null ? (
+                          <span className="text-xs text-muted-foreground">
+                            —
+                          </span>
+                        ) : (
+                          <span
+                            className={`font-mono text-sm font-medium ${pnl >= 0 ? 'text-success' : 'text-destructive'}`}
+                          >
+                            {fmtCurrency(pnl, true)}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge
+                          variant={
+                            trade.status === 'CLOSED'
+                              ? 'secondary'
+                              : trade.status === 'OPEN'
+                                ? 'default'
+                                : 'outline'
+                          }
+                        >
+                          {trade.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {new Date(trade.opened_at).toLocaleString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          day: '2-digit',
+                          month: 'short',
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {trade.closed_at
+                          ? new Date(trade.closed_at).toLocaleString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: 'short',
+                            })
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }
