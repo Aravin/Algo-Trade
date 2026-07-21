@@ -162,6 +162,14 @@ const statusLabel: Record<string, string> = {
   TARGET_HIT: 'Target',
 }
 
+function getLotSizeForSymbol(symbol: string): number {
+  const upper = symbol.toUpperCase()
+  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
+  if (upper.includes('FINNIFTY')) return 40
+  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
+  return 1
+}
+
 function TradesTable({ trades }: { trades: Trade[] }) {
   return (
     <Table>
@@ -191,7 +199,19 @@ function TradesTable({ trades }: { trades: Trade[] }) {
               <Badge variant={typeVariant[trade.type]}>{trade.type}</Badge>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
-              {trade.qty}
+              <div>
+                <span>{trade.qty}</span>
+                {trade.type !== 'EQ' && (
+                  <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                    ({Math.round(trade.qty / getLotSizeForSymbol(trade.symbol))}{' '}
+                    {Math.round(trade.qty / getLotSizeForSymbol(trade.symbol)) >
+                    1
+                      ? 'lots'
+                      : 'lot'}
+                    )
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell className="text-right font-mono text-sm">
               ₹
