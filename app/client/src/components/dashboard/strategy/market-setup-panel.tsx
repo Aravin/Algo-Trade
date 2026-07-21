@@ -57,7 +57,7 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
+        <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-x-6 gap-y-4">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Volatility

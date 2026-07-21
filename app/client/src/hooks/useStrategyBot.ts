@@ -77,6 +77,7 @@ export interface BotStatus {
   logs: BotLog[]
   sourceStatus: Record<string, SourceStatus>
   globalIndices: GlobalIndexItem[] | null
+  candles: Candle[]
 }
 
 // ─── LocalStorage keys ─────────────────────────────────────────────────────────
@@ -1253,6 +1254,7 @@ const INITIAL: BotStatus = {
   logs: [],
   sourceStatus: {},
   globalIndices: null,
+  candles: [],
 }
 
 export function useStrategyBot(token: string | null) {
@@ -1428,6 +1430,7 @@ export function useStrategyBot(token: string | null) {
         ...positionUpdate,
         indicators,
         vrdData,
+        candles,
         allSignalData,
         finalSignal,
         hardStop,
