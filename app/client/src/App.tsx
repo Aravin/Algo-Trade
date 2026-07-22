@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
 import { hydrateAccounts } from '@/lib/accounts'
@@ -50,6 +50,7 @@ function App() {
 
   const [activeItem, setActiveItem] = useState(initialPage)
   const [isHydrated, setIsHydrated] = useState(isBrokerCallback)
+  const isLoggingInRef = useRef(false)
 
   const auth0Enabled = isAuth0Enabled()
   const {
@@ -124,6 +125,12 @@ function App() {
     }
   }, [isBrokerCallback, auth0Enabled, isAuthenticated, user, isLoading])
 
+  useEffect(() => {
+    return () => {
+      isLoggingInRef.current = false
+    }
+  }, [])
+
   if (isBrokerCallback) {
     return (
       <Suspense
@@ -167,9 +174,12 @@ function App() {
           {/* Call to Action */}
           <button
             onClick={() => {
+              if (isLoggingInRef.current) return
+              isLoggingInRef.current = true
               void loginWithRedirect()
             }}
-            className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+            disabled={isLoggingInRef.current}
+            className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition-all cursor-pointer shadow-sm active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Log In <ArrowRight size={14} />
           </button>
