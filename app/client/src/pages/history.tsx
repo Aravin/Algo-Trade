@@ -12,19 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchPaperHistory } from '@/lib/paperTrading'
+import { fmtCurrency } from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
-
-function fmtCurrency(value: number, signed = false) {
-  const formatted = Math.abs(value).toLocaleString('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  })
-  if (!signed) {
-    return value < 0 ? `-${formatted}` : formatted
-  }
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
-}
 
 export function HistoryPage() {
   const [data, setData] = useState<PaperAccountSummary | null>(null)
