@@ -18,7 +18,7 @@ if (isAuth0Enabled()) {
           redirect_uri: window.location.origin,
           audience: auth0Config.audience || undefined,
         }}
-        cacheLocation="localstorage"
+        cacheLocation="sessionstorage"
       >
         <App />
       </Auth0Provider>
