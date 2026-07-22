@@ -60,7 +60,7 @@ export function getLotSizeForSymbol(
   if (upper.includes('ONGC')) return 3850
   if (upper.includes('COALINDIA')) return 2100
 
-  return 1
+  return defaultHint && defaultHint > 0 ? defaultHint : 1
 }
 
 export function makeId(prefix: string): string {

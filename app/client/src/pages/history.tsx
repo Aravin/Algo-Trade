@@ -263,7 +263,7 @@ export function HistoryPage() {
                           <span>{trade.quantity}</span>
                           {(() => {
                             const lotSize = getLotSizeForSymbol(
-                              trade.instrument_key,
+                              displaySymbol || trade.instrument_key,
                             )
                             if (lotSize > 1) {
                               const lots = Math.round(trade.quantity / lotSize)

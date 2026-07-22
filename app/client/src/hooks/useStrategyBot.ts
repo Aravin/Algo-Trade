@@ -296,6 +296,7 @@ export function useStrategyBot(token: string | null) {
   }))
   const isTickingRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastExitTimesRef = useRef<Record<string, number>>({})
   const statusRef = useRef<BotStatus>(status)
   useLayoutEffect(() => {
     statusRef.current = status
@@ -680,6 +681,12 @@ export function useStrategyBot(token: string | null) {
             continue
           }
 
+          const lastExit = lastExitTimesRef.current[sym] ?? 0
+          const COOLDOWN_MS = 60 * 1000 // 1 minute cooldown
+          if (Date.now() - lastExit < COOLDOWN_MS) {
+            continue
+          }
+
           if (
             hardStop.blocked &&
             (hardStop.blockedDirection === 'BOTH' ||
@@ -749,7 +756,7 @@ export function useStrategyBot(token: string | null) {
 
           const executionMode: ExecutionMode = config.executionMode
           const lotSize = getLotSizeForSymbol(
-            symMarket.optionChain[0]?.call_options?.instrument_key || sym,
+            symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
           )
           let qty = symSig.positionSize === 'full' ? lotSize * 2 : lotSize
 
@@ -1207,6 +1214,7 @@ export function useStrategyBot(token: string | null) {
           }
           if (allLegsCleared) {
             curPositions[sym] = null
+            lastExitTimesRef.current[sym] = Date.now()
             addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
           } else {
             curPositions[sym] = {

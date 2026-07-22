@@ -437,19 +437,76 @@ function buildPaperDataset(
   }, {})
 
   const closedRows: TradeRow[] = closedTrades.map((t) => {
+    let tradingSymbol: string | undefined
+    let strikePrice: number | undefined
+    let underlyingSymbol: string | undefined
+    let exitReason: string | undefined
+    let grossPnl: number | undefined
+
+    try {
+      const meta = JSON.parse(t.metadata_json ?? '{}') as {
+        tradingSymbol?: string
+        strikePrice?: number
+        underlyingSymbol?: string
+        reason?: string
+        grossPnl?: number
+      } | null
+      if (meta?.tradingSymbol) tradingSymbol = meta.tradingSymbol
+      if (meta?.strikePrice) strikePrice = meta.strikePrice
+      if (meta?.underlyingSymbol) underlyingSymbol = meta.underlyingSymbol
+      if (meta?.reason) exitReason = meta.reason
+      if (typeof meta?.grossPnl === 'number') grossPnl = meta.grossPnl
+    } catch {
+      // ignore
+    }
+
     const pnl = t.realized_pnl ?? 0
     const pnlPct = t.entry_value > 0 ? (pnl / t.entry_value) * 100 : 0
+
+    const tradeRowType: TradeRow['type'] =
+      t.direction === 'CE' || t.direction === 'PE'
+        ? t.direction
+        : inferType(tradingSymbol ?? t.instrument_key)
+
+    const underlying = underlyingSymbol ?? 'NIFTY'
+    const strikeLabel = strikePrice ? `${strikePrice}` : ''
+    const displaySymbol =
+      tradingSymbol ??
+      (strikeLabel
+        ? `${underlying} ${strikeLabel} ${t.direction}`
+        : t.instrument_key)
+
+    const reasonLower = exitReason?.toLowerCase() ?? ''
+    const status: TradeRowStatus =
+      reasonLower.includes('stop loss') || reasonLower.includes('sl triggered')
+        ? 'SL_HIT'
+        : reasonLower.includes('profit') ||
+            reasonLower.includes('target reached')
+          ? 'TARGET_HIT'
+          : grossPnl !== undefined
+            ? grossPnl > 0
+              ? 'TARGET_HIT'
+              : grossPnl < 0
+                ? 'SL_HIT'
+                : 'CLOSED'
+            : pnl > 0
+              ? 'TARGET_HIT'
+              : pnl < 0
+                ? 'SL_HIT'
+                : 'CLOSED'
+
     return {
       id: t.id,
       symbol: t.instrument_key,
-      type: inferType(t.instrument_key),
+      displaySymbol,
+      type: tradeRowType,
       side: 'BUY',
       qty: t.quantity,
       entryPrice: t.entry_price,
       ltp: t.exit_price,
       pnl,
       pnlPct,
-      status: pnl > 0 ? 'TARGET_HIT' : pnl < 0 ? 'SL_HIT' : 'CLOSED',
+      status,
       entryTime: timeLabel(t.closed_at ?? t.opened_at),
     }
   })

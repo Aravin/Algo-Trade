@@ -15,6 +15,7 @@ import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 interface Trade {
   id: string
   symbol: string
+  displaySymbol?: string
   type: 'CE' | 'PE' | 'EQ' | 'FUT'
   side: 'BUY' | 'SELL'
   qty: number
@@ -195,7 +196,9 @@ function TradesTable({ trades }: { trades: Trade[] }) {
               <div>
                 <span>{trade.qty}</span>
                 {(() => {
-                  const lotSize = getLotSizeForSymbol(trade.symbol)
+                  const lotSize = getLotSizeForSymbol(
+                    trade.displaySymbol ?? trade.symbol,
+                  )
                   if (lotSize > 1 && trade.type !== 'EQ') {
                     const lots = Math.round(trade.qty / lotSize)
                     return (

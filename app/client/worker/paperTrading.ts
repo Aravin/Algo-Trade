@@ -296,11 +296,20 @@ export async function handlePaperTradeEnter(
     )
   }
 
-  const lotSize = getLotSizeForSymbol(body.instrumentKey)
+  const metadataObj = body.metadata as {
+    tradingSymbol?: string
+    underlyingSymbol?: string
+    tradeType?: 'buying' | 'selling'
+  } | null
+  const lotSymbol =
+    metadataObj?.tradingSymbol ??
+    metadataObj?.underlyingSymbol ??
+    body.instrumentKey
+  const lotSize = getLotSizeForSymbol(lotSymbol)
   if (quantity % lotSize !== 0) {
     return Response.json(
       {
-        error: `Quantity must be a multiple of lot size (${lotSize}) for ${body.instrumentKey}`,
+        error: `Quantity (${quantity}) must be a multiple of lot size (${lotSize}) for ${lotSymbol}`,
       },
       { status: 400 },
     )
@@ -309,9 +318,6 @@ export async function handlePaperTradeEnter(
   try {
     const account = await ensurePaperAccount(env, userId)
     const entryValue = Number((entryPrice * quantity).toFixed(2))
-    const metadataObj = body.metadata as {
-      tradeType?: 'buying' | 'selling'
-    } | null
     const tradeType = metadataObj?.tradeType ?? 'buying'
     const isSelling = tradeType === 'selling'
     const charges = calculateOptionCharges(entryValue, isSelling)
