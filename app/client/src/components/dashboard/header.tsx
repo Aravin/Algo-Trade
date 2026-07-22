@@ -246,12 +246,6 @@ export function Header() {
               live
             </span>
           )}
-          {isLive && (
-            <span className="shrink-0 whitespace-nowrap flex items-center gap-1 text-xs text-muted-foreground pl-1 pr-5 sm:pr-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              live
-            </span>
-          )}
         </div>
       </div>
 
