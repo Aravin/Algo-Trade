@@ -18,11 +18,13 @@ function parseSaved() {
 }
 parseSaved()
 
+const MAX_NOTIFICATIONS = 100
+
 function save() {
   try {
     localStorage.setItem(
       'algo-trade:notifications',
-      JSON.stringify(notifications.slice(0, 100)),
+      JSON.stringify(notifications.slice(0, MAX_NOTIFICATIONS)),
     )
   } catch {
     // ignore
@@ -49,7 +51,7 @@ export function notify(
     read: false,
   }
 
-  notifications = [n, ...notifications]
+  notifications = [n, ...notifications].slice(0, MAX_NOTIFICATIONS)
   save()
   listeners.forEach((l) => l(notifications))
 
