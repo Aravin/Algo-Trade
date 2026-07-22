@@ -10,6 +10,7 @@ import {
   fetchPaperAccount,
   resetPaperAccount,
 } from '@/lib/paperTrading'
+import { fmtCurrency } from '@/lib/utils'
 
 // ─── Types ───────────────────────────────────────────────────────
 interface UpstoxProfile {
@@ -67,13 +68,6 @@ interface UpstoxFundsV3 {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-function fmtCurrency(n: number) {
-  return n.toLocaleString('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  })
-}
 
 async function fetchProfile(token: string) {
   const res = await fetch('/api/broker/upstox/profile', {
