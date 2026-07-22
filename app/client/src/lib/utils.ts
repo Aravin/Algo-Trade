@@ -54,6 +54,7 @@ export function fmtCurrency(value: number, signed = false): string {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
     style: 'currency',
     currency: 'INR',
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
   if (!signed) {
