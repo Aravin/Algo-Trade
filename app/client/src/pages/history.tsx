@@ -152,7 +152,7 @@ export function HistoryPage() {
                 <TableHead>Direction</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Entry</TableHead>
-                <TableHead className="text-right">Exit</TableHead>
+                <TableHead className="text-right">Exit / MTM</TableHead>
                 <TableHead className="text-right">P&amp;L</TableHead>
                 <TableHead className="text-right">Status</TableHead>
                 <TableHead className="text-right">Opened</TableHead>
@@ -172,6 +172,54 @@ export function HistoryPage() {
               ) : (
                 trades.map((trade) => {
                   const pnl = trade.realized_pnl
+                  let currentMtmPrice: number | null = null
+                  let mtmUrPnl: number | null = null
+
+                  if (trade.status === 'OPEN') {
+                    try {
+                      const rawPos = localStorage.getItem(
+                        'algo-trade:bot-position',
+                      )
+                      if (rawPos) {
+                        const botPos = JSON.parse(rawPos) as {
+                          instrumentKey?: string
+                          currentPrice?: number
+                          legs?: {
+                            instrumentKey?: string
+                            currentPrice?: number
+                          }[]
+                        }
+                        if (botPos.legs?.length) {
+                          const legMatch = botPos.legs.find(
+                            (l) => l.instrumentKey === trade.instrument_key,
+                          )
+                          if (legMatch?.currentPrice)
+                            currentMtmPrice = legMatch.currentPrice
+                        }
+                        if (currentMtmPrice === null && botPos.currentPrice) {
+                          currentMtmPrice = botPos.currentPrice
+                        }
+                      }
+                    } catch {
+                      // ignore
+                    }
+
+                    if (currentMtmPrice !== null) {
+                      let isSelling = false
+                      try {
+                        const meta = JSON.parse(
+                          trade.metadata_json ?? '{}',
+                        ) as { tradeType?: string }
+                        if (meta?.tradeType === 'selling') isSelling = true
+                      } catch {
+                        // ignore
+                      }
+                      mtmUrPnl = isSelling
+                        ? (trade.entry_price - currentMtmPrice) * trade.quantity
+                        : (currentMtmPrice - trade.entry_price) * trade.quantity
+                    }
+                  }
+
                   return (
                     <TableRow key={trade.id}>
                       <TableCell className="font-medium text-sm">
@@ -207,18 +255,31 @@ export function HistoryPage() {
                       <TableCell className="text-right font-mono text-sm">
                         {trade.exit_price !== null
                           ? fmtCurrency(trade.exit_price)
-                          : '—'}
+                          : currentMtmPrice !== null
+                            ? fmtCurrency(currentMtmPrice)
+                            : '—'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {pnl === null ? (
-                          <span className="text-xs text-muted-foreground">
-                            —
-                          </span>
-                        ) : (
+                        {pnl !== null ? (
                           <span
                             className={`font-mono text-sm font-medium ${pnl >= 0 ? 'text-success' : 'text-destructive'}`}
                           >
                             {fmtCurrency(pnl, true)}
+                          </span>
+                        ) : mtmUrPnl !== null ? (
+                          <div className="flex flex-col items-end">
+                            <span
+                              className={`font-mono text-sm font-medium ${mtmUrPnl >= 0 ? 'text-success' : 'text-destructive'}`}
+                            >
+                              {fmtCurrency(mtmUrPnl, true)}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              (MTM)
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            —
                           </span>
                         )}
                       </TableCell>

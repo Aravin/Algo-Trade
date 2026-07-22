@@ -311,11 +311,8 @@ function buildPaperDataset(
             )
             if (legMatch?.currentPrice) ltp = legMatch.currentPrice
           }
-          if (
-            ltp === null &&
-            (botPos.instrumentKey === t.instrument_key || botPos.currentPrice)
-          ) {
-            ltp = botPos.currentPrice ?? null
+          if (ltp === null && botPos.currentPrice) {
+            ltp = botPos.currentPrice
           }
         }
       } catch {
@@ -338,10 +335,15 @@ function buildPaperDataset(
       unrealizedToday += pnl
     }
 
+    const tradeRowType: TradeRow['type'] =
+      t.direction === 'CE' || t.direction === 'PE'
+        ? t.direction
+        : inferType(t.instrument_key)
+
     return {
       id: t.id,
       symbol: t.instrument_key,
-      type: inferType(t.instrument_key),
+      type: tradeRowType,
       side: isSelling ? 'SELL' : 'BUY',
       qty: t.quantity,
       entryPrice: t.entry_price,
