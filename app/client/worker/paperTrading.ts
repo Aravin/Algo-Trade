@@ -442,10 +442,16 @@ export async function handlePaperTradeExit(
       .first<PaperTradeRow>()
 
     if (!trade)
-      return Response.json({ error: 'Paper trade not found' }, { status: 404 })
+      return Response.json(
+        { error: 'Paper trade not found', code: 'TRADE_NOT_FOUND' },
+        { status: 404 },
+      )
     if (trade.status !== 'OPEN')
       return Response.json(
-        { error: 'Paper trade is already closed' },
+        {
+          error: 'Paper trade is already closed',
+          code: 'TRADE_ALREADY_CLOSED',
+        },
         { status: 400 },
       )
 

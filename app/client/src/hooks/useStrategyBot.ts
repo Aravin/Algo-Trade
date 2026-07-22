@@ -964,6 +964,35 @@ export function useStrategyBot(token: string | null) {
             }
             curPositions[sym] = newPos
             curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+          } else if (executionMode === 'paper' && positionLegs.length > 0) {
+            // Clean up orphaned paper trade legs in D1 if multi-leg entry fails mid-way
+            for (const leg of positionLegs) {
+              if (leg.paperTradeId) {
+                const [, rollbackErr] = await safeFetch(
+                  '/api/paper/trades/exit',
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      tradeId: leg.paperTradeId,
+                      exitPrice: leg.entryPrice,
+                      metadata: {
+                        reason: 'Rollback due to multi-leg entry failure',
+                      },
+                    }),
+                  },
+                )
+                if (rollbackErr) {
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'paper',
+                      `[${sym}] Rollback failed for orphaned leg ${leg.instrumentKey}: ${rollbackErr}`,
+                    ),
+                  )
+                }
+              }
+            }
           }
         }
       }
@@ -1052,9 +1081,11 @@ export function useStrategyBot(token: string | null) {
             : signalReason
 
         if (exit) {
-          const legsToExit =
-            pos.legs && pos.legs.length > 0
-              ? pos.legs
+          const legsSource =
+            updatedLegs && updatedLegs.length > 0 ? updatedLegs : pos.legs
+          const allLegs =
+            legsSource && legsSource.length > 0
+              ? legsSource
               : [
                   {
                     instrumentKey: pos.instrumentKey,
@@ -1070,7 +1101,13 @@ export function useStrategyBot(token: string | null) {
                   },
                 ]
 
-          for (const leg of legsToExit) {
+          const exitedLegsSet = new Set(pos.exitedLegs ?? [])
+          let allLegsCleared = true
+
+          for (const leg of allLegs) {
+            if (exitedLegsSet.has(leg.instrumentKey)) {
+              continue // skip leg already exited or reconciled on previous tick
+            }
             const isSelling = leg.tradeType === 'selling'
             const exitTxType = isSelling ? 'BUY' : 'SELL'
             if (isPaperPosition(pos)) {
@@ -1094,20 +1131,43 @@ export function useStrategyBot(token: string | null) {
                 },
               )
               if (paperExitErr) {
-                addLog(
-                  mkLog(
-                    'error',
-                    'paper',
-                    `[${sym}] Paper ${exitTxType} failed for ${leg.instrumentKey}: ${paperExitErr}`,
-                  ),
+                const isTerminalClosed =
+                  paperExitErr.includes('TRADE_ALREADY_CLOSED') ||
+                  paperExitErr.includes('TRADE_NOT_FOUND') ||
+                  paperExitErr.toLowerCase().includes('already closed') ||
+                  /^HTTP (400|404)\b/i.test(paperExitErr)
+                if (isTerminalClosed) {
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'paper',
+                      `[${sym}] Paper trade leg ${leg.instrumentKey} was already closed on server (${paperExitErr}). Reconciling state.`,
+                    ),
+                  )
+                  notify(
+                    `Paper Trade Reconciled [${sym}]`,
+                    `Paper trade leg ${leg.instrumentKey} was already closed on server.`,
+                    'info',
+                  )
+                  exitedLegsSet.add(leg.instrumentKey)
+                } else {
+                  addLog(
+                    mkLog(
+                      'error',
+                      'paper',
+                      `[${sym}] Paper ${exitTxType} failed for ${leg.instrumentKey}: ${paperExitErr}`,
+                    ),
+                  )
+                  allLegsCleared = false
+                }
+              } else {
+                notify(
+                  `Paper Trade Exited [${sym}]`,
+                  `Paper ${exitTxType} settled for ${leg.instrumentKey}. Reason: ${reason}`,
+                  'info',
                 )
-                continue
+                exitedLegsSet.add(leg.instrumentKey)
               }
-              notify(
-                `Paper Trade Exited [${sym}]`,
-                `Paper ${exitTxType} settled for ${leg.instrumentKey}. Reason: ${reason}`,
-                'info',
-              )
             } else {
               addLog(
                 mkLog(
@@ -1134,17 +1194,26 @@ export function useStrategyBot(token: string | null) {
                     `[${sym}] ${exitTxType} failed for ${leg.instrumentKey}: ${sellErr}`,
                   ),
                 )
-                continue
+                allLegsCleared = false
+              } else {
+                notify(
+                  `Trade Exited [${sym}]`,
+                  `${exitTxType} order placed for ${leg.instrumentKey}. Reason: ${reason}`,
+                  'info',
+                )
+                exitedLegsSet.add(leg.instrumentKey)
               }
-              notify(
-                `Trade Exited [${sym}]`,
-                `${exitTxType} order placed for ${leg.instrumentKey}. Reason: ${reason}`,
-                'info',
-              )
             }
           }
-          curPositions[sym] = null
-          addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
+          if (allLegsCleared) {
+            curPositions[sym] = null
+            addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
+          } else {
+            curPositions[sym] = {
+              ...pos,
+              exitedLegs: Array.from(exitedLegsSet),
+            }
+          }
         }
       }
 

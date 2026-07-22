@@ -77,16 +77,23 @@ export async function safeFetch<T>(
     if (!res.ok) {
       const errData = data as {
         error?: string
+        code?: string
         message?: string
         errors?: { message?: string; errorCode?: string; error_code?: string }[]
       }
-      const detail =
+      const rawDetail =
         errData.error ??
         errData.message ??
         errData.errors
           ?.map((error) => error.message ?? error.errorCode ?? error.error_code)
           .filter(Boolean)
           .join(', ')
+      const codePrefix = errData.code ? `[${errData.code}] ` : ''
+      const detail = rawDetail
+        ? `${codePrefix}${rawDetail}`
+        : errData.code
+          ? `[${errData.code}]`
+          : ''
       return [
         null,
         detail

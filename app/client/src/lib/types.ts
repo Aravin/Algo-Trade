@@ -188,6 +188,7 @@ export interface ActivePosition {
   currentPrice?: number
   unrealizedPnl?: number
   legs?: PositionLeg[]
+  exitedLegs?: string[]
   underlyingSymbol?: UnderlyingSymbol
 }
 
