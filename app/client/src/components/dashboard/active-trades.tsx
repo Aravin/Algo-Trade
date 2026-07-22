@@ -254,13 +254,39 @@ function TradesTable({ trades }: { trades: Trade[] }) {
   )
 }
 
-export function ActiveTrades() {
+interface ActiveTradesProps {
+  activeTradesList?: Trade[]
+  closedTradesList?: Trade[]
+  isDemo?: boolean
+}
+
+export function ActiveTrades({
+  activeTradesList,
+  closedTradesList,
+  isDemo = !activeTradesList && !closedTradesList,
+}: ActiveTradesProps) {
+  const active = activeTradesList ?? activeTrades
+  const closed = closedTradesList ?? closedTrades
+  const totalCount = active.length + closed.length
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Trades</CardTitle>
-          <span className="text-xs text-muted-foreground">8 today</span>
+          <div className="flex items-center gap-2">
+            <CardTitle>Trades</CardTitle>
+            {isDemo && (
+              <Badge
+                variant="outline"
+                className="text-[10px] uppercase py-0 text-muted-foreground"
+              >
+                Demo
+              </Badge>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {totalCount} today
+          </span>
         </div>
       </CardHeader>
       <CardContent className="pt-0 px-0">
@@ -270,22 +296,22 @@ export function ActiveTrades() {
               <TabsTrigger value="active">
                 Open{' '}
                 <span className="ml-1.5 text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
-                  4
+                  {active.length}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="closed">
                 Closed{' '}
                 <span className="ml-1.5 text-xs bg-secondary text-muted-foreground px-1.5 py-0.5 rounded-full">
-                  4
+                  {closed.length}
                 </span>
               </TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="active" className="mt-0">
-            <TradesTable trades={activeTrades} />
+            <TradesTable trades={active} />
           </TabsContent>
           <TabsContent value="closed" className="mt-0">
-            <TradesTable trades={closedTrades} />
+            <TradesTable trades={closed} />
           </TabsContent>
         </Tabs>
       </CardContent>

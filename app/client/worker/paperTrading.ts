@@ -249,7 +249,7 @@ export function calculateOptionCharges(
   isSelling: boolean,
 ): { totalCharges: number; brokerage: number; statutoryTaxes: number } {
   const brokerage = 20
-  const stt = isSelling ? Number((tradeValue * 0.00125).toFixed(2)) : 0
+  const stt = isSelling ? Number((tradeValue * 0.001).toFixed(2)) : 0
   const stampDuty = !isSelling ? Number((tradeValue * 0.00003).toFixed(2)) : 0
   const exchangeFee = Number((tradeValue * 0.0005).toFixed(2))
   const gst = Number(((brokerage + exchangeFee) * 0.18).toFixed(2))
@@ -424,7 +424,12 @@ export async function handlePaperTradeExit(
   env: Env,
   userId: string,
 ): Promise<Response> {
-  let body: { tradeId?: string; exitPrice?: number; metadata?: unknown }
+  let body: {
+    tradeId?: string
+    exitPrice?: number
+    metadata?: unknown
+    isRollback?: boolean
+  }
   try {
     body = await request.json()
   } catch {
@@ -438,6 +443,14 @@ export async function handlePaperTradeExit(
       { status: 400 },
     )
   }
+
+  const isRollback =
+    Boolean(body.isRollback) ||
+    Boolean(
+      typeof body.metadata === 'object' &&
+      body.metadata !== null &&
+      (body.metadata as Record<string, unknown>).isRollback,
+    )
 
   try {
     const account = await ensurePaperAccount(env, userId)
@@ -483,26 +496,54 @@ export async function handlePaperTradeExit(
 
     const closedAt = nowIso()
     const exitValue = Number((exitPrice * trade.quantity).toFixed(2))
-    const exitCharges = calculateOptionCharges(exitValue, !isSelling)
-    const totalTradeFees = Number(
-      (entryCharges.totalCharges + exitCharges.totalCharges).toFixed(2),
-    )
-
-    const grossPnl = isSelling
-      ? Number((trade.entry_value - exitValue).toFixed(2))
-      : Number((exitValue - trade.entry_value).toFixed(2))
-    const realizedPnl = Number((grossPnl - totalTradeFees).toFixed(2))
-
-    const balanceAfter = isSelling
-      ? Number(
-          (account.balance - exitValue - exitCharges.totalCharges).toFixed(2),
-        )
+    const exitCharges = isRollback
+      ? { totalCharges: 0, brokerage: 0, statutoryTaxes: 0 }
+      : calculateOptionCharges(exitValue, !isSelling)
+    const totalTradeFees = isRollback
+      ? 0
       : Number(
-          (account.balance + exitValue - exitCharges.totalCharges).toFixed(2),
+          (entryCharges.totalCharges + exitCharges.totalCharges).toFixed(2),
         )
-    const amountChange = isSelling
-      ? Number((-exitValue - exitCharges.totalCharges).toFixed(2))
-      : Number((exitValue - exitCharges.totalCharges).toFixed(2))
+
+    const grossPnl = isRollback
+      ? 0
+      : isSelling
+        ? Number((trade.entry_value - exitValue).toFixed(2))
+        : Number((exitValue - trade.entry_value).toFixed(2))
+    const realizedPnl = isRollback
+      ? 0
+      : Number((grossPnl - totalTradeFees).toFixed(2))
+
+    const balanceAfter = isRollback
+      ? isSelling
+        ? Number(
+            (
+              account.balance -
+              trade.entry_value +
+              entryCharges.totalCharges
+            ).toFixed(2),
+          )
+        : Number(
+            (
+              account.balance +
+              trade.entry_value +
+              entryCharges.totalCharges
+            ).toFixed(2),
+          )
+      : isSelling
+        ? Number(
+            (account.balance - exitValue - exitCharges.totalCharges).toFixed(2),
+          )
+        : Number(
+            (account.balance + exitValue - exitCharges.totalCharges).toFixed(2),
+          )
+    const amountChange = isRollback
+      ? isSelling
+        ? Number((-trade.entry_value + entryCharges.totalCharges).toFixed(2))
+        : Number((trade.entry_value + entryCharges.totalCharges).toFixed(2))
+      : isSelling
+        ? Number((-exitValue - exitCharges.totalCharges).toFixed(2))
+        : Number((exitValue - exitCharges.totalCharges).toFixed(2))
 
     const mergedMetadata = {
       ...(trade.metadata_json

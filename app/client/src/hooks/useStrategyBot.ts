@@ -598,19 +598,10 @@ export function useStrategyBot(token: string | null) {
       }
 
       // ── Step A: Order Placement Dispatcher for Multi-Symbol Candidates ─────
-      if (cur.state === 'RUNNING' || cur.state === 'ORDERED') {
-        if (afterCutoff) {
-          addLog(
-            mkLog(
-              'warn',
-              'bot',
-              `after last entry time ${config.lastEntryTime} — stopping`,
-            ),
-          )
-          updateStatus({ state: 'STOPPED' })
-          return
-        }
-
+      if (
+        (cur.state === 'RUNNING' || cur.state === 'ORDERED') &&
+        !afterCutoff
+      ) {
         const mode = config.multiSymbolExecutionMode ?? 'independent'
         interface CandidateEntry {
           symbol: UnderlyingSymbol
@@ -914,18 +905,28 @@ export function useStrategyBot(token: string | null) {
                 addLog(mkLog('error', 'order', failure))
                 success = false
                 if (isStaticIpRestrictionError(orderErr)) {
-                  if (intervalRef.current) clearInterval(intervalRef.current)
-                  intervalRef.current = null
-                  updateStatus({
-                    state: 'STOPPED',
-                    error:
-                      'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
-                  })
+                  const hasActivePos = Object.values(curPositions).some(
+                    (p) => p !== null,
+                  )
+                  if (!hasActivePos) {
+                    if (intervalRef.current) clearInterval(intervalRef.current)
+                    intervalRef.current = null
+                    updateStatus({
+                      state: 'STOPPED',
+                      error:
+                        'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
+                    })
+                  } else {
+                    updateStatus({
+                      error:
+                        'Order placement blocked by Upstox static IP restriction. Maintaining active position ticker.',
+                    })
+                  }
                   addLog(
                     mkLog(
                       'warn',
                       'bot',
-                      'stopping bot — Upstox order API is blocked by static IP restriction',
+                      'Upstox order API is blocked by static IP restriction',
                     ),
                   )
                 }
@@ -971,37 +972,76 @@ export function useStrategyBot(token: string | null) {
             }
             curPositions[sym] = newPos
             curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
-          } else if (executionMode === 'paper' && positionLegs.length > 0) {
-            // Clean up orphaned paper trade legs in D1 if multi-leg entry fails mid-way
-            for (const leg of positionLegs) {
-              if (leg.paperTradeId) {
-                const [, rollbackErr] = await safeFetch(
-                  '/api/paper/trades/exit',
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      tradeId: leg.paperTradeId,
-                      exitPrice: leg.entryPrice,
-                      metadata: {
-                        reason: 'Rollback due to multi-leg entry failure',
-                      },
-                    }),
-                  },
-                )
-                if (rollbackErr) {
-                  addLog(
-                    mkLog(
-                      'warn',
-                      'paper',
-                      `[${sym}] Rollback failed for orphaned leg ${leg.instrumentKey}: ${rollbackErr}`,
-                    ),
+          } else if (positionLegs.length > 0) {
+            if (executionMode === 'paper') {
+              // Clean up orphaned paper trade legs in D1 if multi-leg entry fails mid-way
+              for (const leg of positionLegs) {
+                if (leg.paperTradeId) {
+                  const [, rollbackErr] = await safeFetch(
+                    '/api/paper/trades/exit',
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        tradeId: leg.paperTradeId,
+                        exitPrice: leg.entryPrice,
+                        isRollback: true,
+                        metadata: {
+                          reason: 'Rollback due to multi-leg entry failure',
+                          isRollback: true,
+                        },
+                      }),
+                    },
                   )
+                  if (rollbackErr) {
+                    addLog(
+                      mkLog(
+                        'warn',
+                        'paper',
+                        `[${sym}] Rollback failed for orphaned leg ${leg.instrumentKey}: ${rollbackErr}`,
+                      ),
+                    )
+                  }
                 }
               }
+            } else {
+              addLog(
+                mkLog(
+                  'warn',
+                  'order',
+                  `[${sym}] Multi-leg live entry partially failed. Recording ${positionLegs.length} active leg(s) into state for tracking and exit management.`,
+                ),
+              )
+              const partialPos: ActivePosition = {
+                instrumentKey: firstInstrumentKey,
+                direction: firstDirection,
+                entryPrice: firstEntryPrice,
+                currentPrice: firstEntryPrice,
+                unrealizedPnl: 0,
+                quantity: qty,
+                entryTime: new Date().toISOString(),
+                tradeId: Date.now(),
+                executionMode,
+                tradeType: activeTradeType,
+                legs: positionLegs,
+                underlyingSymbol: sym,
+              }
+              curPositions[sym] = partialPos
+              curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
             }
           }
         }
+      } else if (
+        (cur.state === 'RUNNING' || cur.state === 'ORDERED') &&
+        afterCutoff
+      ) {
+        addLog(
+          mkLog(
+            'warn',
+            'bot',
+            `after last entry time ${config.lastEntryTime} — skipping new entries`,
+          ),
+        )
       }
 
       // ── Step B: Multi-Position Exit Routine for Active Symbols ───────────────
