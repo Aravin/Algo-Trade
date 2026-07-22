@@ -72,11 +72,11 @@ export function StrategyHeaderBar({
     return () => clearInterval(id)
   }, [state, pollingIntervalSec, lastUpdated])
 
-  const pct = position
+  const positionSummary = position
     ? (() => {
+        let totalPnl = 0
+        let totalEntryValue = 0
         if (position.legs && position.legs.length > 0) {
-          let totalPnl = 0
-          let totalEntryValue = 0
           for (const leg of position.legs) {
             const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
             const legPnl =
@@ -86,18 +86,20 @@ export function StrategyHeaderBar({
             totalPnl += legPnl
             totalEntryValue += leg.entryPrice * leg.quantity
           }
-          return totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+        } else {
+          const pos = position as ActivePosition & {
+            currentPrice?: number
+            tradeType?: 'buying' | 'selling' | 'both'
+          }
+          const currentPrice = pos.currentPrice ?? pos.entryPrice
+          const isSelling = pos.tradeType === 'selling'
+          totalPnl = isSelling
+            ? (pos.entryPrice - currentPrice) * pos.quantity
+            : (currentPrice - pos.entryPrice) * pos.quantity
+          totalEntryValue = pos.entryPrice * pos.quantity
         }
-
-        const pos = position as ActivePosition & {
-          currentPrice?: number
-          tradeType?: 'buying' | 'selling' | 'both'
-        }
-        if (pos.currentPrice === undefined) return null
-        const isSelling = pos.tradeType === 'selling'
-        return isSelling
-          ? ((pos.entryPrice - pos.currentPrice) / pos.entryPrice) * 100
-          : ((pos.currentPrice - pos.entryPrice) / pos.entryPrice) * 100
+        const pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+        return { totalPnl, pct }
       })()
     : null
 
@@ -202,12 +204,14 @@ export function StrategyHeaderBar({
                 return `${position.quantity} qty${lots !== null ? ` (${lots} ${lots > 1 ? 'lots' : 'lot'})` : ''}`
               })()}
             </span>
-            {pct !== null && (
+            {positionSummary !== null && (
               <span
-                className={`font-mono font-semibold ${pct >= 0 ? 'text-success' : 'text-destructive'}`}
+                className={`font-mono font-semibold ${positionSummary.totalPnl >= 0 ? 'text-success' : 'text-destructive'}`}
               >
-                {pct >= 0 ? '+' : ''}
-                {pct.toFixed(2)}%
+                UR PnL: {positionSummary.totalPnl >= 0 ? '+₹' : '-₹'}
+                {Math.abs(positionSummary.totalPnl).toFixed(2)} (
+                {positionSummary.pct >= 0 ? '+' : ''}
+                {positionSummary.pct.toFixed(2)}%)
               </span>
             )}
           </div>

@@ -294,7 +294,39 @@ function buildPaperDataset(
     const isSelling = tradeType === 'selling'
 
     const quote = quotes ? quotes[t.instrument_key] : undefined
-    const ltp = quote?.last_price ?? null
+    let ltp: number | null = quote?.last_price ?? null
+
+    if (ltp === null) {
+      try {
+        const rawPos = localStorage.getItem('algo-trade:bot-position')
+        if (rawPos) {
+          const botPos = JSON.parse(rawPos) as {
+            instrumentKey?: string
+            currentPrice?: number
+            legs?: { instrumentKey?: string; currentPrice?: number }[]
+          }
+          if (botPos.legs?.length) {
+            const legMatch = botPos.legs.find(
+              (l) => l.instrumentKey === t.instrument_key,
+            )
+            if (legMatch?.currentPrice) ltp = legMatch.currentPrice
+          }
+          if (
+            ltp === null &&
+            (botPos.instrumentKey === t.instrument_key || botPos.currentPrice)
+          ) {
+            ltp = botPos.currentPrice ?? null
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (ltp === null && t.entry_price > 0) {
+      ltp = t.entry_price
+    }
+
     let pnl: number | null = null
     let pnlPct: number | null = null
 
@@ -866,8 +898,12 @@ export function LiveTradesPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(mode)
+    const interval = setInterval(() => {
+      void load(mode)
+    }, 5000)
+    return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [mode])
 
   return (
     <div className="flex flex-col gap-5 p-6 min-w-0">

@@ -170,6 +170,7 @@ export interface PositionLeg {
   tradeType: 'buying' | 'selling'
   paperTradeId?: string
   currentPrice?: number
+  unrealizedPnl?: number
 }
 
 export interface ActivePosition {
@@ -183,6 +184,7 @@ export interface ActivePosition {
   paperTradeId?: string
   tradeType?: 'buying' | 'selling' | 'both'
   currentPrice?: number
+  unrealizedPnl?: number
   legs?: PositionLeg[]
   underlyingSymbol?: UnderlyingSymbol
 }

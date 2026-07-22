@@ -846,9 +846,11 @@ export function useStrategyBot(token: string | null) {
           ? cur.position.direction === 'CE'
             ? match.call_options.market_data.ltp
             : match.put_options.market_data.ltp
-          : cur.position.entryPrice
+          : (cur.position.currentPrice ?? cur.position.entryPrice)
 
         let updatedLegs: PositionLeg[] | undefined
+        let totalUnrealizedPnl = 0
+
         if (cur.position.legs && cur.position.legs.length > 0) {
           updatedLegs = cur.position.legs.map((leg) => {
             const legKey = leg.instrumentKey
@@ -868,18 +870,32 @@ export function useStrategyBot(token: string | null) {
               ? leg.direction === 'CE'
                 ? legMatch.call_options.market_data.ltp
                 : legMatch.put_options.market_data.ltp
-              : leg.entryPrice
+              : (leg.currentPrice ?? leg.entryPrice)
+
+            const legUrPnl =
+              leg.tradeType === 'selling'
+                ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+                : (legCurrentPrice - leg.entryPrice) * leg.quantity
+            totalUnrealizedPnl += legUrPnl
+
             return {
               ...leg,
               currentPrice: legCurrentPrice,
+              unrealizedPnl: legUrPnl,
             }
           })
+        } else {
+          const isSelling = cur.position.tradeType === 'selling'
+          totalUnrealizedPnl = isSelling
+            ? (cur.position.entryPrice - currentPrice) * cur.position.quantity
+            : (currentPrice - cur.position.entryPrice) * cur.position.quantity
         }
 
         positionUpdate = {
           position: {
             ...cur.position,
             currentPrice,
+            unrealizedPnl: totalUnrealizedPnl,
             legs: updatedLegs,
           },
         }
