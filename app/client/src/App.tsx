@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense, useRef } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
 import { hydrateAccounts } from '@/lib/accounts'
@@ -59,6 +59,14 @@ function App() {
     loginWithRedirect,
     user,
   } = useAuth0()
+
+  const loginInProgressRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      loginInProgressRef.current = false
+    }
+  }, [])
 
   // Register Auth0 token getter if enabled
   useEffect(() => {
@@ -168,8 +176,14 @@ function App() {
 
           {/* Call to Action */}
           <button
-            onClick={() => {
-              void loginWithRedirect()
+            onClick={async () => {
+              if (loginInProgressRef.current) return
+              loginInProgressRef.current = true
+              try {
+                await loginWithRedirect()
+              } finally {
+                loginInProgressRef.current = false
+              }
             }}
             className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition-all cursor-pointer shadow-sm active:scale-[0.98]"
           >
