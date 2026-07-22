@@ -281,17 +281,30 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
+              aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+              aria-haspopup="true"
+              aria-expanded={showNotifications}
               title="Notifications"
               onClick={() => setShowNotifications(!showNotifications)}
             >
               <Bell size={15} />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary" />
+                <span
+                  aria-label={`${unreadCount} unread notifications`}
+                  aria-live="polite"
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary"
+                />
               )}
             </Button>
 
             {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-popover text-popover-foreground border border-border rounded-md shadow-md z-50 overflow-hidden flex flex-col">
+              <div
+                role="menu"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setShowNotifications(false)
+                }}
+                className="absolute right-0 mt-2 w-80 bg-popover text-popover-foreground border border-border rounded-md shadow-md z-50 overflow-hidden flex flex-col"
+              >
                 <div className="p-3 font-semibold border-b border-border flex justify-between items-center text-sm">
                   <span>Notifications</span>
                   <div className="flex gap-2">
@@ -326,6 +339,14 @@ export function Header() {
                     notifications.map((n) => (
                       <div
                         key={n.id}
+                        role="menuitem"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            markAsRead(n.id)
+                          }
+                        }}
                         className={`p-3 border-b border-border last:border-b-0 text-sm hover:bg-accent cursor-pointer transition-colors ${!n.read ? 'bg-accent/50 font-medium' : ''}`}
                         onClick={() => markAsRead(n.id)}
                       >
