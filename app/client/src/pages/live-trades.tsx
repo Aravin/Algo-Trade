@@ -4,6 +4,7 @@ import type {
   TradeRowStatus,
 } from '@/lib/types'
 import { useEffect, useState } from 'react'
+import { fmtCurrency, fmtPct } from '@/lib/utils'
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -119,22 +120,7 @@ function activeModeDefault(): TradeMode {
   return getStrategyConfig().executionMode
 }
 
-function fmtCurrency(value: number, signed = false) {
-  const absolute = Math.abs(value).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  if (!signed) return `₹${absolute}`
-  if (value > 0) return `+₹${absolute}`
-  if (value < 0) return `-₹${absolute}`
-  return `₹${absolute}`
-}
-
-function fmtPct(value: number) {
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
-}
-
-function timeLabel(isoLike: string | null | undefined) {
+function timeLabel(isoLike: string | null | undefined): string {
   if (!isoLike) return '—'
   const d = new Date(isoLike)
   if (Number.isNaN(d.getTime())) return '—'

@@ -50,6 +50,26 @@ export function normalizeLiveStatus(s: string | undefined): TradeRowStatus {
   return 'ACTIVE'
 }
 
+export function fmtCurrency(value: number, signed = false): string {
+  const formatted = Math.abs(value).toLocaleString('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  })
+  if (!signed) {
+    return value < 0 ? `-${formatted}` : formatted
+  }
+  return value > 0
+    ? `+${formatted}`
+    : value < 0
+      ? `-${formatted}`
+      : formatted
+}
+
+export function fmtPct(value: number): string {
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
 export interface IndexExpiryInfo {
   expiryDateStr: string // "2026-07-23"
   formattedExpiry: string // "23 Jul 2026"
