@@ -206,6 +206,7 @@ export interface BollingerSqueezeMetrics {
 export interface StrategyConfig {
   strategyMode: StrategyMode
   underlyingMode: UnderlyingMode
+  multiSymbolExecutionMode?: 'independent' | 'consensus' | 'best_signal'
   squeezeThresholdPct: number
   minSqueezeCandles: number
   adxMinThreshold: number
@@ -297,6 +298,7 @@ export interface AppNotification {
 export const DEFAULT_CONFIG: StrategyConfig = {
   strategyMode: 'v5_scorecard',
   underlyingMode: 'ALL_PARALLEL',
+  multiSymbolExecutionMode: 'independent',
   squeezeThresholdPct: 1.2,
   minSqueezeCandles: 3,
   adxMinThreshold: 20,

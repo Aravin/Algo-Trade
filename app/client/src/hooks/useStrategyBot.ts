@@ -55,10 +55,13 @@ export type BotState = 'IDLE' | 'RUNNING' | 'ORDERED' | 'STOPPED'
 export interface BotStatus {
   state: BotState
   position: ActivePosition | null
+  positions: Record<UnderlyingSymbol, ActivePosition | null>
   indicators: IndicatorsResult | null
+  symbolIndicators: Partial<Record<UnderlyingSymbol, IndicatorsResult | null>>
   vrdData: VrdData | null
   allSignalData: AllSignalData | null
   finalSignal: FinalSignal | null
+  symbolSignals: Partial<Record<UnderlyingSymbol, FinalSignal | null>>
   squeezeMetrics: BollingerSqueezeMetrics | null
   hardStop: {
     blocked: boolean
@@ -68,6 +71,7 @@ export interface BotStatus {
   lastUpdated: string | null
   error: string | null
   tradesCount: number
+  tradesCountPerSymbol: Partial<Record<UnderlyingSymbol, number>>
   logs: BotLog[]
   sourceStatus: Record<string, SourceStatus>
   globalIndices: GlobalIndexItem[] | null
@@ -78,7 +82,9 @@ export interface BotStatus {
 const KEYS = {
   state: 'algo-trade:bot-state',
   position: 'algo-trade:bot-position',
+  positions: 'algo-trade:bot-positions',
   trades: 'algo-trade:bot-trades-today',
+  tradesPerSymbol: 'algo-trade:bot-trades-per-symbol',
   date: 'algo-trade:bot-trades-date',
   vrdCache: 'algo-trade:vrd-cache', // { data: VrdData; savedAt: string }
   logs: 'algo-trade:bot-logs', // BotLog[] (last 200)
@@ -161,6 +167,12 @@ function loadSnapshot(): Partial<BotSnapshot> {
   }
 }
 
+const DEFAULT_POSITIONS: Record<UnderlyingSymbol, ActivePosition | null> = {
+  'NIFTY 50': null,
+  BANKNIFTY: null,
+  FINNIFTY: null,
+}
+
 // ─── Load persisted bot state ─────────────────────────────────────────────────
 function loadPersisted(): Partial<BotStatus> {
   try {
@@ -168,16 +180,48 @@ function loadPersisted(): Partial<BotStatus> {
     const position = JSON.parse(
       localStorage.getItem(KEYS.position) ?? 'null',
     ) as ActivePosition | null
+    let positions = { ...DEFAULT_POSITIONS }
+    try {
+      const rawPositions = localStorage.getItem(KEYS.positions)
+      if (rawPositions) {
+        positions = {
+          ...DEFAULT_POSITIONS,
+          ...(JSON.parse(rawPositions) as Record<
+            UnderlyingSymbol,
+            ActivePosition | null
+          >),
+        }
+      } else if (position) {
+        const sym = position.underlyingSymbol ?? 'NIFTY 50'
+        positions[sym] = position
+      }
+    } catch {
+      positions = { ...DEFAULT_POSITIONS }
+    }
+
     const savedDate = localStorage.getItem(KEYS.date)
     const today = new Date().toISOString().split('T')[0]
     const tradesCount =
       savedDate === today
         ? parseInt(localStorage.getItem(KEYS.trades) ?? '0')
         : 0
+    let tradesCountPerSymbol: Partial<Record<UnderlyingSymbol, number>> = {}
+    try {
+      if (savedDate === today) {
+        tradesCountPerSymbol = JSON.parse(
+          localStorage.getItem(KEYS.tradesPerSymbol) ?? '{}',
+        ) as Partial<Record<UnderlyingSymbol, number>>
+      }
+    } catch {
+      tradesCountPerSymbol = {}
+    }
+
     if (savedDate !== today) {
       localStorage.setItem(KEYS.date, today)
       localStorage.setItem(KEYS.trades, '0')
+      localStorage.setItem(KEYS.tradesPerSymbol, '{}')
     }
+
     const state: BotState =
       rawState === 'RUNNING' || rawState === 'ORDERED' ? rawState : 'IDLE'
     const vrdData = loadVrdCache()
@@ -192,10 +236,18 @@ function loadPersisted(): Partial<BotStatus> {
               'unknown' satisfies SourceStatus,
             ]),
           ) as Record<string, SourceStatus>)
+
+    const primaryPosition =
+      positions['NIFTY 50'] ??
+      Object.values(positions).find((p): p is ActivePosition => p !== null) ??
+      null
+
     return {
       state,
-      position,
+      position: primaryPosition,
+      positions,
       tradesCount,
+      tradesCountPerSymbol,
       vrdData,
       logs,
       ...snapshot,
@@ -205,7 +257,9 @@ function loadPersisted(): Partial<BotStatus> {
     return {
       state: 'IDLE',
       position: null,
+      positions: { ...DEFAULT_POSITIONS },
       tradesCount: 0,
+      tradesCountPerSymbol: {},
       vrdData: null,
       logs: [],
     }
@@ -216,15 +270,19 @@ function loadPersisted(): Partial<BotStatus> {
 const INITIAL: BotStatus = {
   state: 'IDLE',
   position: null,
+  positions: { ...DEFAULT_POSITIONS },
   indicators: null,
+  symbolIndicators: {},
   vrdData: null,
   allSignalData: null,
   finalSignal: null,
+  symbolSignals: {},
   squeezeMetrics: null,
   hardStop: { blocked: false, blockedDirection: 'NONE', reasons: [] },
   lastUpdated: null,
   error: null,
   tradesCount: 0,
+  tradesCountPerSymbol: {},
   logs: [],
   sourceStatus: {},
   globalIndices: null,
@@ -250,10 +308,26 @@ export function useStrategyBot(token: string | null) {
       statusRef.current = next
       if (partial.state !== undefined)
         localStorage.setItem(KEYS.state, partial.state)
-      if ('position' in partial)
+      if ('positions' in partial && partial.positions) {
+        localStorage.setItem(KEYS.positions, JSON.stringify(partial.positions))
+        const primary =
+          partial.positions['NIFTY 50'] ??
+          Object.values(partial.positions).find(
+            (p): p is ActivePosition => p !== null,
+          ) ??
+          null
+        localStorage.setItem(KEYS.position, JSON.stringify(primary))
+        next.position = primary
+      } else if ('position' in partial) {
         localStorage.setItem(KEYS.position, JSON.stringify(partial.position))
+      }
       if (partial.tradesCount !== undefined)
         localStorage.setItem(KEYS.trades, String(partial.tradesCount))
+      if (partial.tradesCountPerSymbol !== undefined)
+        localStorage.setItem(
+          KEYS.tradesPerSymbol,
+          JSON.stringify(partial.tradesCountPerSymbol),
+        )
       return next
     })
   }, [])
@@ -311,7 +385,6 @@ export function useStrategyBot(token: string | null) {
 
     try {
       const config = getStrategyConfig()
-      let positionUpdate: Partial<BotStatus> = {}
 
       // Step 1: Determine target active underlying symbols (Single or ALL_PARALLEL)
       const targetSymbols: UnderlyingSymbol[] =
@@ -399,9 +472,15 @@ export function useStrategyBot(token: string | null) {
         config.minSqueezeCandles,
         config.adxMinThreshold,
       )
-      const finalSignal = getFinalSignal(allSignalData, config, candles)
 
-      // Evaluate & Log signals for all active target symbols in parallel
+      // Evaluate & record signals for all active target symbols in parallel
+      const symbolSignals: Partial<
+        Record<UnderlyingSymbol, FinalSignal | null>
+      > = {}
+      const symbolIndicators: Partial<
+        Record<UnderlyingSymbol, IndicatorsResult | null>
+      > = {}
+
       for (const sym of targetSymbols) {
         const symMarket = marketMap[sym]
         if (!symMarket?.candles.length) continue
@@ -420,12 +499,22 @@ export function useStrategyBot(token: string | null) {
           config,
           symMarket.candles,
         )
+        symbolSignals[sym] = symSignal
+        symbolIndicators[sym] = symIndicators
         log(
           'info',
           'engine',
           `[${sym}] bull=${symSignal.bullScore} bear=${symSignal.bearScore} → ${symSignal.signal} (${symSignal.confidence})`,
         )
       }
+
+      const finalSignal =
+        symbolSignals['NIFTY 50'] ??
+        symbolSignals[primaryMarket.underlyingSymbol] ??
+        Object.values(symbolSignals).find(
+          (s): s is FinalSignal => s !== null,
+        ) ??
+        getFinalSignal(allSignalData, config, candles)
 
       // ── Tick log (threshold backtesting) ────────────────────────────────────
       appendTick({
@@ -449,8 +538,9 @@ export function useStrategyBot(token: string | null) {
       tickLogs.length = 0
 
       updateStatus({
-        ...positionUpdate,
         indicators,
+        symbolIndicators,
+        symbolSignals,
         vrdData,
         candles,
         allSignalData,
@@ -463,7 +553,6 @@ export function useStrategyBot(token: string | null) {
         error: null,
       })
       saveSnapshot({
-        ...positionUpdate,
         indicators,
         vrdData,
         allSignalData,
@@ -475,7 +564,10 @@ export function useStrategyBot(token: string | null) {
       })
 
       if (hardStop.blocked && hardStop.blockedDirection === 'BOTH') {
-        if (!cur.position) {
+        const hasOpenPos = Object.values(cur.positions ?? {}).some(
+          (p) => p !== null,
+        )
+        if (!hasOpenPos && !cur.position) {
           updateStatus({ state: 'STOPPED' })
           return
         }
@@ -483,7 +575,6 @@ export function useStrategyBot(token: string | null) {
 
       // Entry cutoff check
       const [lh, lm] = config.lastEntryTime.split(':').map(Number)
-      // Use IST explicitly so the cutoff fires at the correct local market time
       const nowIST = new Date(
         new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
       )
@@ -491,7 +582,22 @@ export function useStrategyBot(token: string | null) {
         nowIST.getHours() > lh ||
         (nowIST.getHours() === lh && nowIST.getMinutes() >= lm)
 
-      if (cur.state === 'RUNNING') {
+      const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
+        ...DEFAULT_POSITIONS,
+        ...(cur.positions ?? {}),
+      }
+      if (
+        cur.position &&
+        !curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50']
+      ) {
+        curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50'] = cur.position
+      }
+      const curTradesPerSym: Partial<Record<UnderlyingSymbol, number>> = {
+        ...(cur.tradesCountPerSymbol ?? {}),
+      }
+
+      // ── Step A: Order Placement Dispatcher for Multi-Symbol Candidates ─────
+      if (cur.state === 'RUNNING' || cur.state === 'ORDERED') {
         if (afterCutoff) {
           addLog(
             mkLog(
@@ -503,380 +609,394 @@ export function useStrategyBot(token: string | null) {
           updateStatus({ state: 'STOPPED' })
           return
         }
-        if (cur.tradesCount >= config.maxTradesPerDay) {
-          addLog(
-            mkLog(
-              'warn',
-              'bot',
-              `max trades/day (${config.maxTradesPerDay}) reached — stopping`,
-            ),
-          )
-          updateStatus({ state: 'STOPPED' })
-          return
+
+        const mode = config.multiSymbolExecutionMode ?? 'independent'
+        interface CandidateEntry {
+          symbol: UnderlyingSymbol
+          signal: FinalSignal
+        }
+        let candidates: CandidateEntry[] = []
+
+        if (mode === 'consensus') {
+          const activeSigs = targetSymbols
+            .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+            .filter(
+              (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+                Boolean(item.sig) &&
+                (item.sig?.signal === 'BUY_CE' ||
+                  item.sig?.signal === 'BUY_PE'),
+            )
+          if (
+            activeSigs.length === targetSymbols.length &&
+            activeSigs.every((s) => s.sig.signal === activeSigs[0].sig.signal)
+          ) {
+            candidates = activeSigs
+              .filter((item) => !curPositions[item.sym])
+              .map((item) => ({ symbol: item.sym, signal: item.sig }))
+          }
+        } else if (mode === 'best_signal') {
+          const eligible = targetSymbols
+            .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+            .filter(
+              (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+                Boolean(item.sig) &&
+                !curPositions[item.sym] &&
+                (item.sig?.signal === 'BUY_CE' ||
+                  item.sig?.signal === 'BUY_PE'),
+            )
+          if (eligible.length > 0) {
+            eligible.sort(
+              (a, b) =>
+                Math.max(b.sig.bullScore, b.sig.bearScore) -
+                Math.max(a.sig.bullScore, a.sig.bearScore),
+            )
+            candidates = [{ symbol: eligible[0].sym, signal: eligible[0].sig }]
+          }
+        } else {
+          // 'independent'
+          candidates = targetSymbols
+            .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+            .filter(
+              (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+                Boolean(item.sig) &&
+                !curPositions[item.sym] &&
+                (item.sig?.signal === 'BUY_CE' ||
+                  item.sig?.signal === 'BUY_PE'),
+            )
+            .map((item) => ({ symbol: item.sym, signal: item.sig }))
         }
 
-        if (
-          finalSignal.signal === 'BUY_CE' ||
-          finalSignal.signal === 'BUY_PE'
-        ) {
+        for (const candidate of candidates) {
+          const { symbol: sym, signal: symSig } = candidate
+          const symTradesCount = curTradesPerSym[sym] ?? 0
+          if (symTradesCount >= config.maxTradesPerDay) {
+            addLog(
+              mkLog(
+                'warn',
+                'bot',
+                `[${sym}] max trades/day (${config.maxTradesPerDay}) reached — skipping entry`,
+              ),
+            )
+            continue
+          }
+
           if (
             hardStop.blocked &&
             (hardStop.blockedDirection === 'BOTH' ||
               (hardStop.blockedDirection === 'CE' &&
-                finalSignal.signal === 'BUY_CE') ||
+                symSig.signal === 'BUY_CE') ||
               (hardStop.blockedDirection === 'PE' &&
-                finalSignal.signal === 'BUY_PE'))
+                symSig.signal === 'BUY_PE'))
           ) {
             addLog(
               mkLog(
                 'warn',
                 'bot',
-                `Entry ${finalSignal.signal} blocked by hard stop: ${hardStop.reasons.join(', ')}`,
+                `[${sym}] Entry ${symSig.signal} blocked by hard stop: ${hardStop.reasons.join(', ')}`,
               ),
             )
-          } else {
-            interface LegSetup {
-              direction: 'CE' | 'PE'
-              tradeType: 'buying' | 'selling'
+            continue
+          }
+
+          const symMarket = marketMap[sym]
+          if (!symMarket?.optionChain.length) continue
+
+          interface LegSetup {
+            direction: 'CE' | 'PE'
+            tradeType: 'buying' | 'selling'
+          }
+          const legsToPlace: LegSetup[] = []
+          let activeTradeType: 'buying' | 'selling' = 'buying'
+          if (config.tradeType === 'both') {
+            const percentAboveAvg = vrdData?.straddleIv?.percentAboveAvg
+            if (percentAboveAvg !== undefined && percentAboveAvg !== null) {
+              const iv = scoreStraddleIV(percentAboveAvg)
+              activeTradeType = iv.preferBuy ? 'buying' : 'selling'
+            } else {
+              activeTradeType = 'buying'
             }
-            const legsToPlace: LegSetup[] = []
-            let activeTradeType: 'buying' | 'selling' = 'buying'
-            if (config.tradeType === 'both') {
-              const percentAboveAvg = vrdData?.straddleIv?.percentAboveAvg
-              if (percentAboveAvg !== undefined && percentAboveAvg !== null) {
-                const iv = scoreStraddleIV(percentAboveAvg)
-                activeTradeType = iv.preferBuy ? 'buying' : 'selling'
-              } else {
-                activeTradeType = 'buying'
-              }
+          } else {
+            activeTradeType = config.tradeType
+          }
+
+          legsToPlace.push({
+            direction:
+              activeTradeType === 'selling'
+                ? symSig.signal === 'BUY_CE'
+                  ? 'PE'
+                  : 'CE'
+                : symSig.signal === 'BUY_CE'
+                  ? 'CE'
+                  : 'PE',
+            tradeType: activeTradeType,
+          })
+
+          let totalReq = 0
+          for (const leg of legsToPlace) {
+            const strike = getOtmStrike(
+              symMarket.optionChain,
+              leg.direction,
+              config.otmSkip,
+            )
+            if (!strike) continue
+            const ltp =
+              leg.direction === 'CE'
+                ? strike.call_options.market_data.ltp
+                : strike.put_options.market_data.ltp
+            const legReq = leg.tradeType === 'selling' ? 4000 : ltp
+            totalReq += legReq
+          }
+
+          const executionMode: ExecutionMode = config.executionMode
+          const lotSize = getLotSizeForSymbol(
+            symMarket.optionChain[0]?.call_options?.instrument_key || sym,
+          )
+          let qty = symSig.positionSize === 'full' ? lotSize * 2 : lotSize
+
+          let paperBalance: number | null = null
+          if (executionMode === 'paper') {
+            try {
+              const summary = await fetchPaperAccount()
+              paperBalance = summary.account.balance
+            } catch (error) {
               addLog(
                 mkLog(
-                  'info',
-                  'bot',
-                  `Trade type 'both' resolved to '${activeTradeType}' based on Straddle IV (percentAboveAvg=${percentAboveAvg ?? 'null'})`,
+                  'warn',
+                  'paper',
+                  `Unable to read paper balance before entry: ${(error as Error).message}`,
                 ),
               )
-            } else {
-              activeTradeType = config.tradeType
             }
 
-            legsToPlace.push({
-              direction:
-                activeTradeType === 'selling'
-                  ? finalSignal.signal === 'BUY_CE'
-                    ? 'PE'
-                    : 'CE'
-                  : finalSignal.signal === 'BUY_CE'
-                    ? 'CE'
-                    : 'PE',
-              tradeType: activeTradeType,
-            })
-
-            let totalReq = 0
-            for (const leg of legsToPlace) {
-              const strike = getOtmStrike(
-                optionChain,
-                leg.direction,
-                config.otmSkip,
-              )
-              if (!strike) continue
-              const ltp =
-                leg.direction === 'CE'
-                  ? strike.call_options.market_data.ltp
-                  : strike.put_options.market_data.ltp
-              const legReq = leg.tradeType === 'selling' ? 4000 : ltp
-              totalReq += legReq
-            }
-
-            const executionMode: ExecutionMode = config.executionMode
-            const lotSize =
-              optionChain.length > 0
-                ? getLotSizeForSymbol(
-                    optionChain[0].call_options.instrument_key,
-                  )
-                : 25
-            let qty =
-              finalSignal.positionSize === 'full' ? lotSize * 2 : lotSize
-
-            let paperBalance: number | null = null
-            if (executionMode === 'paper') {
-              try {
-                const summary = await fetchPaperAccount()
-                paperBalance = summary.account.balance
-              } catch (error) {
+            if (paperBalance !== null && totalReq > 0) {
+              const lotReq = totalReq * lotSize
+              const affordableLots = Math.floor(paperBalance / lotReq)
+              const affordableQty = affordableLots * lotSize
+              if (affordableQty <= 0) {
                 addLog(
                   mkLog(
                     'warn',
                     'paper',
-                    `Unable to read paper balance before entry: ${(error as Error).message}`,
+                    `Skipping paper entry for ${sym}: balance ₹${paperBalance.toFixed(2)} cannot afford 1 lot (cost ₹${lotReq.toFixed(2)})`,
                   ),
                 )
+                continue
               }
-
-              if (paperBalance !== null && totalReq > 0) {
-                const lotReq = totalReq * lotSize
-                const affordableLots = Math.floor(paperBalance / lotReq)
-                const affordableQty = affordableLots * lotSize
-                if (affordableQty <= 0) {
-                  addLog(
-                    mkLog(
-                      'warn',
-                      'paper',
-                      `Skipping paper entry: balance ₹${paperBalance.toFixed(2)} cannot afford even 1 lot (cost ₹${lotReq.toFixed(2)})`,
-                    ),
-                  )
-                  updateStatus({
-                    error: `Paper credit ₹${paperBalance.toFixed(2)} is below required margin/cost per lot ₹${lotReq.toFixed(2)}`,
-                  })
-                  return
-                }
-                if (affordableQty < qty) {
-                  addLog(
-                    mkLog(
-                      'warn',
-                      'paper',
-                      `Reducing quantity from ${qty} to ${affordableQty} to fit credit ₹${paperBalance.toFixed(2)}`,
-                    ),
-                  )
-                  qty = affordableQty
-                }
+              if (affordableQty < qty) {
+                qty = affordableQty
               }
             }
+          }
 
-            const positionLegs: PositionLeg[] = []
-            let success = true
-            let firstInstrumentKey = ''
-            let firstDirection: 'CE' | 'PE' = 'CE'
-            let firstEntryPrice = 0
+          const positionLegs: PositionLeg[] = []
+          let success = true
+          let firstInstrumentKey = ''
+          let firstDirection: 'CE' | 'PE' = 'CE'
+          let firstEntryPrice = 0
 
-            for (const leg of legsToPlace) {
-              const strike = getOtmStrike(
-                optionChain,
-                leg.direction,
-                config.otmSkip,
+          for (const leg of legsToPlace) {
+            const strike = getOtmStrike(
+              symMarket.optionChain,
+              leg.direction,
+              config.otmSkip,
+            )
+            if (!strike) {
+              addLog(
+                mkLog(
+                  'warn',
+                  'order',
+                  `[${sym}] no OTM strike found for ${leg.direction}`,
+                ),
               )
-              if (!strike) {
+              success = false
+              break
+            }
+            const instrumentKey =
+              leg.direction === 'CE'
+                ? strike.call_options.instrument_key
+                : strike.put_options.instrument_key
+            const ltp =
+              leg.direction === 'CE'
+                ? strike.call_options.market_data.ltp
+                : strike.put_options.market_data.ltp
+
+            if (!firstInstrumentKey) {
+              firstInstrumentKey = instrumentKey
+              firstDirection = leg.direction
+              firstEntryPrice = ltp
+            }
+
+            const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
+            addLog(
+              mkLog(
+                'info',
+                'order',
+                `[${sym}] placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
+              ),
+            )
+
+            let paperTradeId: string | undefined
+            if (executionMode === 'paper') {
+              const [paperData, paperErr] = await safeFetch<{
+                trade?: PaperTrade
+                account?: PaperAccountSummary['account']
+              }>('/api/paper/trades/enter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  instrumentKey,
+                  direction: leg.direction,
+                  quantity: qty,
+                  entryPrice: ltp,
+                  metadata: {
+                    signal: symSig.signal,
+                    confidence: symSig.confidence,
+                    bullScore: symSig.bullScore,
+                    bearScore: symSig.bearScore,
+                    tradeType: leg.tradeType,
+                    tradingSymbol:
+                      leg.direction === 'CE'
+                        ? strike.call_options.trading_symbol
+                        : strike.put_options.trading_symbol,
+                    strikePrice: strike.strike_price,
+                    expiry: strike.expiry,
+                    underlyingSymbol: sym,
+                  },
+                }),
+              })
+              if (paperErr || !paperData?.trade?.id) {
                 addLog(
                   mkLog(
-                    'warn',
-                    'order',
-                    `no OTM strike found for ${leg.direction}`,
+                    'error',
+                    'paper',
+                    `[${sym}] Paper ${side} failed: ${paperErr ?? JSON.stringify(paperData)}`,
                   ),
                 )
                 success = false
                 break
               }
-              const instrumentKey =
-                leg.direction === 'CE'
-                  ? strike.call_options.instrument_key
-                  : strike.put_options.instrument_key
-              const ltp =
-                leg.direction === 'CE'
-                  ? strike.call_options.market_data.ltp
-                  : strike.put_options.market_data.ltp
-
-              if (!firstInstrumentKey) {
-                firstInstrumentKey = instrumentKey
-                firstDirection = leg.direction
-                firstEntryPrice = ltp
-              }
-
-              const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
-              addLog(
-                mkLog(
-                  'info',
-                  'order',
-                  `placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
-                ),
+              paperTradeId = paperData.trade.id
+              const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
+              const lotLabel = lotsCount
+                ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
+                : ''
+              notify(
+                `Paper Trade Executed [${sym}]`,
+                `Paper ${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed`,
+                'success',
               )
-
-              let paperTradeId: string | undefined
-              if (executionMode === 'paper') {
-                const [paperData, paperErr] = await safeFetch<{
-                  trade?: PaperTrade
-                  account?: PaperAccountSummary['account']
-                }>('/api/paper/trades/enter', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    instrumentKey,
-                    direction: leg.direction,
-                    quantity: qty,
-                    entryPrice: ltp,
-                    metadata: {
-                      signal: finalSignal.signal,
-                      confidence: finalSignal.confidence,
-                      bullScore: finalSignal.bullScore,
-                      bearScore: finalSignal.bearScore,
-                      tradeType: leg.tradeType,
-                      tradingSymbol:
-                        leg.direction === 'CE'
-                          ? strike.call_options.trading_symbol
-                          : strike.put_options.trading_symbol,
-                      strikePrice: strike.strike_price,
-                      expiry: strike.expiry,
-                      underlyingSymbol: targetSymbols[0] ?? 'NIFTY 50',
-                    },
-                  }),
-                })
-                if (paperErr || !paperData?.trade?.id) {
+            } else {
+              const [orderData, orderErr] = await safeFetch<{
+                status?: string
+                data?: { order_id?: string }
+              }>('/api/order/place', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token,
+                  instrumentKey,
+                  transactionType: side,
+                  quantity: qty,
+                }),
+              })
+              if (
+                orderErr ||
+                (!orderData?.data?.order_id && orderData?.status !== 'success')
+              ) {
+                const failure = `[${sym}] ${side} failed: ${orderErr ?? JSON.stringify(orderData)}`
+                addLog(mkLog('error', 'order', failure))
+                success = false
+                if (isStaticIpRestrictionError(orderErr)) {
+                  if (intervalRef.current) clearInterval(intervalRef.current)
+                  intervalRef.current = null
+                  updateStatus({
+                    state: 'STOPPED',
+                    error:
+                      'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
+                  })
                   addLog(
                     mkLog(
-                      'error',
-                      'paper',
-                      `Paper ${side} failed: ${paperErr ?? JSON.stringify(paperData)}`,
+                      'warn',
+                      'bot',
+                      'stopping bot — Upstox order API is blocked by static IP restriction',
                     ),
                   )
-                  updateStatus({
-                    error: paperErr ?? 'Paper trade entry failed',
-                  })
-                  success = false
-                  break
                 }
-                paperTradeId = paperData.trade.id
-                addLog(
-                  mkLog(
-                    'info',
-                    'paper',
-                    `Paper ${side} created tradeId=${paperTradeId}`,
-                  ),
-                )
-                const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
-                const lotLabel = lotsCount
-                  ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
-                  : ''
-                notify(
-                  'Paper Trade Executed',
-                  `Paper ${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed`,
-                  'success',
-                )
-              } else {
-                const [orderData, orderErr] = await safeFetch<{
-                  status?: string
-                  data?: { order_id?: string }
-                }>('/api/order/place', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    token,
-                    instrumentKey,
-                    transactionType: side,
-                    quantity: qty,
-                  }),
-                })
-                if (
-                  orderErr ||
-                  (!orderData?.data?.order_id &&
-                    orderData?.status !== 'success')
-                ) {
-                  const failure = `${side} failed: ${orderErr ?? JSON.stringify(orderData)}`
-                  addLog(mkLog('error', 'order', failure))
-                  success = false
-                  if (isStaticIpRestrictionError(orderErr)) {
-                    if (intervalRef.current) clearInterval(intervalRef.current)
-                    intervalRef.current = null
-                    updateStatus({
-                      state: 'STOPPED',
-                      error:
-                        'Order placement blocked by Upstox static IP restriction. Configure a static IP in Upstox or use a whitelisted execution environment.',
-                    })
-                    addLog(
-                      mkLog(
-                        'warn',
-                        'bot',
-                        'stopping bot — Upstox order API is blocked by static IP restriction',
-                      ),
-                    )
-                  }
-                  break
-                }
-                addLog(
-                  mkLog(
-                    'info',
-                    'order',
-                    `${side} placed orderId=${orderData?.data?.order_id ?? '—'}`,
-                  ),
-                )
-                const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
-                const lotLabel = lotsCount
-                  ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
-                  : ''
-                notify(
-                  'Trade Executed',
-                  `${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed successfully`,
-                  'success',
-                )
+                break
               }
-
-              positionLegs.push({
-                instrumentKey,
-                direction: leg.direction,
-                entryPrice: ltp,
-                currentPrice: ltp,
-                unrealizedPnl: 0,
-                quantity: qty,
-                tradeType: leg.tradeType,
-                paperTradeId,
-              })
+              const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
+              const lotLabel = lotsCount
+                ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
+                : ''
+              notify(
+                `Trade Executed [${sym}]`,
+                `${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed successfully`,
+                'success',
+              )
             }
 
-            if (success) {
-              const position: ActivePosition = {
-                instrumentKey: firstInstrumentKey,
-                direction: firstDirection,
-                entryPrice: firstEntryPrice,
-                currentPrice: firstEntryPrice,
-                unrealizedPnl: 0,
-                quantity: qty,
-                entryTime: new Date().toISOString(),
-                tradeId: Date.now(),
-                executionMode,
-                tradeType: activeTradeType,
-                legs: positionLegs,
-              }
-              updateStatus({
-                state: 'ORDERED',
-                position,
-                tradesCount: cur.tradesCount + 1,
-              })
-            }
+            positionLegs.push({
+              instrumentKey,
+              direction: leg.direction,
+              entryPrice: ltp,
+              currentPrice: ltp,
+              unrealizedPnl: 0,
+              quantity: qty,
+              tradeType: leg.tradeType,
+              paperTradeId,
+            })
           }
-        } else {
-          addLog(
-            mkLog('debug', 'bot', `signal=${finalSignal.signal} — no entry`),
-          )
+
+          if (success) {
+            const newPos: ActivePosition = {
+              instrumentKey: firstInstrumentKey,
+              direction: firstDirection,
+              entryPrice: firstEntryPrice,
+              currentPrice: firstEntryPrice,
+              unrealizedPnl: 0,
+              quantity: qty,
+              entryTime: new Date().toISOString(),
+              tradeId: Date.now(),
+              executionMode,
+              tradeType: activeTradeType,
+              legs: positionLegs,
+              underlyingSymbol: sym,
+            }
+            curPositions[sym] = newPos
+            curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+          }
         }
-      } else if (cur.state === 'ORDERED' && cur.position) {
-        const posKey = cur.position.instrumentKey
-        const match = optionChain.find(
+      }
+
+      // ── Step B: Multi-Position Exit Routine for Active Symbols ───────────────
+      for (const sym of targetSymbols) {
+        const pos = curPositions[sym]
+        if (!pos) continue
+        const symMarket = marketMap[sym]
+        const symOptionChain = symMarket?.optionChain ?? []
+        const posKey = pos.instrumentKey
+        const match = symOptionChain.find(
           (o) =>
             o.call_options.instrument_key === posKey ||
             o.put_options.instrument_key === posKey,
         )
         const currentPrice = match
-          ? cur.position.direction === 'CE'
+          ? pos.direction === 'CE'
             ? match.call_options.market_data.ltp
             : match.put_options.market_data.ltp
-          : (cur.position.currentPrice ?? cur.position.entryPrice)
+          : (pos.currentPrice ?? pos.entryPrice)
 
         let updatedLegs: PositionLeg[] | undefined
         let totalUnrealizedPnl = 0
 
-        if (cur.position.legs && cur.position.legs.length > 0) {
-          updatedLegs = cur.position.legs.map((leg) => {
+        if (pos.legs && pos.legs.length > 0) {
+          updatedLegs = pos.legs.map((leg) => {
             const legKey = leg.instrumentKey
-            const legMatch = optionChain.find(
+            const legMatch = symOptionChain.find(
               (o) =>
                 o.call_options.instrument_key === legKey ||
                 o.put_options.instrument_key === legKey,
             )
-            if (!legMatch && legKey) {
-              log(
-                'warn',
-                'position',
-                `leg instrument ${legKey} not found in chain`,
-              )
-            }
             const legCurrentPrice = legMatch
               ? leg.direction === 'CE'
                 ? legMatch.call_options.market_data.ltp
@@ -896,33 +1016,28 @@ export function useStrategyBot(token: string | null) {
             }
           })
         } else {
-          const isSelling = cur.position.tradeType === 'selling'
+          const isSelling = pos.tradeType === 'selling'
           totalUnrealizedPnl = isSelling
-            ? (cur.position.entryPrice - currentPrice) * cur.position.quantity
-            : (currentPrice - cur.position.entryPrice) * cur.position.quantity
+            ? (pos.entryPrice - currentPrice) * pos.quantity
+            : (currentPrice - pos.entryPrice) * pos.quantity
         }
 
-        positionUpdate = {
-          position: {
-            ...cur.position,
-            currentPrice,
-            unrealizedPnl: totalUnrealizedPnl,
-            legs: updatedLegs,
-          },
+        curPositions[sym] = {
+          ...pos,
+          currentPrice,
+          unrealizedPnl: totalUnrealizedPnl,
+          legs: updatedLegs,
         }
 
-        if (!match)
-          addLog(
-            mkLog(
-              'warn',
-              'position',
-              `instrument not found in chain — using entry price as current`,
-            ),
-          )
-
+        const symSigData: AllSignalData = {
+          v3: symMarket?.v3 ?? v3,
+          indicators: symbolIndicators[sym] ?? indicators,
+          vrd: vrdData,
+          globalIndices,
+        }
         const { exit: signalExit, reason: signalReason } = shouldExit(
-          cur.position,
-          allSignalData,
+          pos,
+          symSigData,
           currentPrice,
           config,
         )
@@ -935,21 +1050,22 @@ export function useStrategyBot(token: string | null) {
           : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
             ? `Hard Stop triggered — ${hardStop.reasons.join(', ')}`
             : signalReason
+
         if (exit) {
           const legsToExit =
-            cur.position.legs && cur.position.legs.length > 0
-              ? cur.position.legs
+            pos.legs && pos.legs.length > 0
+              ? pos.legs
               : [
                   {
-                    instrumentKey: cur.position.instrumentKey,
-                    direction: cur.position.direction,
-                    entryPrice: cur.position.entryPrice,
-                    quantity: cur.position.quantity,
+                    instrumentKey: pos.instrumentKey,
+                    direction: pos.direction,
+                    entryPrice: pos.entryPrice,
+                    quantity: pos.quantity,
                     tradeType:
-                      cur.position.tradeType === 'selling'
+                      pos.tradeType === 'selling'
                         ? ('selling' as const)
                         : ('buying' as const),
-                    paperTradeId: cur.position.paperTradeId,
+                    paperTradeId: pos.paperTradeId,
                     currentPrice,
                   },
                 ]
@@ -957,12 +1073,12 @@ export function useStrategyBot(token: string | null) {
           for (const leg of legsToExit) {
             const isSelling = leg.tradeType === 'selling'
             const exitTxType = isSelling ? 'BUY' : 'SELL'
-            if (isPaperPosition(cur.position)) {
+            if (isPaperPosition(pos)) {
               addLog(
                 mkLog(
                   'info',
                   'paper',
-                  `exit triggered: ${reason} — closing paper trade leg ${leg.instrumentKey}`,
+                  `[${sym}] exit triggered: ${reason} — closing paper trade leg ${leg.instrumentKey}`,
                 ),
               )
               const [, paperExitErr] = await safeFetch(
@@ -982,25 +1098,13 @@ export function useStrategyBot(token: string | null) {
                   mkLog(
                     'error',
                     'paper',
-                    `Paper ${exitTxType} failed for ${leg.instrumentKey}: ${paperExitErr}`,
+                    `[${sym}] Paper ${exitTxType} failed for ${leg.instrumentKey}: ${paperExitErr}`,
                   ),
-                )
-                notify(
-                  'Paper Trade Error',
-                  `Paper ${exitTxType} failed: ${paperExitErr}`,
-                  'error',
                 )
                 continue
               }
-              addLog(
-                mkLog(
-                  'info',
-                  'paper',
-                  `Paper ${exitTxType} settled successfully for ${leg.instrumentKey}`,
-                ),
-              )
               notify(
-                'Paper Trade Exited',
+                `Paper Trade Exited [${sym}]`,
                 `Paper ${exitTxType} settled for ${leg.instrumentKey}. Reason: ${reason}`,
                 'info',
               )
@@ -1009,7 +1113,7 @@ export function useStrategyBot(token: string | null) {
                 mkLog(
                   'info',
                   'order',
-                  `exit triggered: ${reason} — placing ${exitTxType} for ${leg.instrumentKey}`,
+                  `[${sym}] exit triggered: ${reason} — placing ${exitTxType} for ${leg.instrumentKey}`,
                 ),
               )
               const [, sellErr] = await safeFetch('/api/order/place', {
@@ -1027,51 +1131,64 @@ export function useStrategyBot(token: string | null) {
                   mkLog(
                     'error',
                     'order',
-                    `${exitTxType} failed for ${leg.instrumentKey}: ${sellErr}`,
+                    `[${sym}] ${exitTxType} failed for ${leg.instrumentKey}: ${sellErr}`,
                   ),
-                )
-                notify(
-                  'Trade Error',
-                  `${exitTxType} failed: ${sellErr}`,
-                  'error',
                 )
                 continue
               }
-              addLog(
-                mkLog(
-                  'info',
-                  'order',
-                  `${exitTxType} placed successfully for ${leg.instrumentKey}`,
-                ),
-              )
               notify(
-                'Trade Exited',
+                `Trade Exited [${sym}]`,
                 `${exitTxType} order placed for ${leg.instrumentKey}. Reason: ${reason}`,
                 'info',
               )
             }
           }
-          const nextState: BotState =
-            cur.tradesCount >= config.maxTradesPerDay ||
-            (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
-              ? 'STOPPED'
-              : 'RUNNING'
-          updateStatus({
-            state: nextState,
-            position: null,
-            error: `Exited: ${reason}`,
-          })
-        } else {
-          const displayPrice = currentPrice
-          addLog(
-            mkLog(
-              'debug',
-              'position',
-              `holding — price=${displayPrice.toFixed(2)}`,
-            ),
-          )
+          curPositions[sym] = null
+          addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
         }
       }
+
+      // ── Step C: Final State Sync ─────────────────────────────────────────────
+      const hasActivePosition = Object.values(curPositions).some(
+        (p) => p !== null,
+      )
+      const totalTrades = Object.values(curTradesPerSym).reduce(
+        (acc, count) => acc + (count ?? 0),
+        0,
+      )
+      const nextState: BotState = hasActivePosition
+        ? 'ORDERED'
+        : afterCutoff
+          ? 'STOPPED'
+          : 'RUNNING'
+
+      const primaryPos =
+        curPositions['NIFTY 50'] ??
+        Object.values(curPositions).find(
+          (p): p is ActivePosition => p !== null,
+        ) ??
+        null
+
+      updateStatus({
+        state: nextState,
+        position: primaryPos,
+        positions: curPositions,
+        tradesCount: totalTrades,
+        tradesCountPerSymbol: curTradesPerSym,
+        symbolSignals,
+        symbolIndicators,
+        indicators,
+        vrdData,
+        candles,
+        allSignalData,
+        finalSignal,
+        squeezeMetrics,
+        hardStop,
+        globalIndices,
+        sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
+        lastUpdated: new Date().toLocaleTimeString('en-IN'),
+        error: null,
+      })
     } catch (err) {
       const msg = (err as Error).message
       addLogs([...tickLogs, mkLog('error', 'tick', `unhandled: ${msg}`)])

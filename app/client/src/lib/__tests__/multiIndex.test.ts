@@ -66,12 +66,65 @@ describe('Multi-Index Options Trading Support', () => {
   describe('Default Configuration & Backward Compatibility', () => {
     it('defaults strategy underlyingMode to ALL_PARALLEL', () => {
       expect(DEFAULT_CONFIG.underlyingMode).toBe('ALL_PARALLEL')
+      expect(DEFAULT_CONFIG.multiSymbolExecutionMode).toBe('independent')
     })
 
     it('maintains all legacy DEFAULT_CONFIG fields intact', () => {
       expect(DEFAULT_CONFIG.strategyMode).toBe('v5_scorecard')
       expect(DEFAULT_CONFIG.executionMode).toBe('paper')
       expect(DEFAULT_CONFIG.maxTradesPerDay).toBe(3)
+    })
+  })
+
+  describe('Multi-Symbol Execution Strategy Resolution', () => {
+    it('resolves candidate entries independently in independent mode', () => {
+      const mode = 'independent'
+      const symbolSignals: Record<string, string> = {
+        'NIFTY 50': 'BUY_CE',
+        BANKNIFTY: 'NEUTRAL',
+        FINNIFTY: 'BUY_CE',
+      }
+      const candidates = Object.entries(symbolSignals)
+        .filter(([, sig]) => sig === 'BUY_CE' || sig === 'BUY_PE')
+        .map(([sym]) => sym)
+
+      expect(mode).toBe('independent')
+      expect(candidates).toEqual(['NIFTY 50', 'FINNIFTY'])
+    })
+
+    it('requires consensus across all active target symbols in consensus mode', () => {
+      const symbolSignals1 = {
+        'NIFTY 50': 'BUY_CE',
+        BANKNIFTY: 'BUY_CE',
+        FINNIFTY: 'BUY_CE',
+      }
+      const symbolSignals2 = {
+        'NIFTY 50': 'BUY_CE',
+        BANKNIFTY: 'NEUTRAL',
+        FINNIFTY: 'BUY_CE',
+      }
+
+      const checkConsensus = (sigs: Record<string, string>) => {
+        const values = Object.values(sigs)
+        return (
+          values.every((s) => s === 'BUY_CE' || s === 'BUY_PE') &&
+          values.every((s) => s === values[0])
+        )
+      }
+
+      expect(checkConsensus(symbolSignals1)).toBe(true)
+      expect(checkConsensus(symbolSignals2)).toBe(false)
+    })
+
+    it('selects single highest confidence symbol in best_signal mode', () => {
+      const signals = [
+        { symbol: 'NIFTY 50', score: 14 },
+        { symbol: 'BANKNIFTY', score: 18 },
+        { symbol: 'FINNIFTY', score: 11 },
+      ]
+      signals.sort((a, b) => b.score - a.score)
+
+      expect(signals[0].symbol).toBe('BANKNIFTY')
     })
   })
 

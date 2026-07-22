@@ -295,6 +295,65 @@ export function StrategyConfig({
           </div>
         </div>
 
+        {/* ── Multi-Symbol Parallel Execution Mode Option ─────────────────── */}
+        {(local.underlyingMode ?? 'ALL_PARALLEL') === 'ALL_PARALLEL' && (
+          <div className="space-y-1.5 p-3 rounded-lg border border-primary/20 bg-primary/5">
+            <div className="flex items-center justify-between text-xs font-semibold text-primary">
+              <span className="flex items-center gap-1">
+                ⚙️ Multi-Symbol Execution Mode
+              </span>
+              <InfoTooltip content="Choose how parallel signals across NIFTY 50, BANKNIFTY, and FINNIFTY trigger order placements." />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => set('multiSymbolExecutionMode', 'independent')}
+                className={`p-2 text-left rounded border text-[11px] transition-colors cursor-pointer ${
+                  (local.multiSymbolExecutionMode ?? 'independent') ===
+                  'independent'
+                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                    : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <div className="font-semibold">Independent Parallel</div>
+                <div className="text-[10px] opacity-75">
+                  Trade each symbol as signal triggers
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => set('multiSymbolExecutionMode', 'consensus')}
+                className={`p-2 text-left rounded border text-[11px] transition-colors cursor-pointer ${
+                  local.multiSymbolExecutionMode === 'consensus'
+                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                    : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <div className="font-semibold font-sans">
+                  Cross-Index Consensus
+                </div>
+                <div className="text-[10px] opacity-75">
+                  All target symbols must agree
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => set('multiSymbolExecutionMode', 'best_signal')}
+                className={`p-2 text-left rounded border text-[11px] transition-colors cursor-pointer ${
+                  local.multiSymbolExecutionMode === 'best_signal'
+                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                    : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                }`}
+              >
+                <div className="font-semibold">Best Signal Only</div>
+                <div className="text-[10px] opacity-75 font-sans">
+                  Trade single highest confidence score
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Squeeze Specific Config ────────────────────────────────────── */}
         {local.strategyMode === 'bollinger_squeeze' && (
           <div className="space-y-2 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
