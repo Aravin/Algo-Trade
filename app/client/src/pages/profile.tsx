@@ -300,7 +300,7 @@ function NoAccount() {
 
 function PaperCreditSection() {
   const [summary, setSummary] = useState<PaperAccountSummary | null>(null)
-  const [amount, setAmount] = useState('5000')
+  const [amount, setAmount] = useState('15000')
   const [note, setNote] = useState('Manual paper credit set')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -355,7 +355,7 @@ function PaperCreditSection() {
     try {
       const next = await resetPaperAccount()
       setSummary(next)
-      setAmount('5000')
+      setAmount('15000')
       setNote('Manual paper credit set')
     } catch (err) {
       setError(
@@ -414,7 +414,7 @@ function PaperCreditSection() {
             onClick={() => void handleReset()}
             disabled={loading}
           >
-            Reset To 5000
+            Reset To 15000
           </Button>
           <Button
             size="sm"
@@ -427,7 +427,7 @@ function PaperCreditSection() {
         </div>
         <p className="text-xs text-muted-foreground">
           Reset clears paper trades and statement history from the client D1
-          database, then restores the paper balance to ₹5000.
+          database, then restores the paper balance to ₹15000.
         </p>
         {error && <p className="text-xs text-destructive/80">{error}</p>}
       </CardContent>

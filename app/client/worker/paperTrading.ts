@@ -6,7 +6,7 @@ import type {
 } from './types'
 import { nowIso, makeId, getLotSizeForSymbol } from './utils'
 
-const PAPER_STARTING_CREDIT = 5000
+const PAPER_STARTING_CREDIT = 15000
 
 export async function ensurePaperAccount(
   env: Env,
