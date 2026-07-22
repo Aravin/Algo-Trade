@@ -1,0 +1,18 @@
+# Algo Trade Workspace — LLM Directory Index (llms.txt)
+
+> Quantitative & Algorithmic Trading Platform for NIFTY / BANKNIFTY Options & Equities
+
+## Submodules
+
+### 1. `app/client` (Client Workstation & Worker Edge)
+- Full AI Context: [llm.txt](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/llm.txt)
+- Code Review: [review.md](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/review.md)
+- Knowledge Framework: [OKF.md](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/OKF.md)
+- Fast Lookup Index: [AI_INDEX.md](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/AI_INDEX.md)
+- Agent Rules: [AGENTS.md](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/AGENTS.md)
+
+### 2. `app/core` (Core Strategy Engine & Models)
+- Standard quantitative engine module.
+
+### 3. `app/cron` (Market Data Ingestion)
+- Scheduled jobs for historical and daily tick data ingestion.

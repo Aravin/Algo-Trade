@@ -1,0 +1,75 @@
+# Algo Trade Client — AI Context (llm.text)
+
+> Domain: Automated & Semi-Automated Algorithmic Trading Client (V5 Strategy System)
+> Stack: React 19, TypeScript, Vite 8, Cloudflare Workers, Cloudflare D1 (SQLite), Recharts, Radix UI, Tailwind CSS v4.
+
+---
+
+## 1. Project Overview & Architecture
+`app/client` is the client-side trading dashboard and serverless edge proxy layer for the Algo-Trade system.
+It features browser-executed trading logic (V5 Strategy Engine) synchronized with a Cloudflare Worker edge backend.
+
+- **Vite React UI (`src/`)**: Renders real-time strategy monitors, score breakdowns, threshold optimizers, paper trading management, broker account links, and interactive charts.
+- **Cloudflare Worker (`worker/`)**: Edge API proxy for Upstox API v2/v3, Paper Trading persistent ledger (D1 database `algo-trade-paper`), Auth0 token validation, and Client State persistence (`client_state` table).
+- **Execution Engine (`src/lib/strategyEngine.ts`)**: Evaluates real-time market signals (VWAP, Supertrend, EMA 9/21, Bollinger Bands, RSI 14, PCR, FII/DII, Market Breadth, VIX, Global Markets) to produce directional buy/sell signals, score breakdowns, and execution triggers.
+
+---
+
+## 2. Directory Layout & Module Index
+
+```
+app/client/
+├── worker/                     # Cloudflare Worker Edge Proxy & Backend
+│   ├── index.ts                # Worker fetch router & endpoint dispatcher
+│   ├── auth.ts                 # Auth0 JWT token verification
+│   ├── clientState.ts          # Client State persistence API (D1 client_state table)
+│   ├── paperTrading.ts         # Paper Trading ledger & trade execution engine (D1)
+│   ├── upstoxProxy.ts          # Upstox API proxy (Quotes, Option Chains, FII/DII, VIX, Orders)
+│   ├── globalIndices.ts        # Yahoo Finance / Global market sentiment scraper
+│   ├── types.ts                # Worker environment bindings (PAPER_TRADING_DB, Env)
+│   └── utils.ts                # Helper formatting utilities
+├── src/
+│   ├── components/
+│   │   ├── dashboard/          # Active trades, PnL charts, stats cards, sidebar, header
+│   │   │   └── strategy/       # V5 Strategy Dashboard components
+│   │   │       ├── bot-controls.tsx        # Bot start/stop/pause controls & runtime status
+│   │   │       ├── strategy-config.tsx     # Comprehensive V5 config editor & parameters
+│   │   │       ├── score-panel.tsx          # Real-time multi-factor sentiment & score matrix
+│   │   │       ├── threshold-optimizer.tsx  # Dynamic threshold backtester & optimizer
+│   │   │       ├── market-setup-panel.tsx   # Core market state, VWAP, PCR, VIX indicators
+│   │   │       ├── indicators-panel.tsx     # Technical indicators breakdown (EMA, RSI, BB)
+│   │   │       ├── breadth-panel.tsx        # Advance/Decline breadth monitor
+│   │   │       ├── global-markets-panel.tsx # S&P500, Nasdaq, Nikkei global sentiment
+│   │   │       ├── news-alerts-panel.tsx    # Live market news & high impact alerts
+│   │   │       ├── log-panel.tsx            # Real-time tick & decision log console
+│   │   │       └── hard-stop-banner.tsx     # Emergency risk banner & hard stop trigger
+│   │   └── ui/                 # Radix UI primitives & custom styled components
+│   ├── hooks/
+│   │   └── useStrategyBot.ts   # Core Hook: Real-time bot loop, market data polling, state persistence
+│   ├── lib/
+│   │   ├── strategyEngine.ts   # V5 Strategy algorithm, signal evaluation & entry/exit scoring
+│   │   ├── marketService.ts    # Upstox & market proxy REST data fetchers
+│   │   ├── indicators.ts       # Technical indicator calculators (EMA, VWAP, Supertrend, RSI, BB)
+│   │   ├── syntheticCalculators.ts # Synthetic Option Chain pricing & strike selection
+│   │   ├── vrdSignals.ts       # Volatility Regimes & Directional sentiment signals
+│   │   ├── tickLog.ts          # Throttled tick logger & memory buffer
+│   │   ├── clientState.ts      # Client state storage sync (Worker D1 API + localStorage)
+│   │   ├── accounts.ts         # Broker account credentials persistence
+│   │   └── types.ts            # Global TypeScript interfaces for strategies, trades, quotes
+│   └── pages/                  # Route pages (live-trades, strategies, history, broker-accounts)
+├── migrations/                 # D1 SQLite Database Migrations
+│   ├── 0001_paper_trading.sql  # Paper trading accounts & trades schema
+│   └── 0002_client_state.sql   # Client state key-value table schema
+├── package.json                # Dependencies & script commands
+└── wrangler.jsonc              # Cloudflare Worker configuration & D1 database bindings
+```
+
+---
+
+## 3. Key Commands
+
+- `yarn dev` — Launch Vite dev server locally.
+- `yarn build` — Typecheck (`tsc -b`) and build Vite production bundle.
+- `yarn test` — Run Vitest unit tests (`src/lib/__tests__`).
+- `yarn validate` — Run typecheck, lint, format check, and unit tests.
+- `yarn deploy` — Build client & deploy Cloudflare Worker.
