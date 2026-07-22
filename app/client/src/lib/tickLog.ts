@@ -104,6 +104,9 @@ export function sweepThresholds(
         for (const tick of ticks) {
           const top = Math.max(tick.bullScore, tick.bearScore)
           const gap = Math.abs(tick.bullScore - tick.bearScore)
+          const scoreMax =
+            tick.scoreMax && tick.scoreMax > 0 ? tick.scoreMax : 20
+          const ratio = scoreMax > 0 ? top / scoreMax : 0
           const dominant =
             tick.bullScore > tick.bearScore
               ? 'CE'
@@ -111,9 +114,14 @@ export function sweepThresholds(
                 ? 'PE'
                 : null
 
+          const satisfiesStrong =
+            top >= sT || (ratio >= 0.7 && top >= Math.min(sT, 10))
+          const satisfiesModerate =
+            top >= mT || (ratio >= 0.5 && top >= Math.min(mT, 6))
+
           let conf: 'strong' | 'moderate' | 'none' = 'none'
-          if (top >= sT && gap >= strongGap) conf = 'strong'
-          else if (top >= mT && gap >= moderateGap) conf = 'moderate'
+          if (satisfiesStrong && gap >= strongGap) conf = 'strong'
+          else if (satisfiesModerate && gap >= moderateGap) conf = 'moderate'
 
           if (conf === 'strong') {
             strong++

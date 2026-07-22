@@ -130,7 +130,25 @@ export function ThresholdOptimizer({
       if (a.tradeTicks === 0 && b.tradeTicks > 0) return 1
       if (b.tradeTicks === 0 && a.tradeTicks > 0) return -1
 
-      return a.tradeTicks - b.tradeTicks
+      if (a.tradeTicks !== b.tradeTicks) {
+        return a.tradeTicks - b.tradeTicks
+      }
+
+      // Tie-breakers when trade counts are equal:
+      // 1. More strong ticks (higher quality)
+      if (b.strongTicks !== a.strongTicks) {
+        return b.strongTicks - a.strongTicks
+      }
+      // 2. Higher strong threshold (stricter setup)
+      if (a.strongThreshold !== b.strongThreshold) {
+        return b.strongThreshold - a.strongThreshold
+      }
+      // 3. Higher moderate threshold
+      if (a.moderateThreshold !== b.moderateThreshold) {
+        return b.moderateThreshold - a.moderateThreshold
+      }
+      // 4. Larger strong gap
+      return b.strongGap - a.strongGap
     })
   }, [results, sortBy])
 
