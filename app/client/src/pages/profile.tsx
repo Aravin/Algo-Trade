@@ -301,7 +301,7 @@ function NoAccount() {
 function PaperCreditSection() {
   const [summary, setSummary] = useState<PaperAccountSummary | null>(null)
   const [amount, setAmount] = useState('15000')
-  const [note, setNote] = useState('Manual paper credit set')
+  const [note, setNote] = useState('Manual paper credit adjustment')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -330,14 +330,18 @@ function PaperCreditSection() {
     }
   }, [loadPaper])
 
-  const handleSet = async () => {
+  const handleAdjust = async (mode: 'set' | 'adjust') => {
     setLoading(true)
     setError('')
     try {
       const next = await adjustPaperAccount({
         amount: Number(amount),
-        mode: 'set',
-        note,
+        mode,
+        note:
+          note ||
+          (mode === 'set'
+            ? 'Manual paper credit set'
+            : 'Manual paper credit addition'),
       })
       setSummary(next)
     } catch (err) {
@@ -383,9 +387,7 @@ function PaperCreditSection() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">
-              Balance Amount
-            </label>
+            <label className="text-xs text-muted-foreground">Amount (₹)</label>
             <input
               type="number"
               value={amount}
@@ -403,10 +405,22 @@ function PaperCreditSection() {
             />
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => void handleSet()} disabled={loading}>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => void handleAdjust('set')}
+            disabled={loading}
+          >
             {loading ? <Loader2 size={12} className="animate-spin" /> : null}
-            Set Paper Credit
+            Set Balance
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleAdjust('adjust')}
+            disabled={loading}
+          >
+            Add (+{amount || 0})
           </Button>
           <Button
             size="sm"
@@ -426,8 +440,10 @@ function PaperCreditSection() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Reset clears paper trades and statement history from the client D1
-          database, then restores the paper balance to ₹15000.
+          Use <strong>Set Balance</strong> to replace your paper credit,{' '}
+          <strong>Add</strong> to add funds to your current balance without
+          losing history, or <strong>Reset To 15000</strong> to wipe history and
+          restore the default seed credit.
         </p>
         {error && <p className="text-xs text-destructive/80">{error}</p>}
       </CardContent>

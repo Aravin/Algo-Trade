@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { fetchPaperHistory } from '@/lib/paperTrading'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 function fmtCurrency(value: number, signed = false) {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
@@ -182,7 +183,23 @@ export function HistoryPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
-                        {trade.quantity}
+                        <div>
+                          <span>{trade.quantity}</span>
+                          {(() => {
+                            const lotSize = getLotSizeForSymbol(
+                              trade.instrument_key,
+                            )
+                            if (lotSize > 1) {
+                              const lots = Math.round(trade.quantity / lotSize)
+                              return (
+                                <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                                  ({lots} {lots > 1 ? 'lots' : 'lot'})
+                                </span>
+                              )
+                            }
+                            return null
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {fmtCurrency(trade.entry_price)}

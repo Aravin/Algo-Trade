@@ -4,6 +4,7 @@ import { Play, Square, Clock, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 import type { BotState } from '@/hooks/useStrategyBot'
 
@@ -171,9 +172,23 @@ export function BotControls({
                   Paper
                 </Badge>
               )}
-              <Badge variant="outline" className="ml-auto text-xs">
-                qty {position.quantity}
-              </Badge>
+              {(() => {
+                const symbol = position.legs?.[0]?.instrumentKey ?? 'NIFTY'
+                const lotSize = getLotSizeForSymbol(symbol)
+                const lots =
+                  lotSize > 1 ? Math.round(position.quantity / lotSize) : null
+                return (
+                  <Badge
+                    variant="outline"
+                    className="ml-auto text-xs font-mono"
+                  >
+                    {position.quantity} qty
+                    {lots !== null
+                      ? ` (${lots} ${lots > 1 ? 'lots' : 'lot'})`
+                      : ''}
+                  </Badge>
+                )
+              })()}
             </div>
 
             {position.legs && position.legs.length > 0 && (

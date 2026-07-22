@@ -734,9 +734,13 @@ export function useStrategyBot(token: string | null) {
                     `Paper ${side} created tradeId=${paperTradeId}`,
                   ),
                 )
+                const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
+                const lotLabel = lotsCount
+                  ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
+                  : ''
                 notify(
                   'Paper Trade Executed',
-                  `Paper ${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed`,
+                  `Paper ${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed`,
                   'success',
                 )
               } else {
@@ -786,9 +790,13 @@ export function useStrategyBot(token: string | null) {
                     `${side} placed orderId=${orderData?.data?.order_id ?? '—'}`,
                   ),
                 )
+                const lotsCount = lotSize > 1 ? Math.round(qty / lotSize) : null
+                const lotLabel = lotsCount
+                  ? ` (${lotsCount} ${lotsCount > 1 ? 'lots' : 'lot'})`
+                  : ''
                 notify(
                   'Trade Executed',
-                  `${side} ${leg.direction} ${qty}qty (${instrumentKey}) placed successfully`,
+                  `${side} ${leg.direction} ${qty}qty${lotLabel} (${instrumentKey}) placed successfully`,
                   'success',
                 )
               }

@@ -26,16 +26,40 @@ describe('Multi-Index Options Trading Support', () => {
     it('returns lot size 25 for NIFTY 50', () => {
       expect(getLotSizeForSymbol('NIFTY 50')).toBe(25)
       expect(getLotSizeForSymbol('NSE_INDEX|Nifty 50')).toBe(25)
+      expect(getLotSizeForSymbol('NSE_FO|NIFTY26JUL24500CE')).toBe(25)
     })
 
     it('returns lot size 15 for BANKNIFTY', () => {
       expect(getLotSizeForSymbol('BANKNIFTY')).toBe(15)
       expect(getLotSizeForSymbol('NSE_INDEX|Nifty Bank')).toBe(15)
+      expect(getLotSizeForSymbol('NSE_FO|BANKNIFTY26JUL52000PE')).toBe(15)
     })
 
     it('returns lot size 40 for FINNIFTY', () => {
       expect(getLotSizeForSymbol('FINNIFTY')).toBe(40)
       expect(getLotSizeForSymbol('NSE_INDEX|Nifty Fin Service')).toBe(40)
+    })
+
+    it('returns lot size 50 for MIDCPNIFTY', () => {
+      expect(getLotSizeForSymbol('MIDCPNIFTY')).toBe(50)
+      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Mid Select')).toBe(50)
+    })
+
+    it('returns lot size 10 for SENSEX', () => {
+      expect(getLotSizeForSymbol('SENSEX')).toBe(10)
+      expect(getLotSizeForSymbol('BSE_INDEX|SENSEX')).toBe(10)
+    })
+
+    it('returns lot size 15 for BANKEX', () => {
+      expect(getLotSizeForSymbol('BANKEX')).toBe(15)
+    })
+
+    it('returns correct lot sizes for popular Stock F&O symbols', () => {
+      expect(getLotSizeForSymbol('NSE_FO|RELIANCE26JUL3000CE')).toBe(250)
+      expect(getLotSizeForSymbol('INFY')).toBe(400)
+      expect(getLotSizeForSymbol('TCS')).toBe(175)
+      expect(getLotSizeForSymbol('HDFCBANK')).toBe(550)
+      expect(getLotSizeForSymbol('SBIN')).toBe(1500)
     })
   })
 

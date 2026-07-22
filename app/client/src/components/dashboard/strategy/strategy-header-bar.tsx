@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { InfoTooltip } from '@/components/ui/tooltip'
 import { getUpcomingIndexExpiry } from '@/lib/utils'
+import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 const STATE_DOT: Record<BotState, string> = {
   IDLE: 'bg-muted-foreground',
@@ -193,7 +194,13 @@ export function StrategyHeaderBar({
                 : `${position.tradeType === 'selling' ? 'Short' : 'Long'} ${position.direction}`}
             </span>
             <span className="text-muted-foreground font-mono">
-              qty {position.quantity}
+              {(() => {
+                const symbol = position.legs?.[0]?.instrumentKey ?? 'NIFTY'
+                const lotSize = getLotSizeForSymbol(symbol)
+                const lots =
+                  lotSize > 1 ? Math.round(position.quantity / lotSize) : null
+                return `${position.quantity} qty${lots !== null ? ` (${lots} ${lots > 1 ? 'lots' : 'lot'})` : ''}`
+              })()}
             </span>
             {pct !== null && (
               <span
