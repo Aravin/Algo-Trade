@@ -78,8 +78,10 @@ function App() {
     if (isBrokerCallback) return
 
     const search = window.location.search
+    const code = new URLSearchParams(search).get('code')
+    const state = new URLSearchParams(search).get('state')
     const isAuth0Callback =
-      search.includes('code=') && search.includes('state=')
+      code != null && code.length > 10 && state != null && state.length > 5
 
     if (isAuth0Callback) {
       if (!isLoading) {
