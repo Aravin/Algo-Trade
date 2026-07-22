@@ -250,6 +250,56 @@ export async function handleIntraday(request: Request): Promise<Response> {
   return Response.json(data, { status: upstream.status })
 }
 
+export async function handleHistoricalCandles(
+  request: Request,
+): Promise<Response> {
+  let body: {
+    token: string
+    instrumentKey: string
+    toDate: string
+    fromDate: string
+    interval?: string
+  }
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Invalid body' }, { status: 400 })
+  }
+  if (!body.token || !body.instrumentKey || !body.toDate || !body.fromDate) {
+    return Response.json(
+      {
+        error:
+          'Missing required parameters: token, instrumentKey, toDate, fromDate',
+      },
+      { status: 400 },
+    )
+  }
+  const interval = body.interval ?? '1minute'
+  const key = encodeURIComponent(body.instrumentKey)
+  const toDate = encodeURIComponent(body.toDate)
+  const fromDate = encodeURIComponent(body.fromDate)
+
+  let upstream: Response
+  try {
+    upstream = await fetchWithTimeout(
+      `https://api.upstox.com/v2/historical-candle/${key}/${interval}/${toDate}/${fromDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+  } catch {
+    return Response.json(
+      { error: 'Failed to reach Upstox historical candles API' },
+      { status: 502 },
+    )
+  }
+  const data = await upstream.json()
+  return Response.json(data, { status: upstream.status })
+}
+
 export async function handleOptionContracts(
   request: Request,
 ): Promise<Response> {

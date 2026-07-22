@@ -22,6 +22,7 @@ import { LogPanel } from '@/components/dashboard/strategy/log-panel'
 import { SourceStatusBar } from '@/components/dashboard/strategy/source-status-bar'
 import { NewsAlertsPanel } from '@/components/dashboard/strategy/news-alerts-panel'
 import { ThresholdOptimizer } from '@/components/dashboard/strategy/threshold-optimizer'
+import { DailyBacktestReport } from '@/components/dashboard/strategy/daily-backtest-report'
 
 export function StrategiesPage() {
   const token = getAccounts().find((a) => a.accessToken)?.accessToken ?? null
@@ -184,6 +185,7 @@ export function StrategiesPage() {
           value="config"
           className="space-y-4 focus-visible:outline-none"
         >
+          <DailyBacktestReport />
           <StrategyConfigPanel config={config} onSave={setConfig} />
           <ThresholdOptimizer
             config={config}

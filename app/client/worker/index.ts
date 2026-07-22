@@ -16,6 +16,7 @@ import {
   handleMarketQuotes,
   handleUpstoxFunds,
   handleIntraday,
+  handleHistoricalCandles,
   handleOptionContracts,
   handleOptionChain,
   handleUpstoxPcr,
@@ -70,6 +71,12 @@ export default {
       request.method === 'POST'
     ) {
       return handleIntraday(request)
+    }
+    if (
+      url.pathname === '/api/market/candles/historical' &&
+      request.method === 'POST'
+    ) {
+      return handleHistoricalCandles(request)
     }
     if (
       url.pathname === '/api/market/option-chain' &&
