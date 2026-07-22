@@ -10,6 +10,9 @@ import {
 import { useAuth0 } from '@auth0/auth0-react'
 import { isAuth0Enabled } from '@/lib/auth0-config'
 
+import { InfoTooltip } from '@/components/ui/tooltip'
+import { getUpcomingIndexExpiry } from '@/lib/utils'
+
 interface IndexData {
   name: string
   value: string
@@ -21,6 +24,7 @@ interface IndexData {
 const BLANK: IndexData[] = [
   { name: 'NIFTY 50', value: '—', change: '—', pct: '', up: true },
   { name: 'BANK NIFTY', value: '—', change: '—', pct: '', up: true },
+  { name: 'FIN NIFTY', value: '—', change: '—', pct: '', up: true },
   { name: 'SENSEX', value: '—', change: '—', pct: '', up: true },
   { name: 'INDIA VIX', value: '—', change: '—', pct: '', up: true },
 ]
@@ -28,6 +32,7 @@ const BLANK: IndexData[] = [
 const KEY_MAP = [
   { key: 'NSE_INDEX:Nifty 50', name: 'NIFTY 50' },
   { key: 'NSE_INDEX:Nifty Bank', name: 'BANK NIFTY' },
+  { key: 'NSE_INDEX:Nifty Fin Service', name: 'FIN NIFTY' },
   { key: 'BSE_INDEX:SENSEX', name: 'SENSEX' },
   { key: 'NSE_INDEX:India VIX', name: 'INDIA VIX' },
 ] as const
@@ -205,26 +210,36 @@ export function Header() {
       {/* Indices ticker */}
       <div className="ticker-marquee border-b border-border px-4 py-2 sm:px-6">
         <div className="ticker-marquee__track">
-          {tickerItems.map((idx, index) => (
-            <div
-              key={`${idx.name}-${index}`}
-              className="flex items-center gap-2 shrink-0 whitespace-nowrap"
-            >
-              <span className="text-xs text-muted-foreground font-medium">
-                {idx.name}
-              </span>
-              <span className="text-xs font-semibold text-foreground">
-                {idx.value}
-              </span>
-              {idx.pct && (
-                <span
-                  className={`text-xs font-medium ${idx.up ? 'text-success' : 'text-destructive'}`}
-                >
-                  {idx.change} ({idx.pct})
+          {tickerItems.map((idx, index) => {
+            const expiry = getUpcomingIndexExpiry(idx.name)
+            const showExpiry = idx.name !== 'INDIA VIX'
+            return (
+              <div
+                key={`${idx.name}-${index}`}
+                className="flex items-center gap-2 shrink-0 whitespace-nowrap"
+              >
+                <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                  {idx.name}
+                  {showExpiry && (
+                    <InfoTooltip
+                      content={`${idx.name} Expiry: ${expiry.fullLabel} (${expiry.relativeText})`}
+                      iconSize={11}
+                    />
+                  )}
                 </span>
-              )}
-            </div>
-          ))}
+                <span className="text-xs font-semibold text-foreground">
+                  {idx.value}
+                </span>
+                {idx.pct && (
+                  <span
+                    className={`text-xs font-medium ${idx.up ? 'text-success' : 'text-destructive'}`}
+                  >
+                    {idx.change} ({idx.pct})
+                  </span>
+                )}
+              </div>
+            )
+          })}
           {isLive && (
             <span className="shrink-0 whitespace-nowrap flex items-center gap-1 text-xs text-muted-foreground pl-1 pr-5 sm:pr-6">
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />

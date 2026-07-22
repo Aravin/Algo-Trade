@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { computeAllIndicators, getOtmStrike } from '../indicators'
+import { getUpcomingIndexExpiry } from '../utils'
 import type { Candle, OptionData } from '../types'
 
 describe('indicators', () => {
@@ -162,6 +163,30 @@ describe('indicators', () => {
       ]
       const selected = getOtmStrike(optionChain, 'CE', 2)
       expect(selected?.strike_price).toBe(24300)
+    })
+  })
+
+  describe('getUpcomingIndexExpiry', () => {
+    it('calculates correct weekly expiry day of week for Indian indices', () => {
+      const nifty = getUpcomingIndexExpiry('NIFTY 50')
+      expect(nifty.dayOfWeek).toBe('Thursday')
+      expect(nifty.expiryDateStr).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+      const bank = getUpcomingIndexExpiry('BANKNIFTY')
+      expect(bank.dayOfWeek).toBe('Wednesday')
+
+      const fin = getUpcomingIndexExpiry('FINNIFTY')
+      expect(fin.dayOfWeek).toBe('Tuesday')
+
+      const sensex = getUpcomingIndexExpiry('SENSEX')
+      expect(sensex.dayOfWeek).toBe('Friday')
+    })
+
+    it('honors live expiry override when provided', () => {
+      const override = getUpcomingIndexExpiry('NIFTY 50', '2026-07-30')
+      expect(override.expiryDateStr).toBe('2026-07-30')
+      expect(override.formattedExpiry).toBe('30 Jul 2026')
+      expect(override.dayOfWeek).toBe('Thursday')
     })
   })
 })

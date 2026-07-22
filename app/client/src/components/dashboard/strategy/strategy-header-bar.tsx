@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { InfoTooltip } from '@/components/ui/tooltip'
+import { getUpcomingIndexExpiry } from '@/lib/utils'
 
 const STATE_DOT: Record<BotState, string> = {
   IDLE: 'bg-muted-foreground',
@@ -120,6 +122,38 @@ export function StrategyHeaderBar({
               >
                 {executionMode === 'paper' ? 'Paper' : 'Live'}
               </Badge>
+              {(() => {
+                const niftyExp = getUpcomingIndexExpiry('NIFTY 50')
+                const bankExp = getUpcomingIndexExpiry('BANKNIFTY')
+                const finExp = getUpcomingIndexExpiry('FINNIFTY')
+                return (
+                  <span className="hidden sm:flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-card border border-border text-muted-foreground">
+                    📅 Expiries: NIFTY ({niftyExp.formattedExpiry.slice(0, 6)})
+                    <InfoTooltip
+                      content={
+                        <div className="space-y-1">
+                          <p className="font-semibold border-b pb-0.5 text-foreground">
+                            Weekly Option Expiries (IST)
+                          </p>
+                          <p>
+                            • NIFTY 50: {niftyExp.fullLabel} (
+                            {niftyExp.relativeText})
+                          </p>
+                          <p>
+                            • BANK NIFTY: {bankExp.fullLabel} (
+                            {bankExp.relativeText})
+                          </p>
+                          <p>
+                            • FIN NIFTY: {finExp.fullLabel} (
+                            {finExp.relativeText})
+                          </p>
+                        </div>
+                      }
+                      iconSize={11}
+                    />
+                  </span>
+                )
+              })()}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
               <span>

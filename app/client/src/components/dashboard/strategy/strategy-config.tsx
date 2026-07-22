@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { InfoTooltip } from '@/components/ui/tooltip'
 import { saveStrategyConfig } from '@/lib/strategyConfig'
+import { getUpcomingIndexExpiry } from '@/lib/utils'
 
 // ─── Score max reference (dynamic, but ~27 when all VRD sources up) ──────────
 const APPROX_MAX = 27
@@ -196,61 +197,101 @@ export function StrategyConfig({
             <InfoTooltip content="Select which index to trade or run all major indices (NIFTY 50, BANKNIFTY, FINNIFTY) concurrently in parallel cycles." />
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              type="button"
-              onClick={() => set('underlyingMode', 'ALL_PARALLEL')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                (local.underlyingMode ?? 'ALL_PARALLEL') === 'ALL_PARALLEL'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold flex items-center gap-1">
-                🚀 All Parallel
-              </div>
-              <div className="text-[10px] opacity-80">
-                NIFTY + BANKNIFTY + FINNIFTY
-              </div>
-            </button>
+            {(() => {
+              const niftyExp = getUpcomingIndexExpiry('NIFTY 50')
+              const bankExp = getUpcomingIndexExpiry('BANKNIFTY')
+              const finExp = getUpcomingIndexExpiry('FINNIFTY')
+              return (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => set('underlyingMode', 'ALL_PARALLEL')}
+                    className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                      (local.underlyingMode ?? 'ALL_PARALLEL') ===
+                      'ALL_PARALLEL'
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        🚀 All Parallel
+                      </span>
+                      <InfoTooltip
+                        content={`Parallel Expiries: NIFTY (${niftyExp.formattedExpiry}), BANKNIFTY (${bankExp.formattedExpiry}), FINNIFTY (${finExp.formattedExpiry})`}
+                        iconSize={11}
+                      />
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      NIFTY + BANKNIFTY + FINNIFTY
+                    </div>
+                  </button>
 
-            <button
-              type="button"
-              onClick={() => set('underlyingMode', 'NIFTY 50')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                local.underlyingMode === 'NIFTY 50'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold">NIFTY 50</div>
-              <div className="text-[10px] opacity-80">Lot size: 25</div>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => set('underlyingMode', 'NIFTY 50')}
+                    className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                      local.underlyingMode === 'NIFTY 50'
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center justify-between">
+                      <span>NIFTY 50</span>
+                      <InfoTooltip
+                        content={`Nifty 50 Weekly Expiry: ${niftyExp.fullLabel} (${niftyExp.relativeText})`}
+                        iconSize={11}
+                      />
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      Lot size: 25 • {niftyExp.formattedExpiry}
+                    </div>
+                  </button>
 
-            <button
-              type="button"
-              onClick={() => set('underlyingMode', 'BANKNIFTY')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                local.underlyingMode === 'BANKNIFTY'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold">BANKNIFTY</div>
-              <div className="text-[10px] opacity-80">Lot size: 15</div>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => set('underlyingMode', 'BANKNIFTY')}
+                    className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                      local.underlyingMode === 'BANKNIFTY'
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center justify-between">
+                      <span>BANKNIFTY</span>
+                      <InfoTooltip
+                        content={`Bank Nifty Weekly Expiry: ${bankExp.fullLabel} (${bankExp.relativeText})`}
+                        iconSize={11}
+                      />
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      Lot size: 15 • {bankExp.formattedExpiry}
+                    </div>
+                  </button>
 
-            <button
-              type="button"
-              onClick={() => set('underlyingMode', 'FINNIFTY')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                local.underlyingMode === 'FINNIFTY'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold">FINNIFTY</div>
-              <div className="text-[10px] opacity-80">Lot size: 40</div>
-            </button>
+                  <button
+                    type="button"
+                    onClick={() => set('underlyingMode', 'FINNIFTY')}
+                    className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
+                      local.underlyingMode === 'FINNIFTY'
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-semibold flex items-center justify-between">
+                      <span>FINNIFTY</span>
+                      <InfoTooltip
+                        content={`Fin Nifty Weekly Expiry: ${finExp.fullLabel} (${finExp.relativeText})`}
+                        iconSize={11}
+                      />
+                    </div>
+                    <div className="text-[10px] opacity-80">
+                      Lot size: 40 • {finExp.formattedExpiry}
+                    </div>
+                  </button>
+                </>
+              )
+            })()}
           </div>
         </div>
 

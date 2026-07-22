@@ -3,6 +3,8 @@ import { Globe } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InfoTooltip } from '@/components/ui/tooltip'
 
+import { getUpcomingIndexExpiry } from '@/lib/utils'
+
 function Item({
   label,
   value,
@@ -39,13 +41,17 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
   const vixLabel = vix !== null && vix !== undefined ? `${vix}` : null
   const vixOk = vix !== null && vix !== undefined && vix >= 10 && vix <= 25
 
+  const niftyExp = getUpcomingIndexExpiry('NIFTY 50')
+  const bankExp = getUpcomingIndexExpiry('BANKNIFTY')
+  const finExp = getUpcomingIndexExpiry('FINNIFTY')
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm">
           <Globe size={14} className="text-primary" />
           Market Setup
-          <InfoTooltip content="Macro & sentiment setup including India VIX volatility, FII derivatives positioning, Nifty PE valuation, and Market Mood Index." />
+          <InfoTooltip content="Macro & sentiment setup including India VIX volatility, FII derivatives positioning, Nifty PE valuation, and Index Option Expiry schedule." />
           {vrdData && (
             <span className="ml-auto text-xs text-muted-foreground font-normal">
               {new Date(vrdData.fetchedAt).toLocaleTimeString('en-IN', {
@@ -58,6 +64,26 @@ export function MarketSetupPanel({ vrdData }: { vrdData: VrdData | null }) {
       </CardHeader>
       <CardContent className="pt-0 flex-1">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              Option Expiries
+            </p>
+            <Item
+              label="NIFTY 50"
+              value={niftyExp.formattedExpiry}
+              tooltip={`Nifty 50 Weekly Expiry: ${niftyExp.fullLabel} (${niftyExp.relativeText})`}
+            />
+            <Item
+              label="BANK NIFTY"
+              value={bankExp.formattedExpiry}
+              tooltip={`Bank Nifty Weekly Expiry: ${bankExp.fullLabel} (${bankExp.relativeText})`}
+            />
+            <Item
+              label="FIN NIFTY"
+              value={finExp.formattedExpiry}
+              tooltip={`Fin Nifty Weekly Expiry: ${finExp.fullLabel} (${finExp.relativeText})`}
+            />
+          </div>
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">
               Volatility
