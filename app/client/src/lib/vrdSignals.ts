@@ -106,7 +106,7 @@ export function scoreFiiLongShort(
   let contrarian = false
   let direction: 'BULL' | 'BEAR' | 'NEUTRAL'
   if (shortPct >= 80) {
-    points = shortPctTrend === 'Falling' ? 4 : 3
+    points = shortPctTrend === 'Falling' ? 3 : 2
     contrarian = true
     direction = 'BULL'
     label =
