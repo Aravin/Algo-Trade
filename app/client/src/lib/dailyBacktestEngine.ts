@@ -389,7 +389,24 @@ export function generateDailyReport(
         ? 99.0
         : 0.0
 
-  const maxDrawdownPct = losingTrades > 0 ? 3.98 : 0.0
+  let maxDrawdownPct = 0.0
+  if (trades.length > 0) {
+    let peakEquity = sizing.accountValue
+    let maxDrawdown = 0.0
+    let equity = sizing.accountValue
+    for (const trade of trades) {
+      equity += trade.netPnl
+      if (equity > peakEquity) {
+        peakEquity = equity
+      }
+      const drawdown = peakEquity - equity
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown
+      }
+    }
+    maxDrawdownPct =
+      peakEquity > 0 ? Number(((maxDrawdown / peakEquity) * 100).toFixed(2)) : 0.0
+  }
 
   return {
     dateStr,
