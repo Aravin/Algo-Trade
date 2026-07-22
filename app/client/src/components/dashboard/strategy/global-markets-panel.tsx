@@ -22,7 +22,7 @@ const US_MARKETS: MarketConfig[] = [
 
 const ASIAN_MARKETS: MarketConfig[] = [
   { key: 'Hang Seng', label: 'Hang Seng' },
-  { key: 'Nikkei ', label: 'Nikkei 225' },
+  { key: 'Nikkei', label: 'Nikkei 225' },
   { key: 'Shanghai', label: 'Shanghai' },
   { key: 'KOSPI', label: 'KOSPI' },
 ]
