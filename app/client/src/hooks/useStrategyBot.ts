@@ -709,6 +709,13 @@ export function useStrategyBot(token: string | null) {
                       bullScore: finalSignal.bullScore,
                       bearScore: finalSignal.bearScore,
                       tradeType: leg.tradeType,
+                      tradingSymbol:
+                        leg.direction === 'CE'
+                          ? strike.call_options.trading_symbol
+                          : strike.put_options.trading_symbol,
+                      strikePrice: strike.strike_price,
+                      expiry: strike.expiry,
+                      underlyingSymbol: targetSymbols[0] ?? 'NIFTY 50',
                     },
                   }),
                 })

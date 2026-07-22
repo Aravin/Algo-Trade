@@ -220,10 +220,38 @@ export function HistoryPage() {
                     }
                   }
 
+                  let displaySymbol = trade.instrument_key
+                  let metaSubtext: string | null = null
+                  try {
+                    const meta = JSON.parse(trade.metadata_json ?? '{}') as {
+                      tradingSymbol?: string
+                      strikePrice?: number
+                      expiry?: string
+                      underlyingSymbol?: string
+                    } | null
+                    if (meta?.tradingSymbol || meta?.strikePrice) {
+                      const underlying = meta.underlyingSymbol ?? 'NIFTY'
+                      const strikeStr = meta.strikePrice
+                        ? `${meta.strikePrice}`
+                        : ''
+                      displaySymbol =
+                        meta.tradingSymbol ??
+                        `${underlying} ${strikeStr} ${trade.direction}`
+                      metaSubtext = `${trade.instrument_key}${meta.expiry ? ` · Exp: ${meta.expiry}` : ''}`
+                    }
+                  } catch {
+                    // ignore
+                  }
+
                   return (
                     <TableRow key={trade.id}>
-                      <TableCell className="font-medium text-sm">
-                        {trade.instrument_key}
+                      <TableCell>
+                        <p className="font-medium text-sm">{displaySymbol}</p>
+                        {metaSubtext && (
+                          <p className="text-[11px] font-mono text-muted-foreground">
+                            {metaSubtext}
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">

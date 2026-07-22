@@ -72,6 +72,8 @@ interface UpstoxFundsV3 {
 interface TradeRow {
   id: string
   symbol: string
+  displaySymbol?: string
+  metaInfo?: string
   type: 'CE' | 'PE' | 'EQ' | 'FUT'
   side: 'BUY' | 'SELL'
   qty: number
@@ -261,11 +263,47 @@ async function fetchQuotes(
   return payload.data
 }
 
+function resolveQuoteLtp(
+  quotes:
+    | Record<string, { last_price?: number; instrument_token?: string }>
+    | undefined,
+  instrumentKey: string,
+  tradingSymbol?: string,
+): number | null {
+  if (!quotes) return null
+
+  if (quotes[instrumentKey]?.last_price !== undefined) {
+    return quotes[instrumentKey].last_price ?? null
+  }
+
+  if (tradingSymbol) {
+    if (quotes[tradingSymbol]?.last_price !== undefined) {
+      return quotes[tradingSymbol].last_price ?? null
+    }
+    const prefixed = `NSE_FO:${tradingSymbol}`
+    if (quotes[prefixed]?.last_price !== undefined) {
+      return quotes[prefixed].last_price ?? null
+    }
+  }
+
+  for (const [key, q] of Object.entries(quotes)) {
+    const match =
+      key === instrumentKey ||
+      q.instrument_token === instrumentKey ||
+      (q as { instrument_key?: string }).instrument_key === instrumentKey
+    if (match && q.last_price !== undefined) {
+      return q.last_price
+    }
+  }
+
+  return null
+}
+
 // ─── Dataset builders ─────────────────────────────────────────────────────────
 
 function buildPaperDataset(
   summary: PaperAccountSummary,
-  quotes?: Record<string, { last_price?: number }>,
+  quotes?: Record<string, { last_price?: number; instrument_token?: string }>,
 ): Dataset {
   const trades = summary.trades ?? []
   const openTrades = trades.filter((t) => t.status === 'OPEN')
@@ -281,20 +319,34 @@ function buildPaperDataset(
 
   const openRows: TradeRow[] = openTrades.map((t) => {
     let tradeType = 'buying'
+    let tradingSymbol: string | undefined
+    let strikePrice: number | undefined
+    let expiry: string | undefined
+    let underlyingSymbol: string | undefined
+
     try {
       const meta = JSON.parse(t.metadata_json ?? '{}') as {
         tradeType?: string
+        tradingSymbol?: string
+        strikePrice?: number
+        expiry?: string
+        underlyingSymbol?: string
       } | null
-      if (meta?.tradeType) {
-        tradeType = meta.tradeType
-      }
+      if (meta?.tradeType) tradeType = meta.tradeType
+      if (meta?.tradingSymbol) tradingSymbol = meta.tradingSymbol
+      if (meta?.strikePrice) strikePrice = meta.strikePrice
+      if (meta?.expiry) expiry = meta.expiry
+      if (meta?.underlyingSymbol) underlyingSymbol = meta.underlyingSymbol
     } catch {
       // ignore
     }
     const isSelling = tradeType === 'selling'
 
-    const quote = quotes ? quotes[t.instrument_key] : undefined
-    let ltp: number | null = quote?.last_price ?? null
+    let ltp: number | null = resolveQuoteLtp(
+      quotes,
+      t.instrument_key,
+      tradingSymbol,
+    )
 
     if (ltp === null) {
       try {
@@ -340,9 +392,24 @@ function buildPaperDataset(
         ? t.direction
         : inferType(t.instrument_key)
 
+    const underlying = underlyingSymbol ?? 'NIFTY'
+    const strikeLabel = strikePrice ? `${strikePrice}` : ''
+    const displaySymbol =
+      tradingSymbol ??
+      (strikeLabel
+        ? `${underlying} ${strikeLabel} ${t.direction}`
+        : t.instrument_key)
+
+    const metaParts = [
+      `${isSelling ? 'SELL' : 'BUY'} · ${timeLabel(t.opened_at)}`,
+    ]
+    if (expiry) metaParts.push(`Exp: ${expiry}`)
+
     return {
       id: t.id,
       symbol: t.instrument_key,
+      displaySymbol,
+      metaInfo: metaParts.join(' · '),
       type: tradeRowType,
       side: isSelling ? 'SELL' : 'BUY',
       qty: t.quantity,
@@ -689,9 +756,14 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
         {rows.map((row) => (
           <TableRow key={row.id}>
             <TableCell>
-              <p className="font-medium text-sm">{row.symbol}</p>
-              <p className="text-xs text-muted-foreground">
-                {row.side} · {row.entryTime}
+              <p className="font-medium text-sm">
+                {row.displaySymbol ?? row.symbol}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono">
+                {row.metaInfo ?? `${row.side} · ${row.entryTime}`}
+                {row.displaySymbol && row.displaySymbol !== row.symbol && (
+                  <span className="ml-1.5 opacity-70">({row.symbol})</span>
+                )}
               </p>
             </TableCell>
             <TableCell>

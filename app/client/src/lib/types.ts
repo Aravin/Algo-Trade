@@ -50,11 +50,13 @@ export interface OptionData {
   underlying_spot_price: number
   call_options: {
     instrument_key: string
+    trading_symbol?: string
     market_data: { ltp: number; volume: number; oi: number }
     option_greeks?: OptionGreeks
   }
   put_options: {
     instrument_key: string
+    trading_symbol?: string
     market_data: { ltp: number; volume: number; oi: number }
     option_greeks?: OptionGreeks
   }

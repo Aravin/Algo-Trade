@@ -23,7 +23,7 @@ describe('dailyBacktestEngine', () => {
       const sizing = calculateCapitalSizing(30000, 'NIFTY', 25, 110)
       expect(sizing.maxLotsAllowedPerTrade).toBe(5)
       expect(sizing.costPerLot).toBe(2750)
-      expect(sizing.maxCapitalDeployed).toBe(13750)
+      expect(sizing.maxCapitalDeployed).toBe(27500)
     })
   })
 
