@@ -110,8 +110,8 @@ export function getFinalSignal(
     return evaluateBollingerSqueezeStrategy(data, candles, config)
   }
 
-  const bull = scoreBullish(data)
-  const bear = scoreBearish(data)
+  const bull = scoreBullish(data, config)
+  const bear = scoreBearish(data, config)
   const v4 = getV4Signal(data.indicators)
   const gap = Math.abs(bull.score - bear.score)
   const top = Math.max(bull.score, bear.score)
@@ -240,6 +240,7 @@ export function shouldExit(
 export function runHardStopChecks(
   vrd: VrdData | null,
   globalIndices?: McMarketItem[] | null,
+  config?: Partial<StrategyConfig>,
 ): {
   blocked: boolean
   blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
@@ -263,8 +264,11 @@ export function runHardStopChecks(
       (item) => item.symbol.toLowerCase() === 'brent oil',
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
-    if (brentPrice !== null && brentPrice >= 95) {
-      reasons.push(`Brent Crude $${brentPrice} >= $95 (Extreme Global Risk)`)
+    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
+    if (brentPrice !== null && brentPrice >= brentExtremeThreshold) {
+      reasons.push(
+        `Brent Crude $${brentPrice} >= $${brentExtremeThreshold} (Extreme Global Risk)`,
+      )
       blockedDirection = 'BOTH'
     }
   }
@@ -336,7 +340,10 @@ function addScore(
 }
 
 // ─── Bullish scoring ──────────────────────────────────────────────────────────
-export function scoreBullish(data: AllSignalData): ScoreResult {
+export function scoreBullish(
+  data: AllSignalData,
+  config?: Partial<StrategyConfig>,
+): ScoreResult {
   const bd: ScoreBreakdown[] = []
   let score = 0
   let max = 0
@@ -442,12 +449,13 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
       (item) => item.symbol.toLowerCase() === 'brent oil',
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
-    if (brentPrice !== null && brentPrice >= 88) {
+    const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
+    if (brentPrice !== null && brentPrice >= brentOverhangThreshold) {
       score += addScore(
         bd,
         'Macro',
         'Brent Crude Overhang',
-        `Oil at $${brentPrice} >= $88 (penalty)`,
+        `Oil at $${brentPrice} >= $${brentOverhangThreshold} (penalty)`,
         -2,
         0,
       )
@@ -492,7 +500,10 @@ export function scoreBullish(data: AllSignalData): ScoreResult {
 }
 
 // ─── Bearish scoring ──────────────────────────────────────────────────────────
-export function scoreBearish(data: AllSignalData): ScoreResult {
+export function scoreBearish(
+  data: AllSignalData,
+  config?: Partial<StrategyConfig>,
+): ScoreResult {
   const bd: ScoreBreakdown[] = []
   let score = 0
   let max = 0
@@ -626,13 +637,14 @@ export function scoreBearish(data: AllSignalData): ScoreResult {
       (item) => item.symbol.toLowerCase() === 'brent oil',
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
-    if (brentPrice !== null && brentPrice >= 88) {
+    const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
+    if (brentPrice !== null && brentPrice >= brentOverhangThreshold) {
       max += 1
       score += addScore(
         bd,
         'Macro',
         'Brent Crude Overhang',
-        `Oil at $${brentPrice} >= $88 (bearish catalyst)`,
+        `Oil at $${brentPrice} >= $${brentOverhangThreshold} (bearish catalyst)`,
         1,
         1,
       )

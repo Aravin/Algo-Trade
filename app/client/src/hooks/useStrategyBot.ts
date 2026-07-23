@@ -460,7 +460,7 @@ export function useStrategyBot(token: string | null) {
         'sentiment',
         `mmi=${vrdData.mmi?.score} vix=${vrdData.vix} pe=${vrdData.niftyPe?.pe} A/D=${vrdData.advancesDeclines?.advances}↑${vrdData.advancesDeclines?.declines}↓`,
       )
-      const hardStop = runHardStopChecks(vrdData, globalIndices)
+      const hardStop = runHardStopChecks(vrdData, globalIndices, config)
       const allSignalData: AllSignalData = {
         v3,
         indicators,

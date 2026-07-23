@@ -98,6 +98,8 @@ describe('Bollinger Volatility Squeeze Strategy', () => {
       otmSkip: 3,
       executionMode: 'paper',
       tradeType: 'buying',
+      brentCrudeExtremeThreshold: 95,
+      brentCrudeOverhangThreshold: 88,
     }
 
     it('returns WAIT or NO_TRADE when in squeeze without breakout', () => {

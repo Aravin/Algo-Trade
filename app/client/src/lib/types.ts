@@ -226,6 +226,8 @@ export interface StrategyConfig {
   otmSkip: number
   executionMode: ExecutionMode
   tradeType: 'buying' | 'selling' | 'both'
+  brentCrudeExtremeThreshold: number
+  brentCrudeOverhangThreshold: number
 }
 
 // Paper Trading
@@ -316,6 +318,8 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   otmSkip: 3,
   executionMode: 'paper',
   tradeType: 'buying',
+  brentCrudeExtremeThreshold: 95,
+  brentCrudeOverhangThreshold: 88,
 }
 
 export const ACCOUNTS_CHANGED_EVENT = 'algo-trade:accounts-changed'
