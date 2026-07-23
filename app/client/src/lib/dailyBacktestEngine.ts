@@ -279,7 +279,7 @@ export function generateDailyReport(
       minConfidence: 'moderate',
     })
 
-    const hardStop = runHardStopChecks(baseVrd, [])
+    const hardStop = runHardStopChecks(baseVrd)
     if (hardStop.blocked) {
       hardStopCount++
       return

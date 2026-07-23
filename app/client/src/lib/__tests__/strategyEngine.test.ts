@@ -37,7 +37,7 @@ describe('strategyEngine', () => {
 
   describe('runHardStopChecks', () => {
     it('returns blocked: false when VIX is within normal bounds', () => {
-      const check = runHardStopChecks(baseVrd, [])
+      const check = runHardStopChecks(baseVrd)
       expect(check.blocked).toBe(false)
       expect(check.reasons).toHaveLength(0)
     })
@@ -47,7 +47,7 @@ describe('strategyEngine', () => {
         ...baseVrd,
         vix: 28,
       }
-      const check = runHardStopChecks(vrdHighVix, [])
+      const check = runHardStopChecks(vrdHighVix)
       expect(check.blocked).toBe(true)
       expect(check.blockedDirection).toBe('BOTH')
       expect(check.reasons[0]).toContain('VIX')

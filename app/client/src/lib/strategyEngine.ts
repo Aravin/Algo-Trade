@@ -18,7 +18,6 @@ import type {
   FinalSignal,
   AllSignalData,
   ActivePosition,
-  McMarketItem,
   Candle,
 } from './types'
 
@@ -237,11 +236,7 @@ export function shouldExit(
 }
 
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
-export function runHardStopChecks(
-  vrd: VrdData | null,
-  globalIndices?: McMarketItem[] | null,
-  config?: Partial<StrategyConfig>,
-): {
+export function runHardStopChecks(vrd: VrdData | null): {
   blocked: boolean
   blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
   reasons: string[]
@@ -259,19 +254,7 @@ export function runHardStopChecks(
     blockedDirection = 'BOTH'
   }
 
-  if (globalIndices) {
-    const brent = globalIndices.find(
-      (item) => item.symbol.toLowerCase() === 'brent oil',
-    )
-    const brentPrice = brent?.last_price ? Number(brent.last_price) : null
-    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
-    if (brentPrice !== null && brentPrice >= brentExtremeThreshold) {
-      reasons.push(
-        `Brent Crude $${brentPrice} >= $${brentExtremeThreshold} (Extreme Global Risk)`,
-      )
-      blockedDirection = 'BOTH'
-    }
-  }
+  // Brent Crude check removed from hard stops in favor of sentiment scoring.
 
   if (vrd.newsAlerts) {
     const highMacro = vrd.newsAlerts.find(
@@ -450,15 +433,27 @@ export function scoreBullish(
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
     const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
-    if (brentPrice !== null && brentPrice >= brentOverhangThreshold) {
-      score += addScore(
-        bd,
-        'Macro',
-        'Brent Crude Overhang',
-        `Oil at $${brentPrice} >= $${brentOverhangThreshold} (penalty)`,
-        -2,
-        0,
-      )
+    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
+    if (brentPrice !== null) {
+      if (brentPrice >= brentExtremeThreshold) {
+        score += addScore(
+          bd,
+          'Macro',
+          'Brent Crude Extreme Risk',
+          `Oil at $${brentPrice} >= $${brentExtremeThreshold} (severe penalty)`,
+          -4,
+          0,
+        )
+      } else if (brentPrice >= brentOverhangThreshold) {
+        score += addScore(
+          bd,
+          'Macro',
+          'Brent Crude Overhang',
+          `Oil at $${brentPrice} >= $${brentOverhangThreshold} (penalty)`,
+          -2,
+          0,
+        )
+      }
     }
   }
 
@@ -638,16 +633,29 @@ export function scoreBearish(
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
     const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
-    if (brentPrice !== null && brentPrice >= brentOverhangThreshold) {
-      max += 1
-      score += addScore(
-        bd,
-        'Macro',
-        'Brent Crude Overhang',
-        `Oil at $${brentPrice} >= $${brentOverhangThreshold} (bearish catalyst)`,
-        1,
-        1,
-      )
+    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
+    if (brentPrice !== null) {
+      if (brentPrice >= brentExtremeThreshold) {
+        max += 2
+        score += addScore(
+          bd,
+          'Macro',
+          'Brent Crude Extreme Risk',
+          `Oil at $${brentPrice} >= $${brentExtremeThreshold} (strong bearish catalyst)`,
+          2,
+          2,
+        )
+      } else if (brentPrice >= brentOverhangThreshold) {
+        max += 1
+        score += addScore(
+          bd,
+          'Macro',
+          'Brent Crude Overhang',
+          `Oil at $${brentPrice} >= $${brentOverhangThreshold} (bearish catalyst)`,
+          1,
+          1,
+        )
+      }
     }
   }
 
