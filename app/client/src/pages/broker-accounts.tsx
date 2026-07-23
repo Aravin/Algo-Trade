@@ -263,23 +263,22 @@ function TestConnection({ account }: { account: BrokerAccount }) {
       body: JSON.stringify({ token }),
     })
       .then((r) => r.json())
-      .then(
-        (data: {
+      .then((json: unknown) => {
+        const data = json as {
           status?: string
           data?: ProfileData
           errors?: { message: string }[]
-        }) => {
-          if (data.status === 'success' && data.data) {
-            setProfile(data.data)
-            setStatus('ok')
-          } else {
-            setErrMsg(
-              data.errors?.[0]?.message ?? 'Unexpected response from Upstox',
-            )
-            setStatus('error')
-          }
-        },
-      )
+        }
+        if (data.status === 'success' && data.data) {
+          setProfile(data.data)
+          setStatus('ok')
+        } else {
+          setErrMsg(
+            data.errors?.[0]?.message ?? 'Unexpected response from Upstox',
+          )
+          setStatus('error')
+        }
+      })
       .catch(() => {
         setErrMsg('Network error reaching proxy')
         setStatus('error')
