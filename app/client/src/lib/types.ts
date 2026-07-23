@@ -318,7 +318,7 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   otmSkip: 3,
   executionMode: 'paper',
   tradeType: 'buying',
-  brentCrudeExtremeThreshold: 95,
+  brentCrudeExtremeThreshold: 125,
   brentCrudeOverhangThreshold: 88,
 }
 

@@ -433,7 +433,7 @@ export function scoreBullish(
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
     const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
-    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
+    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 125
     if (brentPrice !== null) {
       if (brentPrice >= brentExtremeThreshold) {
         score += addScore(
@@ -633,7 +633,7 @@ export function scoreBearish(
     )
     const brentPrice = brent?.last_price ? Number(brent.last_price) : null
     const brentOverhangThreshold = config?.brentCrudeOverhangThreshold ?? 88
-    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 95
+    const brentExtremeThreshold = config?.brentCrudeExtremeThreshold ?? 125
     if (brentPrice !== null) {
       if (brentPrice >= brentExtremeThreshold) {
         max += 2

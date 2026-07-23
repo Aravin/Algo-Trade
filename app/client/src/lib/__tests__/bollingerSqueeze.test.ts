@@ -98,7 +98,7 @@ describe('Bollinger Volatility Squeeze Strategy', () => {
       otmSkip: 3,
       executionMode: 'paper',
       tradeType: 'buying',
-      brentCrudeExtremeThreshold: 95,
+      brentCrudeExtremeThreshold: 125,
       brentCrudeOverhangThreshold: 88,
     }
 
