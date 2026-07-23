@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.40.1",
+    "@cloudflare/workers-types": "^5.20260723.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.2",
     "@types/react": "^19.2.14",

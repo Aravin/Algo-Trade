@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 export interface PaperTradeEnv {
   PAPER_TRADING_DB: D1Database
   AUTH0_DOMAIN?: string
