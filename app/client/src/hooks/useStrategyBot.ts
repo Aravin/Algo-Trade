@@ -599,6 +599,8 @@ export function useStrategyBot(token: string | null) {
         ...(cur.tradesCountPerSymbol ?? {}),
       }
 
+      const newlyEnteredPositions = new Set<UnderlyingSymbol>()
+
       // ── Step A: Order Placement Dispatcher for Multi-Symbol Candidates ─────
       if (
         (cur.state === 'RUNNING' || cur.state === 'ORDERED') &&
@@ -974,6 +976,7 @@ export function useStrategyBot(token: string | null) {
             }
             curPositions[sym] = newPos
             curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+            newlyEnteredPositions.add(sym)
           } else if (positionLegs.length > 0) {
             if (executionMode === 'paper') {
               // Clean up orphaned paper trade legs in D1 if multi-leg entry fails mid-way
@@ -1085,6 +1088,7 @@ export function useStrategyBot(token: string | null) {
 
       // ── Step B: Multi-Position Exit Routine for Active Symbols ───────────────
       for (const sym of targetSymbols) {
+        if (newlyEnteredPositions.has(sym)) continue
         const pos = curPositions[sym]
         if (!pos) continue
         const symMarket = marketMap[sym]

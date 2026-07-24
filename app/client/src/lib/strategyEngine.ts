@@ -78,6 +78,27 @@ export function getFinalSignal(
 
   const signal = dominant === 'bull' ? 'BUY_CE' : 'BUY_PE'
   const positionSize = confidence === 'strong' ? 'full' : 'half'
+
+  // Prevent entering a trade that would immediately trigger exit conditions
+  const isBullishBias = signal === 'BUY_CE'
+  const adRatio = data.vrd?.advancesDeclines?.ratio
+  const isImmediateExit = isBullishBias
+    ? v4 === 'Sell' || data.v3 === 'sell' || (adRatio != null && adRatio < 0.8)
+    : v4 === 'Buy' || data.v3 === 'buy' || (adRatio != null && adRatio > 1.5)
+
+  if (isImmediateExit) {
+    return {
+      signal: 'NO_TRADE',
+      confidence: 'none',
+      positionSize: 'none',
+      v3: data.v3,
+      v4,
+      bullScore: bull.score,
+      bearScore: bear.score,
+      scoreMax: scoreMax,
+    }
+  }
+
   return {
     signal,
     confidence,

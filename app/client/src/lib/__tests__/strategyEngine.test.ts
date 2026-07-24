@@ -257,6 +257,44 @@ describe('strategyEngine', () => {
       expect(newsItem?.points).toBe(2)
       expect(newsItem?.max).toBe(2)
     })
+
+    it('returns NO_TRADE if the resulting signal would trigger an immediate exit (same-tick exit prevention)', () => {
+      const signalData: AllSignalData = {
+        v3: 'sell', // Contradicts BUY_CE
+        indicators: {
+          ema: 'Buy',
+          adx: 'Buy',
+          rsi: { signal: 'Hold', value: 55 },
+          stochastic: { k: 70, d: 65, signal: 'Buy' },
+          bollinger: {
+            signal: 'Buy',
+            upper: 24200,
+            lower: 23800,
+            middle: 24000,
+            trend: 'Up',
+          },
+          atr: { value: 40, level: 'Neutral' },
+          pcr: 'Buy',
+          pcrValue: 1.2,
+        },
+        // Very strong bullish VRD data to force a BUY_CE despite v3='sell'
+        vrd: {
+          ...baseVrd,
+          mmi: { score: 90, label: 'Extreme Greed' },
+          fiiPositioning: { netPosition: 5000, consecutiveShortDays: 0 },
+        },
+      }
+
+      const res = getFinalSignal(signalData, {
+        strongThreshold: 8,
+        moderateThreshold: 5,
+        minConfidence: 'moderate',
+      })
+
+      // Even though scoreMax would exceed threshold for BUY_CE, v3='sell' triggers immediate exit block
+      expect(res.signal).toBe('NO_TRADE')
+      expect(res.confidence).toBe('none')
+    })
   })
 
   describe('shouldExit', () => {
