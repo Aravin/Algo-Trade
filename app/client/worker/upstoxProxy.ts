@@ -425,6 +425,7 @@ export async function handleUpstoxPcr(request: Request): Promise<Response> {
   let body: {
     token: string
     expiry: string
+    instrumentKey?: string
     date?: string
     bucketInterval?: number
   }
@@ -437,7 +438,7 @@ export async function handleUpstoxPcr(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
 
   const qs = new URLSearchParams({
-    instrument_key: 'NSE_INDEX|Nifty 50',
+    instrument_key: body.instrumentKey ?? 'NSE_INDEX|Nifty 50',
     expiry: body.expiry,
     date: body.date ?? formatIsoDate(),
     bucket_interval: String(body.bucketInterval ?? 60),
@@ -776,6 +777,7 @@ export async function handleUpstoxMaxPain(request: Request): Promise<Response> {
   let body: {
     token: string
     expiry: string
+    instrumentKey?: string
     date?: string
     bucketInterval?: number
   }
@@ -788,7 +790,7 @@ export async function handleUpstoxMaxPain(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
 
   const qs = new URLSearchParams({
-    instrument_key: 'NSE_INDEX|Nifty 50',
+    instrument_key: body.instrumentKey ?? 'NSE_INDEX|Nifty 50',
     expiry: body.expiry,
     date: body.date ?? formatIsoDate(),
     bucket_interval: String(body.bucketInterval ?? 60),
@@ -863,7 +865,12 @@ export async function handleUpstoxNews(request: Request): Promise<Response> {
 }
 
 export async function handleUpstoxOi(request: Request): Promise<Response> {
-  let body: { token: string; expiry: string; date?: string }
+  let body: {
+    token: string
+    expiry: string
+    date?: string
+    instrumentKey?: string
+  }
   try {
     body = await request.json()
   } catch {
@@ -873,7 +880,7 @@ export async function handleUpstoxOi(request: Request): Promise<Response> {
     return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
 
   const qs = new URLSearchParams({
-    instrument_key: 'NSE_INDEX|Nifty 50',
+    instrument_key: body.instrumentKey ?? 'NSE_INDEX|Nifty 50',
     expiry: body.expiry,
     date: body.date ?? formatIsoDate(),
   })
@@ -908,6 +915,7 @@ export async function handleUpstoxChangeOi(
     expiry: string
     date?: string
     interval?: number
+    instrumentKey?: string
   }
   try {
     body = await request.json()
@@ -918,7 +926,7 @@ export async function handleUpstoxChangeOi(
     return Response.json({ error: 'Missing token or expiry' }, { status: 400 })
 
   const qs = new URLSearchParams({
-    instrument_key: 'NSE_INDEX|Nifty 50',
+    instrument_key: body.instrumentKey ?? 'NSE_INDEX|Nifty 50',
     expiry: body.expiry,
     date: body.date ?? formatIsoDate(),
     interval: String(body.interval ?? 1),

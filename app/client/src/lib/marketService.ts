@@ -115,100 +115,83 @@ export async function safeFetch<T>(
   }
 }
 
-// ─── Market Sentiment data (replaces VRD fetch) ───────────────────────────────
-export async function fetchMarketSentiment(
+export interface GlobalSentimentData {
+  vix: number | null
+  fiiLongShort: {
+    longPct: number | null
+    shortPct: number | null
+    shortPctTrend: 'Rising' | 'Falling' | 'Stable' | null
+  } | null
+  fiiPositioning: {
+    netPosition: number | null
+    consecutiveShortDays: number | null
+  } | null
+  newsAlerts: NewsAlert[]
+}
+
+// ─── Global Market Data (VIX, FII, DII, News) ─────────────────────────────────
+export async function fetchGlobalMarketData(
   token: string,
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
-  optionChain: OptionData[],
-  indicators: IndicatorsResult,
-  breadth: {
-    advances: number
-    declines: number
-    ratio: number
-    total: number
-  } | null,
-  giftNifty: VrdData['giftNifty'],
-): Promise<VrdData> {
+  primaryOptionChain: OptionData[],
+): Promise<GlobalSentimentData> {
   sourceUpdate('vix', 'pending')
   sourceUpdate('upstox/fii', 'pending')
   sourceUpdate('upstox/dii', 'pending')
-  sourceUpdate('upstox/pcr', 'pending')
-  sourceUpdate('upstox/max-pain', 'pending')
-  sourceUpdate('synthetic/value', 'pending')
   sourceUpdate('upstox/news', 'pending')
 
-  const latestExpiry = optionChain[0]?.expiry ?? ''
-
-  const [vixRes, fiiRes, diiRes, pcrRes, maxPainRes, newsRes] =
-    await Promise.allSettled([
-      safeFetch<{ vix: number | null }>('/api/market/vix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+  const [vixRes, fiiRes, diiRes, newsRes] = await Promise.allSettled([
+    safeFetch<{ vix: number | null }>('/api/market/vix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+    safeFetch<{
+      status: string
+      data?: Record<
+        string,
+        {
+          time_stamp: number
+          total_long_contracts: number
+          total_short_contracts: number
+          buy_amount: number
+          sell_amount: number
+        }[]
+      >
+    }>('/api/market/upstox/fii', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+    safeFetch<{
+      status: string
+      data?: Record<
+        string,
+        {
+          time_stamp: number
+          buy_amount: number
+          sell_amount: number
+        }[]
+      >
+    }>('/api/market/upstox/dii', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }),
+    safeFetch<{
+      status: string
+      data?: Record<string, UpstoxNewsItem[]>
+    }>('/api/market/upstox/news', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token,
+        category: 'instrument_keys',
+        instrumentKeys: 'NSE_INDEX|Nifty 50',
       }),
-      safeFetch<{
-        status: string
-        data?: Record<
-          string,
-          {
-            time_stamp: number
-            total_long_contracts: number
-            total_short_contracts: number
-            buy_amount: number
-            sell_amount: number
-          }[]
-        >
-      }>('/api/market/upstox/fii', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      }),
-      safeFetch<{
-        status: string
-        data?: Record<
-          string,
-          {
-            time_stamp: number
-            buy_amount: number
-            sell_amount: number
-          }[]
-        >
-      }>('/api/market/upstox/dii', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      }),
-      safeFetch<{
-        value: number | null
-      }>('/api/market/upstox/pcr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, expiry: latestExpiry }),
-      }),
-      safeFetch<{
-        status: string
-        data?: {
-          max_pain: number
-        }
-      }>('/api/market/upstox/max-pain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, expiry: latestExpiry }),
-      }),
-      safeFetch<{
-        status: string
-        data?: Record<string, UpstoxNewsItem[]>
-      }>('/api/market/upstox/news', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          category: 'instrument_keys',
-          instrumentKeys: 'NSE_INDEX|Nifty 50',
-        }),
-      }),
-    ])
+    }),
+  ])
 
   // VIX
   let vix: number | null = null
@@ -322,9 +305,9 @@ export async function fetchMarketSentiment(
   }
 
   // Fallback to proxy/synthetic FII if Upstox FII failed
-  const niftyLtp = optionChain[0]?.underlying_spot_price ?? 0
+  const niftyLtp = primaryOptionChain[0]?.underlying_spot_price ?? 0
   if (!fiiLongShort || !fiiPositioning) {
-    const proxyFlow = computeProxyFlow(optionChain, niftyLtp)
+    const proxyFlow = computeProxyFlow(primaryOptionChain, niftyLtp)
     fiiLongShort =
       proxyFlow.longPct !== null && proxyFlow.shortPct !== null
         ? {
@@ -378,116 +361,6 @@ export async function fetchMarketSentiment(
     sourceUpdate('upstox/dii', 'error')
   }
 
-  // PCR
-  let officialPcr: number | null = null
-  if (pcrRes.status === 'fulfilled' && !pcrRes.value[1]) {
-    officialPcr = pcrRes.value[0]?.value ?? null
-    if (officialPcr !== null) {
-      addLog(
-        mkLog('info', 'upstox/pcr', `Upstox PCR=${officialPcr.toFixed(3)}`),
-      )
-      sourceUpdate('upstox/pcr', 'ok')
-    } else {
-      sourceUpdate('upstox/pcr', 'error')
-    }
-  } else {
-    sourceUpdate('upstox/pcr', 'error')
-  }
-
-  const effectivePcr = officialPcr ?? indicators.pcrValue
-  addLog(mkLog('info', 'pcr', 'Option PCR=' + effectivePcr.toFixed(3)))
-
-  // Max Pain
-  let maxPain: number | null = null
-  if (maxPainRes.status === 'fulfilled' && !maxPainRes.value[1]) {
-    maxPain = maxPainRes.value[0]?.data?.max_pain ?? null
-    if (maxPain !== null) {
-      addLog(
-        mkLog('info', 'upstox/max-pain', `Upstox Max Pain Strike=${maxPain}`),
-      )
-      sourceUpdate('upstox/max-pain', 'ok')
-    } else {
-      sourceUpdate('upstox/max-pain', 'error')
-    }
-  } else {
-    sourceUpdate('upstox/max-pain', 'error')
-  }
-
-  // Support and Resistance walls from optionChain Open Interest
-  let supportWall: number | null = null
-  let resistanceWall: number | null = null
-  if (optionChain.length > 0) {
-    let maxPutOi = -1
-    let maxCallOi = -1
-    for (const strike of optionChain) {
-      const putOi = strike.put_options?.market_data?.oi ?? 0
-      const callOi = strike.call_options?.market_data?.oi ?? 0
-      if (putOi > maxPutOi) {
-        maxPutOi = putOi
-        supportWall = strike.strike_price
-      }
-      if (callOi > maxCallOi) {
-        maxCallOi = callOi
-        resistanceWall = strike.strike_price
-      }
-    }
-  }
-
-  // Compute straddle IV from option chain
-  const straddleIv = computeStraddleIV(optionChain, niftyLtp, vix)
-  addLog(
-    mkLog(
-      'debug',
-      'straddle-iv',
-      'ATM IV=' +
-        straddleIv.currentIv +
-        ' vs VIX=' +
-        vix +
-        ' -> ' +
-        (straddleIv.percentAboveAvg !== null
-          ? straddleIv.percentAboveAvg.toFixed(1)
-          : 'null') +
-        '% above avg',
-    ),
-  )
-
-  const adRatio = breadth?.ratio ?? null
-  const proxyValue = computeProxyValuation(niftyLtp, indicators, vix, adRatio)
-  sourceUpdate('synthetic/value', 'ok')
-
-  const niftyPe = { pe: proxyValue.pe, label: proxyValue.label }
-  addLog(
-    mkLog(
-      'info',
-      'synthetic/value',
-      'Computed proxy Nifty PE valuation=' +
-        proxyValue.pe +
-        ' (' +
-        proxyValue.label +
-        ')',
-    ),
-  )
-
-  // Synthetic MMI
-  const mmi = computeMMI(vix, indicators.rsi.value, effectivePcr)
-  addLog(
-    mkLog(
-      'info',
-      'mmi',
-      'Computed proxy MMI score=' +
-        mmi.score +
-        ' (' +
-        mmi.label +
-        ') [vix=' +
-        vix +
-        ' rsi=' +
-        indicators.rsi.value.toFixed(1) +
-        ' pcr=' +
-        effectivePcr.toFixed(3) +
-        ']',
-    ),
-  )
-
   // News Alerts
   let newsAlerts: NewsAlert[] = []
   if (newsRes.status === 'fulfilled' && !newsRes.value[1]) {
@@ -515,6 +388,176 @@ export async function fetchMarketSentiment(
     sourceUpdate('upstox/news', 'error')
   }
 
+  return { vix, fiiLongShort, fiiPositioning, newsAlerts }
+}
+
+// ─── Market Sentiment data (Symbol Specific) ───────────────────────────────────
+export async function fetchSymbolSentiment(
+  token: string,
+  addLog: (l: BotLog) => void,
+  sourceUpdate: (k: string, s: SourceStatus) => void,
+  underlyingSymbol: UnderlyingSymbol,
+  instrumentKey: string,
+  optionChain: OptionData[],
+  indicators: IndicatorsResult,
+  breadth: {
+    advances: number
+    declines: number
+    ratio: number
+    total: number
+  } | null,
+  giftNifty: VrdData['giftNifty'],
+  globalData: GlobalSentimentData,
+): Promise<VrdData> {
+  sourceUpdate(`upstox/pcr/${underlyingSymbol}`, 'pending')
+  sourceUpdate(`upstox/max-pain/${underlyingSymbol}`, 'pending')
+  sourceUpdate(`synthetic/value/${underlyingSymbol}`, 'pending')
+
+  const latestExpiry = optionChain[0]?.expiry ?? ''
+
+  const [pcrRes, maxPainRes] = await Promise.allSettled([
+    safeFetch<{
+      value: number | null
+    }>('/api/market/upstox/pcr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
+    }),
+    safeFetch<{
+      status: string
+      data?: {
+        max_pain: number
+      }
+    }>('/api/market/upstox/max-pain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
+    }),
+  ])
+
+  // PCR
+  let officialPcr: number | null = null
+  if (pcrRes.status === 'fulfilled' && !pcrRes.value[1]) {
+    officialPcr = pcrRes.value[0]?.value ?? null
+    if (officialPcr !== null) {
+      addLog(
+        mkLog(
+          'info',
+          `upstox/pcr/${underlyingSymbol}`,
+          `Upstox PCR (${underlyingSymbol})=${officialPcr.toFixed(3)}`,
+        ),
+      )
+      sourceUpdate(`upstox/pcr/${underlyingSymbol}`, 'ok')
+    } else {
+      sourceUpdate(`upstox/pcr/${underlyingSymbol}`, 'error')
+    }
+  } else {
+    sourceUpdate(`upstox/pcr/${underlyingSymbol}`, 'error')
+  }
+
+  const effectivePcr = officialPcr ?? indicators.pcrValue
+  addLog(mkLog('info', 'pcr', 'Option PCR=' + effectivePcr.toFixed(3)))
+
+  // Max Pain
+  let maxPain: number | null = null
+  if (maxPainRes.status === 'fulfilled' && !maxPainRes.value[1]) {
+    maxPain = maxPainRes.value[0]?.data?.max_pain ?? null
+    if (maxPain !== null) {
+      addLog(
+        mkLog(
+          'info',
+          `upstox/max-pain/${underlyingSymbol}`,
+          `Upstox Max Pain Strike (${underlyingSymbol})=${maxPain}`,
+        ),
+      )
+      sourceUpdate(`upstox/max-pain/${underlyingSymbol}`, 'ok')
+    } else {
+      sourceUpdate(`upstox/max-pain/${underlyingSymbol}`, 'error')
+    }
+  } else {
+    sourceUpdate(`upstox/max-pain/${underlyingSymbol}`, 'error')
+  }
+
+  // Support and Resistance walls from optionChain Open Interest
+  let supportWall: number | null = null
+  let resistanceWall: number | null = null
+  if (optionChain.length > 0) {
+    let maxPutOi = -1
+    let maxCallOi = -1
+    for (const strike of optionChain) {
+      const putOi = strike.put_options?.market_data?.oi ?? 0
+      const callOi = strike.call_options?.market_data?.oi ?? 0
+      if (putOi > maxPutOi) {
+        maxPutOi = putOi
+        supportWall = strike.strike_price
+      }
+      if (callOi > maxCallOi) {
+        maxCallOi = callOi
+        resistanceWall = strike.strike_price
+      }
+    }
+  }
+
+  const ltp = optionChain[0]?.underlying_spot_price ?? 0
+  const straddleIv = computeStraddleIV(optionChain, ltp, globalData.vix)
+  addLog(
+    mkLog(
+      'debug',
+      'straddle-iv',
+      `${underlyingSymbol} ATM IV=` +
+        straddleIv.currentIv +
+        ' vs VIX=' +
+        globalData.vix +
+        ' -> ' +
+        (straddleIv.percentAboveAvg !== null
+          ? straddleIv.percentAboveAvg.toFixed(1)
+          : 'null') +
+        '% above avg',
+    ),
+  )
+
+  const adRatio = breadth?.ratio ?? null
+  const proxyValue = computeProxyValuation(
+    ltp,
+    indicators,
+    globalData.vix,
+    adRatio,
+  )
+  sourceUpdate(`synthetic/value/${underlyingSymbol}`, 'ok')
+
+  const proxyPe = { pe: proxyValue.pe, label: proxyValue.label }
+  addLog(
+    mkLog(
+      'info',
+      `synthetic/value/${underlyingSymbol}`,
+      `Computed proxy ${underlyingSymbol} PE valuation=` +
+        proxyValue.pe +
+        ' (' +
+        proxyValue.label +
+        ')',
+    ),
+  )
+
+  // Synthetic MMI
+  const mmi = computeMMI(globalData.vix, indicators.rsi.value, effectivePcr)
+  addLog(
+    mkLog(
+      'info',
+      'mmi',
+      `Computed proxy MMI score (${underlyingSymbol})=` +
+        mmi.score +
+        ' (' +
+        mmi.label +
+        ') [vix=' +
+        globalData.vix +
+        ' rsi=' +
+        indicators.rsi.value.toFixed(1) +
+        ' pcr=' +
+        effectivePcr.toFixed(3) +
+        ']',
+    ),
+  )
+
   return {
     mmi: { score: mmi.score, label: mmi.label },
     advancesDeclines:
@@ -526,8 +569,8 @@ export async function fetchMarketSentiment(
             label: null,
           }
         : null,
-    fiiLongShort: fiiLongShort,
-    fiiPositioning: fiiPositioning,
+    fiiLongShort: globalData.fiiLongShort,
+    fiiPositioning: globalData.fiiPositioning,
     pcr:
       effectivePcr > 0
         ? {
@@ -547,13 +590,13 @@ export async function fetchMarketSentiment(
         straddleIv.percentAboveAvg !== null && straddleIv.percentAboveAvg > 30,
       percentAboveAvg: straddleIv.percentAboveAvg,
     },
-    niftyPe: niftyPe,
-    vix,
+    niftyPe: proxyPe,
+    vix: globalData.vix,
     giftNifty,
     supportWall,
     resistanceWall,
     maxPain,
-    newsAlerts,
+    newsAlerts: globalData.newsAlerts,
     fetchedAt: new Date().toISOString(),
   }
 }

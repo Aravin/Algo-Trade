@@ -11,6 +11,7 @@ import type {
   PaperAccountSummary,
   UnderlyingSymbol,
 } from '@/lib/types'
+import { UNDERLYING_INSTRUMENT_KEYS } from '@/lib/types'
 import {
   useState,
   useEffect,
@@ -39,7 +40,8 @@ import {
   mkLog,
   safeFetch,
   fetchMarketForSymbols,
-  fetchMarketSentiment,
+  fetchGlobalMarketData,
+  fetchSymbolSentiment,
 } from '@/lib/marketService'
 
 export type { SourceStatus, BotLog, GlobalIndexItem }
@@ -451,35 +453,13 @@ export function useStrategyBot(token: string | null) {
         return
       }
 
-      const { candles, optionChain, v3, breadth, globalIndices, giftNifty } =
-        primaryMarket
-
-      // Step 2: compute indicators for primary market
-      const indicators = computeAllIndicators(candles, optionChain)
-
-      // Step 3: fetch market sentiment (VIX, breadth, NSE PE, FII)
-      const vrdData = await fetchMarketSentiment(
+      // Step 2: Fetch global sentiment data
+      const globalData = await fetchGlobalMarketData(
         token,
         (e) => tickLogs.push(e),
         srcUpd,
-        optionChain,
-        indicators,
-        breadth,
-        giftNifty,
+        primaryMarket.optionChain,
       )
-      saveVrdCache(vrdData)
-      log(
-        'info',
-        'sentiment',
-        `mmi=${vrdData.mmi?.score} vix=${vrdData.vix} pe=${vrdData.niftyPe?.pe} A/D=${vrdData.advancesDeclines?.advances}↑${vrdData.advancesDeclines?.declines}↓`,
-      )
-      const hardStop = runHardStopChecks(vrdData)
-      const allSignalData: AllSignalData = {
-        v3,
-        indicators,
-        vrd: vrdData,
-        globalIndices,
-      }
 
       // Evaluate & record signals for all active target symbols in parallel
       const symbolSignals: Partial<
@@ -488,28 +468,74 @@ export function useStrategyBot(token: string | null) {
       const symbolIndicators: Partial<
         Record<UnderlyingSymbol, IndicatorsResult | null>
       > = {}
+      const symbolVrds: Partial<Record<UnderlyingSymbol, VrdData>> = {}
 
-      for (const sym of targetSymbols) {
-        const symMarket = marketMap[sym]
-        if (!symMarket?.candles.length) continue
-        const symIndicators = computeAllIndicators(
-          symMarket.candles,
-          symMarket.optionChain,
-        )
-        const symSignalData: AllSignalData = {
-          v3: symMarket.v3,
-          indicators: symIndicators,
-          vrd: vrdData,
-          globalIndices,
-        }
-        const symSignal = getFinalSignal(symSignalData, config)
-        symbolSignals[sym] = symSignal
-        symbolIndicators[sym] = symIndicators
+      await Promise.all(
+        targetSymbols.map(async (sym) => {
+          const symMarket = marketMap[sym]
+          if (!symMarket?.candles.length) return
+          const symIndicators = computeAllIndicators(
+            symMarket.candles,
+            symMarket.optionChain,
+          )
+          const targetInstrumentKey =
+            UNDERLYING_INSTRUMENT_KEYS[sym] ?? 'NSE_INDEX|Nifty 50'
+
+          const symVrdData = await fetchSymbolSentiment(
+            token,
+            (e) => tickLogs.push(e),
+            srcUpd,
+            sym,
+            targetInstrumentKey,
+            symMarket.optionChain,
+            symIndicators,
+            primaryMarket.breadth,
+            primaryMarket.giftNifty,
+            globalData,
+          )
+
+          const symSignalData: AllSignalData = {
+            v3: symMarket.v3,
+            indicators: symIndicators,
+            vrd: symVrdData,
+            globalIndices: symMarket.globalIndices,
+          }
+          const symSignal = getFinalSignal(symSignalData, config)
+          symbolSignals[sym] = symSignal
+          symbolIndicators[sym] = symIndicators
+          symbolVrds[sym] = symVrdData
+
+          log(
+            'info',
+            'engine',
+            `[${sym}] bull=${symSignal.bullScore} bear=${symSignal.bearScore} → ${symSignal.signal} (${symSignal.confidence})`,
+          )
+        }),
+      )
+
+      const primaryVrdData = symbolVrds[primaryMarket.underlyingSymbol]
+      if (primaryVrdData) {
+        saveVrdCache(primaryVrdData)
         log(
           'info',
-          'engine',
-          `[${sym}] bull=${symSignal.bullScore} bear=${symSignal.bearScore} → ${symSignal.signal} (${symSignal.confidence})`,
+          'sentiment',
+          `mmi=${primaryVrdData.mmi?.score} vix=${primaryVrdData.vix} pe=${primaryVrdData.niftyPe?.pe} A/D=${primaryVrdData.advancesDeclines?.advances}↑${primaryVrdData.advancesDeclines?.declines}↓`,
         )
+      }
+
+      const hardStop = primaryVrdData
+        ? runHardStopChecks(primaryVrdData)
+        : { blocked: false, blockedDirection: 'NONE' as const, reasons: [] }
+
+      const indicators =
+        symbolIndicators[primaryMarket.underlyingSymbol] ??
+        computeAllIndicators(primaryMarket.candles, primaryMarket.optionChain)
+
+      const allSignalData: AllSignalData = {
+        v3: primaryMarket.v3,
+        indicators,
+        vrd: primaryVrdData ?? null,
+        globalIndices: primaryMarket.globalIndices,
       }
 
       const finalSignal =
@@ -528,7 +554,7 @@ export function useStrategyBot(token: string | null) {
         scoreMax: finalSignal.scoreMax,
         confidence: finalSignal.confidence,
         signal: finalSignal.signal,
-        vix: vrdData.vix,
+        vix: primaryVrdData?.vix ?? null,
         strongThreshold: config.strongThreshold,
         moderateThreshold: config.moderateThreshold,
         strongGap: config.strongGap,
@@ -545,23 +571,21 @@ export function useStrategyBot(token: string | null) {
         indicators,
         symbolIndicators,
         symbolSignals,
-        vrdData,
-        candles,
+        vrdData: primaryVrdData ?? null,
         allSignalData,
         finalSignal,
         hardStop,
-        globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
         lastUpdated: new Date().toLocaleTimeString('en-IN'),
         error: null,
       })
       saveSnapshot({
         indicators,
-        vrdData,
+        vrdData: primaryVrdData ?? null,
         allSignalData,
         finalSignal,
         hardStop,
-        globalIndices,
+        globalIndices: primaryMarket.globalIndices,
         lastUpdated: new Date().toLocaleTimeString('en-IN'),
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
       })
@@ -631,22 +655,29 @@ export function useStrategyBot(token: string | null) {
               .map((item) => ({ symbol: item.sym, signal: item.sig }))
           }
         } else if (mode === 'best_signal') {
-          const eligible = targetSymbols
-            .map((sym) => ({ sym, sig: symbolSignals[sym] }))
-            .filter(
-              (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
-                Boolean(item.sig) &&
-                !curPositions[item.sym] &&
-                (item.sig?.signal === 'BUY_CE' ||
-                  item.sig?.signal === 'BUY_PE'),
-            )
-          if (eligible.length > 0) {
-            eligible.sort(
-              (a, b) =>
-                Math.max(b.sig.bullScore, b.sig.bearScore) -
-                Math.max(a.sig.bullScore, a.sig.bearScore),
-            )
-            candidates = [{ symbol: eligible[0].sym, signal: eligible[0].sig }]
+          const hasAnyOpenPosition = Object.values(curPositions).some(
+            (p) => p !== null,
+          )
+          if (!hasAnyOpenPosition) {
+            const eligible = targetSymbols
+              .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+              .filter(
+                (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+                  Boolean(item.sig) &&
+                  !curPositions[item.sym] &&
+                  (item.sig?.signal === 'BUY_CE' ||
+                    item.sig?.signal === 'BUY_PE'),
+              )
+            if (eligible.length > 0) {
+              eligible.sort(
+                (a, b) =>
+                  Math.max(b.sig.bullScore, b.sig.bearScore) -
+                  Math.max(a.sig.bullScore, a.sig.bearScore),
+              )
+              candidates = [
+                { symbol: eligible[0].sym, signal: eligible[0].sig },
+              ]
+            }
           }
         } else {
           // 'independent'
@@ -710,7 +741,7 @@ export function useStrategyBot(token: string | null) {
           const legsToPlace: LegSetup[] = []
           let activeTradeType: 'buying' | 'selling' = 'buying'
           if (config.tradeType === 'both') {
-            const percentAboveAvg = vrdData?.straddleIv?.percentAboveAvg
+            const percentAboveAvg = symbolVrds[sym]?.straddleIv?.percentAboveAvg
             if (percentAboveAvg !== undefined && percentAboveAvg !== null) {
               const iv = scoreStraddleIV(percentAboveAvg)
               activeTradeType = iv.preferBuy ? 'buying' : 'selling'
@@ -1153,10 +1184,11 @@ export function useStrategyBot(token: string | null) {
         }
 
         const symSigData: AllSignalData = {
-          v3: symMarket?.v3 ?? v3,
+          v3: symMarket?.v3 ?? primaryMarket.v3,
           indicators: symbolIndicators[sym] ?? indicators,
-          vrd: vrdData,
-          globalIndices,
+          vrd: symbolVrds[sym] ?? primaryVrdData ?? null,
+          globalIndices:
+            symMarket?.globalIndices ?? primaryMarket.globalIndices,
         }
         const { exit: signalExit, reason: signalReason } = shouldExit(
           pos,
@@ -1340,15 +1372,13 @@ export function useStrategyBot(token: string | null) {
         positions: curPositions,
         tradesCount: totalTrades,
         tradesCountPerSymbol: curTradesPerSym,
-        symbolSignals,
-        symbolIndicators,
         indicators,
-        vrdData,
-        candles,
+        symbolIndicators,
+        vrdData: primaryVrdData ?? null,
         allSignalData,
         finalSignal,
+        symbolSignals,
         hardStop,
-        globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
         lastUpdated: new Date().toLocaleTimeString('en-IN'),
         error: null,
