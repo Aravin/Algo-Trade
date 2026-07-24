@@ -346,12 +346,20 @@ export async function handlePaperTradeEnter(
 
     const tradeId = makeId('paper_trade')
     const createdAt = nowIso()
+    const marginBlocked = isSelling ? quantity * 4000 : 0
     const balanceAfter = isSelling
-      ? Number((account.balance + entryValue - charges.totalCharges).toFixed(2))
+      ? Number(
+          (
+            account.balance +
+            entryValue -
+            charges.totalCharges -
+            marginBlocked
+          ).toFixed(2),
+        )
       : Number((account.balance - entryValue - charges.totalCharges).toFixed(2))
 
     const amountChange = isSelling
-      ? Number((entryValue - charges.totalCharges).toFixed(2))
+      ? Number((entryValue - charges.totalCharges - marginBlocked).toFixed(2))
       : Number((-entryValue - charges.totalCharges).toFixed(2))
     const noteStr = isSelling
       ? `Paper SELL ${body.direction} (Fee: ₹${charges.totalCharges})`
@@ -362,6 +370,7 @@ export async function handlePaperTradeEnter(
         ? body.metadata
         : {}),
       entryCharges: charges,
+      marginBlocked,
     }
 
     await env.PAPER_TRADING_DB.batch([
@@ -476,17 +485,22 @@ export async function handlePaperTradeExit(
 
     let tradeType = 'buying'
     let entryCharges = { totalCharges: 0 }
+    let marginBlocked = 0
     if (trade.metadata_json) {
       try {
         const meta = JSON.parse(trade.metadata_json) as {
           tradeType?: string
           entryCharges?: { totalCharges: number }
+          marginBlocked?: number
         }
         if (meta?.tradeType === 'selling') {
           tradeType = 'selling'
         }
         if (meta?.entryCharges) {
           entryCharges = meta.entryCharges
+        }
+        if (typeof meta?.marginBlocked === 'number') {
+          marginBlocked = meta.marginBlocked
         }
       } catch {
         /* ignore invalid metadata */
@@ -520,7 +534,8 @@ export async function handlePaperTradeExit(
             (
               account.balance -
               trade.entry_value +
-              entryCharges.totalCharges
+              entryCharges.totalCharges +
+              marginBlocked
             ).toFixed(2),
           )
         : Number(
@@ -532,17 +547,30 @@ export async function handlePaperTradeExit(
           )
       : isSelling
         ? Number(
-            (account.balance - exitValue - exitCharges.totalCharges).toFixed(2),
+            (
+              account.balance -
+              exitValue -
+              exitCharges.totalCharges +
+              marginBlocked
+            ).toFixed(2),
           )
         : Number(
             (account.balance + exitValue - exitCharges.totalCharges).toFixed(2),
           )
     const amountChange = isRollback
       ? isSelling
-        ? Number((-trade.entry_value + entryCharges.totalCharges).toFixed(2))
+        ? Number(
+            (
+              -trade.entry_value +
+              entryCharges.totalCharges +
+              marginBlocked
+            ).toFixed(2),
+          )
         : Number((trade.entry_value + entryCharges.totalCharges).toFixed(2))
       : isSelling
-        ? Number((-exitValue - exitCharges.totalCharges).toFixed(2))
+        ? Number(
+            (-exitValue - exitCharges.totalCharges + marginBlocked).toFixed(2),
+          )
         : Number((exitValue - exitCharges.totalCharges).toFixed(2))
 
     const mergedMetadata = {

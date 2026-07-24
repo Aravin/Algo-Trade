@@ -1111,16 +1111,20 @@ export function useStrategyBot(token: string | null) {
         if (pos.legs && pos.legs.length > 0) {
           updatedLegs = pos.legs.map((leg) => {
             const legKey = leg.instrumentKey
+            const isExited = pos.exitedLegs?.includes(legKey)
+
             const legMatch = symOptionChain.find(
               (o) =>
                 o.call_options.instrument_key === legKey ||
                 o.put_options.instrument_key === legKey,
             )
-            const legCurrentPrice = legMatch
-              ? leg.direction === 'CE'
-                ? legMatch.call_options.market_data.ltp
-                : legMatch.put_options.market_data.ltp
-              : (leg.currentPrice ?? leg.entryPrice)
+            const legCurrentPrice = isExited
+              ? (leg.currentPrice ?? leg.entryPrice)
+              : legMatch
+                ? leg.direction === 'CE'
+                  ? legMatch.call_options.market_data.ltp
+                  : legMatch.put_options.market_data.ltp
+                : (leg.currentPrice ?? leg.entryPrice)
 
             const legUrPnl =
               leg.tradeType === 'selling'
