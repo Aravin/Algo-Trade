@@ -9,7 +9,6 @@ import type {
   FinalSignal,
   PaperTrade,
   PaperAccountSummary,
-  BollingerSqueezeMetrics,
   UnderlyingSymbol,
 } from '@/lib/types'
 import {
@@ -19,11 +18,7 @@ import {
   useRef,
   useCallback,
 } from 'react'
-import {
-  calcBollingerSqueezeMetrics,
-  computeAllIndicators,
-  getOtmStrike,
-} from '@/lib/indicators'
+import { computeAllIndicators, getOtmStrike } from '@/lib/indicators'
 import { notify } from '@/lib/notifications'
 import {
   runHardStopChecks,
@@ -62,7 +57,6 @@ export interface BotStatus {
   allSignalData: AllSignalData | null
   finalSignal: FinalSignal | null
   symbolSignals: Partial<Record<UnderlyingSymbol, FinalSignal | null>>
-  squeezeMetrics: BollingerSqueezeMetrics | null
   hardStop: {
     blocked: boolean
     blockedDirection?: 'CE' | 'PE' | 'BOTH' | 'NONE'
@@ -297,7 +291,6 @@ const INITIAL: BotStatus = {
   allSignalData: null,
   finalSignal: null,
   symbolSignals: {},
-  squeezeMetrics: null,
   hardStop: { blocked: false, blockedDirection: 'NONE', reasons: [] },
   lastUpdated: null,
   error: null,
@@ -487,12 +480,6 @@ export function useStrategyBot(token: string | null) {
         vrd: vrdData,
         globalIndices,
       }
-      const squeezeMetrics = calcBollingerSqueezeMetrics(
-        candles,
-        config.squeezeThresholdPct,
-        config.minSqueezeCandles,
-        config.adxMinThreshold,
-      )
 
       // Evaluate & record signals for all active target symbols in parallel
       const symbolSignals: Partial<
@@ -515,11 +502,7 @@ export function useStrategyBot(token: string | null) {
           vrd: vrdData,
           globalIndices,
         }
-        const symSignal = getFinalSignal(
-          symSignalData,
-          config,
-          symMarket.candles,
-        )
+        const symSignal = getFinalSignal(symSignalData, config)
         symbolSignals[sym] = symSignal
         symbolIndicators[sym] = symIndicators
         log(
@@ -535,7 +518,7 @@ export function useStrategyBot(token: string | null) {
         Object.values(symbolSignals).find(
           (s): s is FinalSignal => s !== null,
         ) ??
-        getFinalSignal(allSignalData, config, candles)
+        getFinalSignal(allSignalData, config)
 
       // ── Tick log (threshold backtesting) ────────────────────────────────────
       appendTick({
@@ -566,7 +549,6 @@ export function useStrategyBot(token: string | null) {
         candles,
         allSignalData,
         finalSignal,
-        squeezeMetrics,
         hardStop,
         globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
@@ -1357,7 +1339,6 @@ export function useStrategyBot(token: string | null) {
         candles,
         allSignalData,
         finalSignal,
-        squeezeMetrics,
         hardStop,
         globalIndices,
         sourceStatus: { ...cur.sourceStatus, ...srcUpdates },

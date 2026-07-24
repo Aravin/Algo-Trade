@@ -8,7 +8,6 @@ import type {
   VolatilityLevel,
   OptionData,
   IndicatorsResult,
-  BollingerSqueezeMetrics,
 } from './types'
 // ─── EMA helpers ─────────────────────────────────────────────────────────────
 function updateEMA(prev: number, price: number, k: number): number {
@@ -298,80 +297,6 @@ export function calcADXRaw(
   const plusLast = plusDi[plusDi.length - 1] ?? 0
   const minusLast = minusDi[minusDi.length - 1] ?? 0
   return { adx, plusDi: plusLast, minusDi: minusLast }
-}
-
-// ─── Bollinger Volatility Squeeze Evaluator ─────────────────────────────────
-export function calcBollingerSqueezeMetrics(
-  candles: Candle[],
-  squeezeThresholdPct = 1.2,
-  minSqueezeCandles = 3,
-  adxMinThreshold = 20,
-): BollingerSqueezeMetrics {
-  if (candles.length < 20) {
-    return {
-      isSqueezing: false,
-      bandwidthPct: 0,
-      squeezeThresholdPct: 0,
-      squeezeCandleCount: 0,
-      breakoutDirection: 'NONE',
-      adxValue: 0,
-    }
-  }
-
-  const latestSpot = candles[candles.length - 1][4]
-  const bb = calcBollingerBands(candles)
-  const atr = calcATR(candles)
-
-  const bandwidthPct =
-    bb.middle > 0
-      ? parseFloat((((bb.upper - bb.lower) / bb.middle) * 100).toFixed(3))
-      : 0
-  const atrPct = latestSpot > 0 ? (atr.value / latestSpot) * 100 : 0
-  const thresholdPct = parseFloat((squeezeThresholdPct * atrPct).toFixed(3))
-
-  // Calculate squeeze count over recent candles window (up to last 10 candles)
-  let squeezeCandleCount = 0
-  const checkCount = Math.min(10, candles.length - 20 + 1)
-  for (let i = 0; i < checkCount; i++) {
-    const subCandles = candles.slice(0, candles.length - i)
-    if (subCandles.length < 20) break
-    const subSpot = subCandles[subCandles.length - 1][4]
-    const subBB = calcBollingerBands(subCandles)
-    const subATR = calcATR(subCandles)
-    const subBwPct =
-      subBB.middle > 0 ? ((subBB.upper - subBB.lower) / subBB.middle) * 100 : 0
-    const subAtrPct = subSpot > 0 ? (subATR.value / subSpot) * 100 : 0
-    const subThresholdPct = squeezeThresholdPct * subAtrPct
-
-    if (subBwPct <= subThresholdPct || subBwPct <= 0.8) {
-      squeezeCandleCount++
-    } else {
-      break
-    }
-  }
-
-  const isSqueezing = squeezeCandleCount >= minSqueezeCandles
-  const adxInfo = calcADXRaw(candles)
-
-  let breakoutDirection: 'CE' | 'PE' | 'NONE' = 'NONE'
-  // Breakout triggers if candle closes outside band and either recently squeezed or currently squeezing
-  const wasSqueezingRecently = isSqueezing || squeezeCandleCount >= 1
-  if (wasSqueezingRecently && adxInfo.adx >= adxMinThreshold) {
-    if (latestSpot > bb.upper && adxInfo.plusDi > adxInfo.minusDi) {
-      breakoutDirection = 'CE'
-    } else if (latestSpot < bb.lower && adxInfo.minusDi > adxInfo.plusDi) {
-      breakoutDirection = 'PE'
-    }
-  }
-
-  return {
-    isSqueezing,
-    bandwidthPct,
-    squeezeThresholdPct: thresholdPct,
-    squeezeCandleCount,
-    breakoutDirection,
-    adxValue: parseFloat(adxInfo.adx.toFixed(1)),
-  }
 }
 
 // ─── Compute all indicators at once ──────────────────────────────────────────

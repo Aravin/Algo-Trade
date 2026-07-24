@@ -147,48 +147,6 @@ export function StrategyConfig({
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
-        {/* ── Strategy Engine Mode ────────────────────────────────────────────── */}
-        <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
-          <p className="text-xs text-foreground font-semibold flex items-center gap-1.5">
-            <TrendingUp size={13} className="text-primary" />
-            Active Strategy Engine Mode
-            <InfoTooltip content="Select which algorithmic strategy model executes trades: V5 Multi-Layer Quantitative Scorecard or Bollinger Volatility Squeeze & Breakout Strategy." />
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => set('strategyMode', 'v5_scorecard')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                (local.strategyMode ?? 'v5_scorecard') === 'v5_scorecard'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold">V5 Multi-Layer Scorecard</div>
-              <div className="text-[10px] opacity-80">
-                Composite indicator & market sentiment scorecard
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => set('strategyMode', 'bollinger_squeeze')}
-              className={`p-2.5 text-left rounded-md border text-xs transition-colors cursor-pointer ${
-                local.strategyMode === 'bollinger_squeeze'
-                  ? 'border-primary bg-primary/10 text-primary font-medium'
-                  : 'border-border bg-background hover:bg-muted text-muted-foreground'
-              }`}
-            >
-              <div className="font-semibold flex items-center gap-1">
-                🔥 Bollinger Volatility Squeeze
-              </div>
-              <div className="text-[10px] opacity-80">
-                Coiled volatility breakout strategy (Strategy 3)
-              </div>
-            </button>
-          </div>
-        </div>
-
         {/* ── Underlying Execution Mode ────────────────────────────────────────── */}
         <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
           <p className="text-xs text-foreground font-semibold flex items-center gap-1.5">
@@ -350,46 +308,6 @@ export function StrategyConfig({
                   Trade single highest confidence score
                 </div>
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Squeeze Specific Config ────────────────────────────────────── */}
-        {local.strategyMode === 'bollinger_squeeze' && (
-          <div className="space-y-2 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
-            <p className="text-xs text-amber-500 font-semibold flex items-center gap-1">
-              🔥 Bollinger Squeeze Parameters
-              <InfoTooltip content="Adjust volatility compression threshold, required squeeze duration, and ADX momentum confirmation limits." />
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              <Field
-                label="Squeeze Threshold (x ATR)"
-                value={local.squeezeThresholdPct ?? 1.2}
-                step={0.1}
-                min={0.5}
-                max={3.0}
-                onChange={(v) => set('squeezeThresholdPct', Number(v))}
-                tooltip="Multiplier for ATR. Bandwidth % must drop below this factor times ATR % to trigger squeeze status."
-                hint="Default: 1.2x"
-              />
-              <Field
-                label="Min Squeeze Candles"
-                value={local.minSqueezeCandles ?? 3}
-                min={1}
-                max={10}
-                onChange={(v) => set('minSqueezeCandles', Number(v))}
-                tooltip="Minimum consecutive candles in low volatility compression before breakout triggers."
-                hint="Default: 3 candles"
-              />
-              <Field
-                label="Min ADX Threshold"
-                value={local.adxMinThreshold ?? 20}
-                min={10}
-                max={40}
-                onChange={(v) => set('adxMinThreshold', Number(v))}
-                tooltip="Minimum Average Directional Index (ADX) required to confirm trend strength on band breach."
-                hint="Default: 20"
-              />
             </div>
           </div>
         )}

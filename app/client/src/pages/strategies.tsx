@@ -164,10 +164,7 @@ export function StrategiesPage() {
           </div>
 
           {/* Technical indicators & Squeeze */}
-          <IndicatorsPanel
-            indicators={bot.indicators}
-            squeezeMetrics={bot.squeezeMetrics}
-          />
+          <IndicatorsPanel indicators={bot.indicators} />
 
           {/* Institutional + Breadth */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

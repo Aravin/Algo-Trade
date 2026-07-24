@@ -192,25 +192,10 @@ export interface ActivePosition {
   underlyingSymbol?: UnderlyingSymbol
 }
 
-export type StrategyMode = 'v5_scorecard' | 'bollinger_squeeze'
-
-export interface BollingerSqueezeMetrics {
-  isSqueezing: boolean
-  bandwidthPct: number
-  squeezeThresholdPct: number
-  squeezeCandleCount: number
-  breakoutDirection: 'CE' | 'PE' | 'NONE'
-  adxValue: number
-}
-
 // Strategy Config
 export interface StrategyConfig {
-  strategyMode: StrategyMode
   underlyingMode: UnderlyingMode
   multiSymbolExecutionMode?: 'independent' | 'consensus' | 'best_signal'
-  squeezeThresholdPct: number
-  minSqueezeCandles: number
-  adxMinThreshold: number
   strongThreshold: number
   moderateThreshold: number
   /** Minimum bull−bear gap required for Strong confidence (default 6) */
@@ -299,12 +284,8 @@ export interface AppNotification {
 
 // Constants & Config Values
 export const DEFAULT_CONFIG: StrategyConfig = {
-  strategyMode: 'v5_scorecard',
   underlyingMode: 'ALL_PARALLEL',
   multiSymbolExecutionMode: 'independent',
-  squeezeThresholdPct: 1.2,
-  minSqueezeCandles: 3,
-  adxMinThreshold: 20,
   strongThreshold: 14,
   moderateThreshold: 10,
   strongGap: 6,

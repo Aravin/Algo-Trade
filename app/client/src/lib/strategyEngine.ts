@@ -7,7 +7,7 @@ import {
   scoreVix,
   scoreStraddleIV,
 } from './vrdSignals'
-import { calcBollingerSqueezeMetrics } from './indicators'
+
 import type {
   IndicatorsResult,
   SignalType,
@@ -18,97 +18,13 @@ import type {
   FinalSignal,
   AllSignalData,
   ActivePosition,
-  Candle,
 } from './types'
-
-// ─── Bollinger Squeeze Strategy Evaluator ─────────────────────────────────────
-export function evaluateBollingerSqueezeStrategy(
-  data: AllSignalData,
-  candles: Candle[],
-  config: Partial<StrategyConfig>,
-): FinalSignal {
-  const v4 = getV4Signal(data.indicators)
-  const squeeze = calcBollingerSqueezeMetrics(
-    candles,
-    config.squeezeThresholdPct ?? 1.2,
-    config.minSqueezeCandles ?? 3,
-    config.adxMinThreshold ?? 20,
-  )
-
-  const minConf = config.minConfidence ?? 'moderate'
-
-  if (squeeze.breakoutDirection === 'CE') {
-    const isStrong = squeeze.adxValue >= (config.adxMinThreshold ?? 20) + 5
-    const confidence = isStrong ? 'strong' : 'moderate'
-    const shouldTrade =
-      confidence === 'strong' ||
-      (minConf === 'moderate' && confidence === 'moderate')
-
-    return {
-      signal: shouldTrade ? 'BUY_CE' : 'NO_TRADE',
-      confidence,
-      positionSize: shouldTrade
-        ? confidence === 'strong'
-          ? 'full'
-          : 'half'
-        : 'none',
-      v3: data.v3,
-      v4,
-      bullScore: 15,
-      bearScore: 0,
-      scoreMax: 20,
-    }
-  }
-
-  if (squeeze.breakoutDirection === 'PE') {
-    const isStrong = squeeze.adxValue >= (config.adxMinThreshold ?? 20) + 5
-    const confidence = isStrong ? 'strong' : 'moderate'
-    const shouldTrade =
-      confidence === 'strong' ||
-      (minConf === 'moderate' && confidence === 'moderate')
-
-    return {
-      signal: shouldTrade ? 'BUY_PE' : 'NO_TRADE',
-      confidence,
-      positionSize: shouldTrade
-        ? confidence === 'strong'
-          ? 'full'
-          : 'half'
-        : 'none',
-      v3: data.v3,
-      v4,
-      bullScore: 0,
-      bearScore: 15,
-      scoreMax: 20,
-    }
-  }
-
-  return {
-    signal: squeeze.isSqueezing ? 'WAIT' : 'NO_TRADE',
-    confidence: squeeze.isSqueezing ? 'moderate' : 'none',
-    positionSize: 'none',
-    v3: data.v3,
-    v4,
-    bullScore: squeeze.isSqueezing ? 5 : 0,
-    bearScore: squeeze.isSqueezing ? 5 : 0,
-    scoreMax: 20,
-  }
-}
 
 // ─── Final signal decision ────────────────────────────────────────────────────
 export function getFinalSignal(
   data: AllSignalData,
   config: Partial<StrategyConfig>,
-  candles?: Candle[],
 ): FinalSignal {
-  if (
-    config.strategyMode === 'bollinger_squeeze' &&
-    candles &&
-    candles.length >= 20
-  ) {
-    return evaluateBollingerSqueezeStrategy(data, candles, config)
-  }
-
   const bull = scoreBullish(data, config)
   const bear = scoreBearish(data, config)
   const v4 = getV4Signal(data.indicators)

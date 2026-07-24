@@ -67,10 +67,6 @@ describe('Multi-Index Options Trading Support', () => {
     it('defaults strategy underlyingMode to ALL_PARALLEL', () => {
       expect(DEFAULT_CONFIG.underlyingMode).toBe('ALL_PARALLEL')
       expect(DEFAULT_CONFIG.multiSymbolExecutionMode).toBe('independent')
-    })
-
-    it('maintains all legacy DEFAULT_CONFIG fields intact', () => {
-      expect(DEFAULT_CONFIG.strategyMode).toBe('v5_scorecard')
       expect(DEFAULT_CONFIG.executionMode).toBe('paper')
       expect(DEFAULT_CONFIG.maxTradesPerDay).toBe(3)
     })
