@@ -27,19 +27,34 @@
 
 ## 2. Code Quality & Pre-Commit Rules
 
-Before finishing any task inside `app/client`:
+**CRITICAL MANDATORY RULE**: After making any code changes, you MUST ALWAYS run typechecks, linters, and formatters, and fix any errors before concluding your task. Do not leave broken types or lint errors behind.
 
-1. Run unit tests to verify strategy algorithms remain unbroken:
-   ```bash
-   yarn test
-   ```
-2. Run validation check:
-   ```bash
-   yarn validate
-   ```
-3. Do not commit broken pre-commit hooks or bypass husky checks.
+Before finishing any task inside `app/client`, you must first identify what pre-commit hooks are active in the project (check `.husky/pre-commit` and `package.json` for `lint-staged` rules) so you understand exactly what checks will run during commit.
 
----
+Then, run the following commands to automatically fix and verify your changes:
+
+1. **Format Code**:
+   ```bash
+   npm run format
+   ```
+2. **Lint & Fix**:
+   ```bash
+   npm run lint:fix
+   ```
+3. **Typecheck** (Fix any TypeScript errors that appear):
+   ```bash
+   npm run typecheck
+   ```
+4. **Unit Tests** (Ensure strategy algorithms remain unbroken):
+   ```bash
+   npm run test
+   ```
+5. **Final Validation Check**:
+   ```bash
+   npm run validate
+   ```
+
+> **Note**: Do not commit broken pre-commit hooks or bypass husky checks. If a typecheck fails, you must investigate and fix the TypeScript error rather than ignoring it.
 
 ## 3. Fast Reference Files
 

@@ -14,6 +14,11 @@ interface PendingAccount {
   mode?: 'create' | 'reauth'
 }
 
+interface TokenResponse {
+  access_token?: string
+  error?: string
+}
+
 export function BrokerCallbackPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(() => {
     const params = new URLSearchParams(window.location.search)
@@ -54,10 +59,10 @@ export function BrokerCallbackPage() {
         redirectUri: pending.redirectUri,
       }),
     })
-      .then(
-        (res) =>
-          res.json() as Promise<{ access_token?: string; error?: string }>,
-      )
+      .then(async (res) => {
+        const data: TokenResponse = await res.json()
+        return data
+      })
       .then((data) => {
         if (data.access_token) {
           if (pending.mode === 'reauth') {

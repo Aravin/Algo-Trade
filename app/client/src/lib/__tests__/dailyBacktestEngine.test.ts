@@ -60,5 +60,20 @@ describe('dailyBacktestEngine', () => {
       expect(typeof wow.roiDeltaPct).toBe('number')
       expect(typeof wow.winRateDeltaPct).toBe('number')
     })
+
+    it('ensures data for identical weekdays varies due to deterministic PRNG seeding', () => {
+      // 2026-07-20 and 2026-07-13 are both Mondays.
+      // Prior to the fix, they returned identical results.
+      const wow = getWoWComparison('2026-07-20', 15000)
+
+      const { selectedReport, wowReport } = wow
+
+      // Because we seed PRNG with the date string, they should generate different synthetic data
+      const isSameOpenPrice = selectedReport.openPrice === wowReport.openPrice
+      const isSameHighPrice = selectedReport.highPrice === wowReport.highPrice
+
+      // We expect the random variation to make these different
+      expect(isSameOpenPrice && isSameHighPrice).toBe(false)
+    })
   })
 })

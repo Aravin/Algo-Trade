@@ -75,15 +75,26 @@ function fmtCurrency(n: number) {
   })
 }
 
+interface ProfileResponse {
+  status?: string
+  data: UpstoxProfile
+}
+
 async function fetchProfile(token: string) {
   const res = await fetch('/api/broker/upstox/profile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
-  const json = (await res.json()) as { status: string; data: UpstoxProfile }
+  const json: ProfileResponse = await res.json()
   if (json.status !== 'success') throw new Error('Failed to load profile')
   return json.data
+}
+
+interface FundsResponse {
+  status?: string
+  data: UpstoxFundsV3
+  errors?: { message?: string }[]
 }
 
 async function fetchFunds(token: string) {
@@ -92,11 +103,7 @@ async function fetchFunds(token: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
-  const json = (await res.json()) as {
-    status: string
-    data: UpstoxFundsV3
-    errors?: { message: string }[]
-  }
+  const json: FundsResponse = await res.json()
   if (json.status !== 'success') {
     const msg = json.errors?.[0]?.message ?? `HTTP ${res.status}`
     throw new Error(msg)

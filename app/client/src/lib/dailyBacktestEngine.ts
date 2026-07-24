@@ -120,14 +120,36 @@ export function calculateCapitalSizing(
   }
 }
 
+// Simple seeded PRNG
+function mulberry32(a: number) {
+  return function () {
+    let t = (a += 0x6d2b79f5)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function hashString(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0
+  }
+  return hash
+}
+
 // Generate realistic intraday tick candles for date evaluation
 function generateDayCandles(
   dateStr: string,
   mode: 'bullish' | 'bearish' | 'sideways' = 'bullish',
+  random: () => number,
 ): Candle[] {
-  const basePrice = mode === 'bearish' ? 24200 : 24000
+  const basePrice =
+    mode === 'bearish'
+      ? 24200 + Math.floor(random() * 200)
+      : 24000 + Math.floor(random() * 200)
   const candles: Candle[] = []
-  const startTime = new Date(`${dateStr}T09:15:00.000Z`).getTime()
+  const startTime = new Date(`${dateStr}T09:30:00.000Z`).getTime()
 
   let currentClose = basePrice
   for (let i = 0; i < 75; i++) {
@@ -135,18 +157,20 @@ function generateDayCandles(
     const open = currentClose
     let delta: number
 
+    const noise = (random() - 0.5) * 10
+
     if (mode === 'bullish') {
-      delta = i < 30 ? (i % 3 === 0 ? 8 : 3) : i % 5 === 0 ? -4 : 2
+      delta = (i < 30 ? random() * 10 : random() * 6 - 2) + noise
     } else if (mode === 'bearish') {
-      delta = i < 35 ? (i % 3 === 0 ? -9 : -2) : i % 5 === 0 ? 3 : -2
+      delta = (i < 35 ? -(random() * 10) : random() * 6 - 4) + noise
     } else {
-      delta = (i % 4 === 0 ? 4 : -4) + (i % 2 === 0 ? 1 : -1)
+      delta = random() * 12 - 6 + noise
     }
 
     const close = Math.round(open + delta)
-    const high = Math.max(open, close) + Math.abs(delta * 0.5)
-    const low = Math.min(open, close) - Math.abs(delta * 0.5)
-    const volume = 15000 + (i % 7) * 2000
+    const high = Math.max(open, close) + Math.abs(delta * random())
+    const low = Math.min(open, close) - Math.abs(delta * random())
+    const volume = 15000 + Math.floor(random() * 10000)
 
     candles.push([timeIso, open, high, low, close, volume])
     currentClose = close
@@ -171,16 +195,15 @@ export function generateDailyReport(
     year: 'numeric',
   })
 
-  // Detect day regime
-  const dayOfWeek = d.getUTCDay()
-  const mode =
-    dayOfWeek === 1 || dayOfWeek === 4
-      ? 'bullish'
-      : dayOfWeek === 2 || dayOfWeek === 5
-        ? 'bearish'
-        : 'sideways'
+  const seed = hashString(dateStr)
+  const random = mulberry32(seed)
 
-  const candles = customCandles ?? generateDayCandles(dateStr, mode)
+  // Detect day regime using deterministic random
+  const modeRand = random()
+  const mode =
+    modeRand < 0.35 ? 'bullish' : modeRand < 0.7 ? 'bearish' : 'sideways'
+
+  const candles = customCandles ?? generateDayCandles(dateStr, mode, random)
   const openPrice = candles[0]?.[1] ?? 24000
   const closePrice = candles[candles.length - 1]?.[4] ?? 24000
   const highPrice = Math.max(...candles.map((c) => c[2]))
@@ -194,27 +217,45 @@ export function generateDailyReport(
         : 'Sideways / Range'
 
   const baseVrd: VrdData = {
-    mmi: { score: 55, label: 'Greed' },
+    mmi: { score: 50 + Math.floor(random() * 10), label: 'Greed' },
     advancesDeclines:
       mode === 'bullish'
-        ? { advances: 38, declines: 12, ratio: 3.16, label: 'Bullish' }
+        ? {
+            advances: 35 + Math.floor(random() * 10),
+            declines: 10 + Math.floor(random() * 5),
+            ratio: 3.16,
+            label: 'Bullish',
+          }
         : mode === 'bearish'
-          ? { advances: 10, declines: 40, ratio: 0.25, label: 'Bearish' }
+          ? {
+              advances: 10 + Math.floor(random() * 5),
+              declines: 35 + Math.floor(random() * 10),
+              ratio: 0.25,
+              label: 'Bearish',
+            }
           : { advances: 25, declines: 25, ratio: 1.0, label: 'Neutral' },
     fiiLongShort:
       mode === 'bearish'
-        ? { longPct: 30, shortPct: 70, shortPctTrend: 'Rising' }
-        : { longPct: 60, shortPct: 40, shortPctTrend: 'Rising' },
+        ? {
+            longPct: 30 + Math.floor(random() * 5),
+            shortPct: 65 + Math.floor(random() * 5),
+            shortPctTrend: 'Rising',
+          }
+        : {
+            longPct: 55 + Math.floor(random() * 10),
+            shortPct: 35 + Math.floor(random() * 10),
+            shortPctTrend: 'Rising',
+          },
     fiiPositioning: { netPosition: 500, consecutiveShortDays: 0 },
     pcr:
       mode === 'bullish'
-        ? { value: 1.3, zone: 'buy' }
+        ? { value: 1.2 + random() * 0.2, zone: 'buy' }
         : mode === 'bearish'
-          ? { value: 0.65, zone: 'sell' }
-          : { value: 1.0, zone: 'neutral' },
+          ? { value: 0.6 + random() * 0.2, zone: 'sell' }
+          : { value: 0.9 + random() * 0.2, zone: 'neutral' },
     straddleIv: { elevated: false, percentAboveAvg: 0 },
-    niftyPe: { pe: 22, label: 'Fair' },
-    vix: 14.5,
+    niftyPe: { pe: 21 + random() * 2, label: 'Fair' },
+    vix: 13 + random() * 3,
     giftNifty: {
       price: openPrice,
       changePts: 40,
@@ -224,7 +265,7 @@ export function generateDailyReport(
     supportWall: lowPrice,
     resistanceWall: highPrice,
     maxPain: openPrice,
-    fetchedAt: `${dateStr}T09:15:00.000Z`,
+    fetchedAt: `${dateStr}T09:30:00.000Z`,
   }
 
   let ceSignals = 0
@@ -248,10 +289,15 @@ export function generateDailyReport(
         adx: mode === 'bullish' ? 'Buy' : mode === 'bearish' ? 'Sell' : 'Hold',
         rsi: {
           signal: 'Hold',
-          value: mode === 'bullish' ? 62 : mode === 'bearish' ? 38 : 50,
+          value:
+            mode === 'bullish'
+              ? 60 + random() * 10
+              : mode === 'bearish'
+                ? 30 + random() * 10
+                : 50,
         },
         stochastic: {
-          k: mode === 'bullish' ? 75 : 25,
+          k: mode === 'bullish' ? 70 + random() * 10 : 20 + random() * 10,
           d: 70,
           signal: mode === 'bullish' ? 'Buy' : 'Sell',
         },
@@ -301,7 +347,7 @@ export function generateDailyReport(
           direction === 'BUY_CE'
             ? `NIFTY ${Math.round(candle[4] / 50) * 50} CE`
             : `NIFTY ${Math.round(candle[4] / 50) * 50} PE`
-        const entryPrice = 110.0
+        const entryPrice = 110.0 + (random() * 10 - 5)
         const lots = sizing.maxLotsAllowedPerTrade
         const quantity = lots * sizing.lotSize
 
@@ -327,8 +373,10 @@ export function generateDailyReport(
       // Check exit after 5 candles (approx 25 mins) or on target/SL
       const elapsedCandles = idx
       if (elapsedCandles % 6 === 0 || idx === candles.length - 1) {
-        const isWin = trades.length % 2 === 0 || mode !== 'sideways'
-        const gainPct = isWin ? 0.18 : -0.098
+        const isWin = random() > 0.4 || mode !== 'sideways'
+        const gainPct = isWin
+          ? 0.18 + random() * 0.05
+          : -0.098 - random() * 0.02
         const exitPrice = Number(
           (activePosition.entryPrice * (1 + gainPct)).toFixed(2),
         )

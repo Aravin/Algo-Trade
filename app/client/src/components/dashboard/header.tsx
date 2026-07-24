@@ -67,6 +67,11 @@ function parseIndices(data: Record<string, unknown>): IndexData[] {
   })
 }
 
+interface IndicesResponse {
+  status?: string
+  data?: Record<string, unknown>
+}
+
 function useIndices(isMarketOpen: boolean) {
   const [indices, setIndices] = useState<IndexData[]>(BLANK)
   const [isLive, setIsLive] = useState(false)
@@ -82,10 +87,7 @@ function useIndices(isMarketOpen: boolean) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: account.accessToken }),
       })
-      const json = (await res.json()) as {
-        status: string
-        data: Record<string, unknown>
-      }
+      const json: IndicesResponse = await res.json()
       if (json.status === 'success' && json.data) {
         setIndices(parseIndices(json.data))
         setIsLive(isMarketOpen)

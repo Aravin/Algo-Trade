@@ -3,7 +3,7 @@ interface ClientStateResponse<T> {
 }
 
 async function parseJson<T>(response: Response): Promise<T> {
-  return (await response.json()) as T
+  return await response.json()
 }
 
 export async function loadRemoteState<T>(key: string): Promise<T | null> {

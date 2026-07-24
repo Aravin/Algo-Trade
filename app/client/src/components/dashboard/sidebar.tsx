@@ -73,6 +73,10 @@ interface OrderListResponse {
   data?: LocalLiveOrder[]
 }
 
+interface PaperAccountResponse {
+  openTradeCount?: number
+}
+
 function useActiveTradesCount() {
   const [count, setCount] = useState<number | null>(null)
 
@@ -111,7 +115,7 @@ function useActiveTradesCount() {
         if (mode === 'paper') {
           const res = await fetch('/api/paper/account')
           if (!res.ok) return
-          const summary = (await res.json()) as { openTradeCount?: number }
+          const summary: PaperAccountResponse = await res.json()
           if (active && typeof summary?.openTradeCount === 'number') {
             setCount(summary.openTradeCount)
           }
@@ -135,7 +139,7 @@ function useActiveTradesCount() {
             body: JSON.stringify({ token }),
           })
           if (!res.ok) return
-          const payload = (await res.json()) as unknown
+          const payload = await res.json()
           const rows = Array.isArray(payload)
             ? (payload as LocalLiveOrder[])
             : ((payload as OrderListResponse).data ?? [])

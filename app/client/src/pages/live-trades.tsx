@@ -192,18 +192,20 @@ const statusLabel: Record<TradeRowStatus, string> = {
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
+interface UpstoxFundsResponse {
+  status?: string
+  data?: UpstoxFundsV3
+  error?: string
+  errors?: { message?: string }[]
+}
+
 async function fetchFunds(token: string): Promise<UpstoxFundsV3> {
   const res = await fetch('/api/broker/upstox/funds', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
-  const payload = (await res.json()) as {
-    status?: string
-    data?: UpstoxFundsV3
-    errors?: { message?: string }[]
-    error?: string
-  }
+  const payload: UpstoxFundsResponse = await res.json()
   if (!res.ok || payload.status !== 'success' || !payload.data) {
     throw new Error(
       payload.errors?.[0]?.message ?? payload.error ?? 'Failed to load funds',
@@ -212,32 +214,48 @@ async function fetchFunds(token: string): Promise<UpstoxFundsV3> {
   return payload.data
 }
 
+interface UpstoxOrderResponse {
+  status?: string
+  data?: LiveOrder[]
+  error?: string
+  errors?: { message?: string }[]
+}
+
+type OrderPayload = UpstoxOrderResponse | LiveOrder[]
+
 async function fetchOrders(token: string): Promise<LiveOrder[]> {
   const res = await fetch('/api/order/list', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
-  const payload = (await res.json()) as {
-    status?: string
-    data?: unknown
-    error?: string
-    errors?: { message?: string }[]
-  }
-  const rows = Array.isArray(payload.data)
-    ? payload.data
-    : Array.isArray(payload)
-      ? payload
-      : []
+
+  const payload: OrderPayload = await res.json()
+  const isArray = Array.isArray(payload)
+
+  const rows = isArray ? payload : (payload.data ?? [])
+
   if (
     !res.ok ||
-    (payload.status && payload.status !== 'success' && rows.length === 0)
+    (!isArray &&
+      payload.status &&
+      payload.status !== 'success' &&
+      rows.length === 0)
   ) {
-    throw new Error(
-      payload.errors?.[0]?.message ?? payload.error ?? 'Failed to load orders',
-    )
+    const errorMsg = !isArray
+      ? (payload.errors?.[0]?.message ?? payload.error)
+      : null
+    throw new Error(errorMsg ?? 'Failed to load orders')
   }
-  return rows as LiveOrder[]
+
+  return rows
+}
+
+interface UpstoxQuotesResponse {
+  status?: string
+  data?: Record<string, { last_price?: number }>
+  error?: string
+  errors?: { message?: string }[]
 }
 
 async function fetchQuotes(
@@ -249,12 +267,7 @@ async function fetchQuotes(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, instrumentKeys }),
   })
-  const payload = (await res.json()) as {
-    status?: string
-    data?: Record<string, { last_price?: number }>
-    errors?: { message?: string }[]
-    error?: string
-  }
+  const payload: UpstoxQuotesResponse = await res.json()
   if (!res.ok || payload.status !== 'success' || !payload.data) {
     throw new Error(
       payload.errors?.[0]?.message ?? payload.error ?? 'Failed to load quotes',
