@@ -89,9 +89,29 @@ const KEYS = {
   vrdCache: 'algo-trade:vrd-cache', // { data: VrdData; savedAt: string }
   logs: 'algo-trade:bot-logs', // BotLog[] (last 200)
   snapshot: 'algo-trade:bot-snapshot',
+  exitTimes: 'algo-trade:bot-last-exit-times',
 }
 const MAX_LOGS = 200
 const VRD_CACHE_MAX_MS = 30 * 60 * 1000 // 30 minutes
+
+function loadExitTimes(): Record<string, number> {
+  try {
+    return JSON.parse(localStorage.getItem(KEYS.exitTimes) ?? '{}') as Record<
+      string,
+      number
+    >
+  } catch {
+    return {}
+  }
+}
+
+function saveExitTimes(exitTimes: Record<string, number>) {
+  try {
+    localStorage.setItem(KEYS.exitTimes, JSON.stringify(exitTimes))
+  } catch {
+    /* ignore */
+  }
+}
 
 type BotSnapshot = Pick<
   BotStatus,
@@ -296,7 +316,7 @@ export function useStrategyBot(token: string | null) {
   }))
   const isTickingRef = useRef(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastExitTimesRef = useRef<Record<string, number>>({})
+  const lastExitTimesRef = useRef<Record<string, number>>(loadExitTimes())
   const statusRef = useRef<BotStatus>(status)
   useLayoutEffect(() => {
     statusRef.current = status
@@ -1009,25 +1029,62 @@ export function useStrategyBot(token: string | null) {
                 mkLog(
                   'warn',
                   'order',
-                  `[${sym}] Multi-leg live entry partially failed. Recording ${positionLegs.length} active leg(s) into state for tracking and exit management.`,
+                  `[${sym}] Multi-leg live entry partially failed. Attempting emergency exit for ${positionLegs.length} executed leg(s)...`,
                 ),
               )
-              const partialPos: ActivePosition = {
-                instrumentKey: firstInstrumentKey,
-                direction: firstDirection,
-                entryPrice: firstEntryPrice,
-                currentPrice: firstEntryPrice,
-                unrealizedPnl: 0,
-                quantity: qty,
-                entryTime: new Date().toISOString(),
-                tradeId: Date.now(),
-                executionMode,
-                tradeType: activeTradeType,
-                legs: positionLegs,
-                underlyingSymbol: sym,
+              const failedExitLegs: PositionLeg[] = []
+              for (const leg of positionLegs) {
+                const exitTxType = leg.tradeType === 'selling' ? 'BUY' : 'SELL'
+                const [, exitErr] = await safeFetch('/api/order/place', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    token,
+                    instrumentKey: leg.instrumentKey,
+                    transactionType: exitTxType,
+                    quantity: leg.quantity,
+                  }),
+                })
+                if (exitErr) {
+                  addLog(
+                    mkLog(
+                      'error',
+                      'order',
+                      `[${sym}] Emergency exit failed for leg ${leg.instrumentKey}: ${exitErr}`,
+                    ),
+                  )
+                  failedExitLegs.push(leg)
+                } else {
+                  notify(
+                    `Emergency Exit Executed [${sym}]`,
+                    `Emergency ${exitTxType} order placed for orphaned leg ${leg.instrumentKey}`,
+                    'warn',
+                  )
+                }
               }
-              curPositions[sym] = partialPos
-              curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+              if (failedExitLegs.length > 0) {
+                notify(
+                  `Multi-Leg Order Alert [${sym}]`,
+                  `Multi-leg entry partially failed and ${failedExitLegs.length} leg(s) could not be emergency closed. Recording position in state.`,
+                  'error',
+                )
+                const partialPos: ActivePosition = {
+                  instrumentKey: firstInstrumentKey,
+                  direction: firstDirection,
+                  entryPrice: firstEntryPrice,
+                  currentPrice: firstEntryPrice,
+                  unrealizedPnl: 0,
+                  quantity: qty,
+                  entryTime: new Date().toISOString(),
+                  tradeId: Date.now(),
+                  executionMode,
+                  tradeType: activeTradeType,
+                  legs: failedExitLegs,
+                  underlyingSymbol: sym,
+                }
+                curPositions[sym] = partialPos
+                curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+              }
             }
           }
         }
@@ -1255,6 +1312,7 @@ export function useStrategyBot(token: string | null) {
           if (allLegsCleared) {
             curPositions[sym] = null
             lastExitTimesRef.current[sym] = Date.now()
+            saveExitTimes(lastExitTimesRef.current)
             addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
           } else {
             curPositions[sym] = {
@@ -1345,6 +1403,7 @@ export function useStrategyBot(token: string | null) {
     updateStatus({
       state: 'IDLE',
       position: null,
+      positions: { ...DEFAULT_POSITIONS },
       error: null,
       sourceStatus: {},
     })

@@ -143,8 +143,8 @@ function calcStochastic(
     (kValues.reduce((s, v) => s + v, 0) / kValues.length).toFixed(2),
   )
   let signal: SignalType = 'Hold'
-  if (k < d && k < 20) signal = 'Buy'
-  else if (k > d && k > 80) signal = 'Sell'
+  if (k > d && k < 20) signal = 'Buy'
+  else if (k < d && k > 80) signal = 'Sell'
   return { k, d, signal }
 }
 

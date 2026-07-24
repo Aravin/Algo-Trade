@@ -47,7 +47,6 @@ export function BrokerCallbackPage() {
     if (!raw) return
 
     const pending = JSON.parse(raw) as PendingAccount
-    localStorage.removeItem(`upstox-pending-${stateParam}`)
 
     fetch('/api/broker/upstox/token', {
       method: 'POST',
@@ -65,6 +64,7 @@ export function BrokerCallbackPage() {
       })
       .then((data) => {
         if (data.access_token) {
+          localStorage.removeItem(`upstox-pending-${stateParam}`)
           if (pending.mode === 'reauth') {
             updateAccount(pending.id, {
               accessToken: data.access_token,

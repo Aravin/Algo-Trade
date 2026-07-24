@@ -86,6 +86,14 @@ describe('indicators', () => {
       expect(result.pcrValue).toBe(1.5)
       expect(result.pcr).toBe('Buy')
     })
+
+    it('computes stochastic indicator structure correctly', () => {
+      const candles = generateCandles(30)
+      const result = computeAllIndicators(candles, [])
+      expect(result.stochastic).toHaveProperty('k')
+      expect(result.stochastic).toHaveProperty('d')
+      expect(['Buy', 'Sell', 'Hold']).includes(result.stochastic.signal)
+    })
   })
 
   describe('getOtmStrike', () => {
