@@ -9,6 +9,13 @@ import type {
   OptionData,
   IndicatorsResult,
 } from './types'
+import {
+  SIGNAL_BUY,
+  SIGNAL_SELL,
+  SIGNAL_HOLD,
+  MOMENTUM_OVERBOUGHT,
+  MOMENTUM_OVERSOLD,
+} from './constants'
 // ─── EMA helpers ─────────────────────────────────────────────────────────────
 function updateEMA(prev: number, price: number, k: number): number {
   return price * k + prev * (1 - k)
@@ -31,7 +38,7 @@ function calcEMACrossover(
   fastPeriod = 10,
   slowPeriod = 42,
 ): SignalType {
-  if (candles.length < slowPeriod + 1) return 'Hold'
+  if (candles.length < slowPeriod + 1) return SIGNAL_HOLD
   const closes = candles.map((c) => c[4])
   const fastK = 2 / (fastPeriod + 1)
   const slowK = 2 / (slowPeriod + 1)
@@ -41,14 +48,14 @@ function calcEMACrossover(
     fastEMA = updateEMA(fastEMA, closes[i], fastK)
     slowEMA = updateEMA(slowEMA, closes[i], slowK)
   }
-  if (fastEMA > slowEMA) return 'Buy'
-  if (fastEMA < slowEMA) return 'Sell'
-  return 'Hold'
+  if (fastEMA > slowEMA) return SIGNAL_BUY
+  if (fastEMA < slowEMA) return SIGNAL_SELL
+  return SIGNAL_HOLD
 }
 
 // ─── ADX(14) — trend strength + direction ────────────────────────────────────
 function calcADX(candles: Candle[], period = 14): SignalType {
-  if (candles.length < period * 2) return 'Hold'
+  if (candles.length < period * 2) return SIGNAL_HOLD
   const recent = candles.slice(-(period * 2))
   const pdms = new Array<number>(recent.length).fill(0)
   const ndms = new Array<number>(recent.length).fill(0)
@@ -78,11 +85,11 @@ function calcADX(candles: Candle[], period = 14): SignalType {
   })
   const adxArr = computeEMAArray(dxs, period)
   const adx = adxArr[adxArr.length - 1] ?? 0
-  if (adx < 25) return 'Hold'
+  if (adx < 25) return SIGNAL_HOLD
   // Fixed polarity: +DI > -DI = uptrend = Buy
   const plusLast = plusDi[plusDi.length - 1] ?? 0
   const minusLast = minusDi[minusDi.length - 1] ?? 0
-  return plusLast > minusLast ? 'Buy' : 'Sell'
+  return plusLast > minusLast ? SIGNAL_BUY : SIGNAL_SELL
 }
 
 // ─── RSI(14) ─────────────────────────────────────────────────────────────────
@@ -92,7 +99,7 @@ function calcRSI(
   overbought = 70,
   oversold = 30,
 ): { value: number; signal: MomentumType } {
-  if (candles.length <= period) return { value: 50, signal: 'Hold' }
+  if (candles.length <= period) return { value: 50, signal: SIGNAL_HOLD }
   const closes = candles.map((c) => c[4])
   // Seed with simple average of first period changes
   let avgGain = 0
@@ -112,11 +119,11 @@ function calcRSI(
     avgGain = (avgGain * (period - 1) + gain) / period
     avgLoss = (avgLoss * (period - 1) + loss) / period
   }
-  if (avgLoss === 0) return { value: 100, signal: 'Overbought' }
+  if (avgLoss === 0) return { value: 100, signal: MOMENTUM_OVERBOUGHT }
   const rs = avgGain / avgLoss
   const value = parseFloat((100 - 100 / (1 + rs)).toFixed(2))
   const signal: MomentumType =
-    value >= overbought ? 'Overbought' : value <= oversold ? 'Oversold' : 'Hold'
+    value >= overbought ? MOMENTUM_OVERBOUGHT : value <= oversold ? MOMENTUM_OVERSOLD : SIGNAL_HOLD
   return { value, signal }
 }
 
@@ -127,7 +134,7 @@ function calcStochastic(
   smoothing = 3,
 ): { k: number; d: number; signal: SignalType } {
   const needed = period + smoothing - 1
-  if (candles.length < needed) return { k: 50, d: 50, signal: 'Hold' }
+  if (candles.length < needed) return { k: 50, d: 50, signal: SIGNAL_HOLD }
   const recent = candles.slice(-needed)
   const kValues: number[] = []
   for (let i = period - 1; i < recent.length; i++) {
@@ -141,9 +148,9 @@ function calcStochastic(
   const d = parseFloat(
     (kValues.reduce((s, v) => s + v, 0) / kValues.length).toFixed(2),
   )
-  let signal: SignalType = 'Hold'
-  if (k > d && k < 20) signal = 'Buy'
-  else if (k < d && k > 80) signal = 'Sell'
+  let signal: SignalType = SIGNAL_HOLD
+  if (k > d && k < 20) signal = SIGNAL_BUY
+  else if (k < d && k > 80) signal = SIGNAL_SELL
   return { k, d, signal }
 }
 
@@ -165,7 +172,7 @@ function calcBollingerBands(
       upper: last,
       middle: last,
       lower: last,
-      signal: 'Hold',
+      signal: SIGNAL_HOLD,
       trend: 'Neutral',
     }
   }
@@ -179,13 +186,13 @@ function calcBollingerBands(
   const lower = parseFloat((sma - 2 * stdDev).toFixed(2))
   const middle = parseFloat(sma.toFixed(2))
   const currentPrice = candles[candles.length - 1][4]
-  let signal: SignalType = 'Hold'
+  let signal: SignalType = SIGNAL_HOLD
   if (mode === 'breakout') {
-    if (currentPrice > upper) signal = 'Buy'
-    else if (currentPrice < lower) signal = 'Sell'
+    if (currentPrice > upper) signal = SIGNAL_BUY
+    else if (currentPrice < lower) signal = SIGNAL_SELL
   } else {
-    if (currentPrice > upper) signal = 'Sell'
-    else if (currentPrice < lower) signal = 'Buy'
+    if (currentPrice > upper) signal = SIGNAL_SELL
+    else if (currentPrice < lower) signal = SIGNAL_BUY
   }
   const trend: TrendType =
     currentPrice > middle ? 'Up' : currentPrice < middle ? 'Down' : 'Neutral'
@@ -230,10 +237,10 @@ function calcOiPCR(optionChain: OptionData[]): {
     totalPutOI += o.put_options.market_data.oi ?? 0
     totalCallOI += o.call_options.market_data.oi ?? 0
   }
-  if (totalCallOI === 0) return { signal: 'Hold', value: 0 }
+  if (totalCallOI === 0) return { signal: SIGNAL_HOLD, value: 0 }
   const pcr = parseFloat((totalPutOI / totalCallOI).toFixed(3))
   // PCR > 1.0: more puts = put writers active = support = bullish
-  const signal: SignalType = pcr >= 1.0 ? 'Buy' : pcr <= 0.7 ? 'Sell' : 'Hold'
+  const signal: SignalType = pcr >= 1.0 ? SIGNAL_BUY : pcr <= 0.7 ? SIGNAL_SELL : SIGNAL_HOLD
   return { signal, value: pcr }
 }
 
@@ -306,7 +313,7 @@ export function computeAllIndicators(
 ): IndicatorsResult {
   const pcrResult = optionChain.length
     ? calcOiPCR(optionChain)
-    : { signal: 'Hold' as SignalType, value: 0 }
+    : { signal: SIGNAL_HOLD as SignalType, value: 0 }
   return {
     ema: calcEMACrossover(candles),
     adx: calcADX(candles),

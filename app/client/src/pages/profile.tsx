@@ -10,6 +10,16 @@ import {
   fetchPaperAccount,
   resetPaperAccount,
 } from '@/lib/paperTrading'
+import {
+  STORAGE_KEY_BOT_STATE,
+  STORAGE_KEY_BOT_POSITION,
+  STORAGE_KEY_BOT_TRADES_TODAY,
+  STORAGE_KEY_BOT_TRADES_DATE,
+  STORAGE_KEY_VRD_CACHE,
+  STORAGE_KEY_BOT_LOGS,
+  STORAGE_KEY_BOT_SNAPSHOT,
+  STORAGE_KEY_PROXY_HISTORY,
+} from '@/lib/constants'
 
 // ─── Types ───────────────────────────────────────────────────────
 interface UpstoxProfile {
@@ -81,7 +91,7 @@ interface ProfileResponse {
 }
 
 async function fetchProfile(token: string) {
-  const res = await fetch('/api/broker/upstox/profile', {
+  const res = await fetch(API_UPSTOX_PROFILE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
@@ -98,7 +108,7 @@ interface FundsResponse {
 }
 
 async function fetchFunds(token: string) {
-  const res = await fetch('/api/broker/upstox/funds', {
+  const res = await fetch(API_UPSTOX_FUNDS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
@@ -478,14 +488,14 @@ function BotResetSection() {
     }
 
     // Clear localStorage keys
-    localStorage.removeItem('algo-trade:bot-state')
-    localStorage.removeItem('algo-trade:bot-position')
-    localStorage.removeItem('algo-trade:bot-trades-today')
-    localStorage.removeItem('algo-trade:bot-trades-date')
-    localStorage.removeItem('algo-trade:vrd-cache')
-    localStorage.removeItem('algo-trade:bot-logs')
-    localStorage.removeItem('algo-trade:bot-snapshot')
-    localStorage.removeItem('algo-trade:proxy-history')
+    localStorage.removeItem(STORAGE_KEY_BOT_STATE)
+    localStorage.removeItem(STORAGE_KEY_BOT_POSITION)
+    localStorage.removeItem(STORAGE_KEY_BOT_TRADES_TODAY)
+    localStorage.removeItem(STORAGE_KEY_BOT_TRADES_DATE)
+    localStorage.removeItem(STORAGE_KEY_VRD_CACHE)
+    localStorage.removeItem(STORAGE_KEY_BOT_LOGS)
+    localStorage.removeItem(STORAGE_KEY_BOT_SNAPSHOT)
+    localStorage.removeItem(STORAGE_KEY_PROXY_HISTORY)
 
     setTimeout(() => {
       window.location.reload()

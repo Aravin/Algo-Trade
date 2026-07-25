@@ -1,5 +1,18 @@
 import { runHardStopChecks, getFinalSignal } from './strategyEngine'
 import type { AllSignalData, VrdData, Candle } from './types'
+import {
+  SIGNAL_BUY_CE,
+  SIGNAL_BUY_PE,
+  TRADE_STATUS_WIN,
+  TRADE_STATUS_LOSS,
+  ORDER_TYPE_BUY,
+  ORDER_TYPE_SELL,
+  ORDER_TYPE_HOLD,
+  SIGNAL_BUY,
+  SIGNAL_SELL,
+  SIGNAL_HOLD,
+  CONFIDENCE_MODERATE,
+} from './constants'
 
 export interface CapitalSizing {
   accountValue: number
@@ -249,9 +262,9 @@ export function generateDailyReport(
     fiiPositioning: { netPosition: 500, consecutiveShortDays: 0 },
     pcr:
       mode === 'bullish'
-        ? { value: 1.2 + random() * 0.2, zone: 'buy' }
+        ? { value: 1.2 + random() * 0.2, zone: ORDER_TYPE_BUY }
         : mode === 'bearish'
-          ? { value: 0.6 + random() * 0.2, zone: 'sell' }
+          ? { value: 0.6 + random() * 0.2, zone: ORDER_TYPE_SELL }
           : { value: 0.9 + random() * 0.2, zone: 'neutral' },
     straddleIv: { elevated: false, percentAboveAvg: 0 },
     niftyPe: { pe: 21 + random() * 2, label: 'Fair' },
@@ -283,12 +296,12 @@ export function generateDailyReport(
     })
 
     const signalData: AllSignalData = {
-      v3: mode === 'bullish' ? 'buy' : mode === 'bearish' ? 'sell' : 'hold',
+      v3: mode === 'bullish' ? ORDER_TYPE_BUY : mode === 'bearish' ? ORDER_TYPE_SELL : ORDER_TYPE_HOLD,
       indicators: {
-        ema: mode === 'bullish' ? 'Buy' : mode === 'bearish' ? 'Sell' : 'Hold',
-        adx: mode === 'bullish' ? 'Buy' : mode === 'bearish' ? 'Sell' : 'Hold',
+        ema: mode === 'bullish' ? SIGNAL_BUY : mode === 'bearish' ? SIGNAL_SELL : SIGNAL_HOLD,
+        adx: mode === 'bullish' ? SIGNAL_BUY : mode === 'bearish' ? SIGNAL_SELL : SIGNAL_HOLD,
         rsi: {
-          signal: 'Hold',
+          signal: SIGNAL_HOLD,
           value:
             mode === 'bullish'
               ? 60 + random() * 10
@@ -299,11 +312,11 @@ export function generateDailyReport(
         stochastic: {
           k: mode === 'bullish' ? 70 + random() * 10 : 20 + random() * 10,
           d: 70,
-          signal: mode === 'bullish' ? 'Buy' : 'Sell',
+          signal: mode === 'bullish' ? SIGNAL_BUY : SIGNAL_SELL,
         },
         bollinger: {
           signal:
-            mode === 'bullish' ? 'Buy' : mode === 'bearish' ? 'Sell' : 'Hold',
+            mode === 'bullish' ? SIGNAL_BUY : mode === 'bearish' ? SIGNAL_SELL : SIGNAL_HOLD,
           upper: highPrice,
           lower: lowPrice,
           middle: (highPrice + lowPrice) / 2,
@@ -311,7 +324,7 @@ export function generateDailyReport(
             mode === 'bullish' ? 'Up' : mode === 'bearish' ? 'Down' : 'Neutral',
         },
         atr: { value: 40, level: 'Neutral' },
-        pcr: mode === 'bullish' ? 'Buy' : mode === 'bearish' ? 'Sell' : 'Hold',
+        pcr: mode === 'bullish' ? SIGNAL_BUY : mode === 'bearish' ? SIGNAL_SELL : SIGNAL_HOLD,
         pcrValue: baseVrd.pcr?.value ?? 1.0,
       },
       vrd: baseVrd,
@@ -322,7 +335,7 @@ export function generateDailyReport(
       moderateThreshold: 10,
       strongGap: 6,
       moderateGap: 3,
-      minConfidence: 'moderate',
+      minConfidence: CONFIDENCE_MODERATE,
     })
 
     const hardStop = runHardStopChecks(baseVrd)
@@ -331,20 +344,20 @@ export function generateDailyReport(
       return
     }
 
-    if (res.signal === 'BUY_CE') ceSignals++
-    else if (res.signal === 'BUY_PE') peSignals++
+    if (res.signal === SIGNAL_BUY_CE) ceSignals++
+    else if (res.signal === SIGNAL_BUY_PE) peSignals++
     else waitSignals++
 
     // Simulate Position Management
     if (
       !activePosition &&
-      (res.signal === 'BUY_CE' || res.signal === 'BUY_PE')
+      (res.signal === SIGNAL_BUY_CE || res.signal === SIGNAL_BUY_PE)
     ) {
       // Limit to max 3 trades per day
       if (trades.length < 3) {
         const direction = res.signal
         const strike =
-          direction === 'BUY_CE'
+          direction === SIGNAL_BUY_CE
             ? `NIFTY ${Math.round(candle[4] / 50) * 50} CE`
             : `NIFTY ${Math.round(candle[4] / 50) * 50} PE`
         const entryPrice = 110.0 + (random() * 10 - 5)
@@ -366,7 +379,7 @@ export function generateDailyReport(
           netPnl: 0,
           pnlPct: 0,
           exitReason: 'TARGET_HIT',
-          status: 'WIN',
+          status: TRADE_STATUS_WIN,
         }
       }
     } else if (activePosition) {
@@ -399,7 +412,7 @@ export function generateDailyReport(
         activePosition.netPnl = netPnl
         activePosition.pnlPct = pnlPct
         activePosition.exitReason = isWin ? 'TARGET_HIT' : 'STOP_LOSS_HIT'
-        activePosition.status = isWin ? 'WIN' : 'LOSS'
+        activePosition.status = isWin ? TRADE_STATUS_WIN : TRADE_STATUS_LOSS
 
         trades.push({ ...activePosition })
         activePosition = null
@@ -408,20 +421,20 @@ export function generateDailyReport(
   })
 
   const totalTrades = trades.length
-  const winningTrades = trades.filter((t) => t.status === 'WIN').length
-  const losingTrades = trades.filter((t) => t.status === 'LOSS').length
+  const winningTrades = trades.filter((t) => t.status === TRADE_STATUS_WIN).length
+  const losingTrades = trades.filter((t) => t.status === TRADE_STATUS_LOSS).length
   const winRatePct =
     totalTrades > 0 ? Math.round((winningTrades / totalTrades) * 100) : 0
 
   const grossProfit = Number(
     trades
-      .filter((t) => t.status === 'WIN')
+      .filter((t) => t.status === TRADE_STATUS_WIN)
       .reduce((acc, t) => acc + t.grossPnl, 0)
       .toFixed(2),
   )
   const grossLoss = Math.abs(
     trades
-      .filter((t) => t.status === 'LOSS')
+      .filter((t) => t.status === TRADE_STATUS_LOSS)
       .reduce((acc, t) => acc + t.grossPnl, 0),
   )
 

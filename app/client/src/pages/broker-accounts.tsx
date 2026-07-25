@@ -23,6 +23,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import {
+  MCP_UPSTOX_URL,
+  UPSTOX_MCP_DOCS_URL,
+  UPSTOX_AUTH_URL,
+  UPSTOX_DEVELOPER_APPS_URL,
+  UPSTOX_DEVELOPER_APPS_BASE_URL,
+  API_UPSTOX_PROFILE,
+} from '@/lib/constants'
+import {
   addAccount,
   getAccounts,
   getAccountConnectionState,
@@ -51,7 +59,7 @@ const MCP_CONFIG = JSON.stringify(
     mcpServers: {
       'Upstox MCP': {
         command: 'npx',
-        args: ['mcp-remote', 'https://mcp.upstox.com/mcp'],
+        args: ['mcp-remote', MCP_UPSTOX_URL],
       },
     },
   },
@@ -137,7 +145,7 @@ function McpSection() {
             <p className="text-xs text-muted-foreground">
               Full setup guide:{' '}
               <a
-                href="https://upstox.com/developer/api-documentation/mcp-integration"
+                href={UPSTOX_MCP_DOCS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
@@ -175,7 +183,7 @@ function ReauthorizeInline({ account }: { account: BrokerAccount }) {
       JSON.stringify(pending),
     )
     const oauthUrl = new URL(
-      'https://api.upstox.com/v2/login/authorization/dialog',
+      UPSTOX_AUTH_URL,
     )
     oauthUrl.searchParams.set('response_type', 'code')
     oauthUrl.searchParams.set('client_id', account.apiKey)
@@ -257,7 +265,7 @@ function TestConnection({ account }: { account: BrokerAccount }) {
     setStatus('loading')
     setProfile(null)
     setErrMsg('')
-    fetch('/api/broker/upstox/profile', {
+    fetch(API_UPSTOX_PROFILE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
@@ -582,7 +590,7 @@ function UpstoxForm({
           JSON.stringify(pending),
         )
         const oauthUrl = new URL(
-          'https://api.upstox.com/v2/login/authorization/dialog',
+          UPSTOX_AUTH_URL,
         )
         oauthUrl.searchParams.set('response_type', 'code')
         oauthUrl.searchParams.set('client_id', apiKey.trim())
@@ -633,7 +641,7 @@ function UpstoxForm({
       }
       localStorage.setItem(`upstox-pending-${id}`, JSON.stringify(pending))
       const oauthUrl = new URL(
-        'https://api.upstox.com/v2/login/authorization/dialog',
+        UPSTOX_AUTH_URL,
       )
       oauthUrl.searchParams.set('response_type', 'code')
       oauthUrl.searchParams.set('client_id', apiKey.trim())
@@ -698,7 +706,7 @@ function UpstoxForm({
             <p className="text-xs text-muted-foreground">
               Long-lived read-only token (1 year). Generated once from{' '}
               <a
-                href="https://account.upstox.com/developer/apps#analytics"
+                href={UPSTOX_DEVELOPER_APPS_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
@@ -809,7 +817,7 @@ function UpstoxForm({
               <p className="text-xs text-muted-foreground">
                 Must match the Redirect URL in your{' '}
                 <a
-                  href="https://account.upstox.com/developer/apps"
+                  href={UPSTOX_DEVELOPER_APPS_BASE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"

@@ -7,6 +7,27 @@ import {
   scoreVix,
   scoreStraddleIV,
 } from './vrdSignals'
+import {
+  SIGNAL_BUY_CE,
+  SIGNAL_BUY_PE,
+  SIGNAL_NO_TRADE,
+  TRADE_TYPE_SELLING,
+  SIGNAL_BUY,
+  SIGNAL_SELL,
+  SIGNAL_HOLD,
+  ORDER_TYPE_BUY,
+  ORDER_TYPE_SELL,
+  ORDER_TYPE_HOLD,
+  CONFIDENCE_STRONG,
+  CONFIDENCE_MODERATE,
+  CONFIDENCE_WEAK,
+  CONFIDENCE_NONE,
+  POSITION_SIZE_FULL,
+  POSITION_SIZE_HALF,
+  POSITION_SIZE_NONE,
+  LEG_DIRECTION_CE,
+  LEG_DIRECTION_PE,
+} from './constants'
 
 import type {
   IndicatorsResult,
@@ -31,7 +52,7 @@ export function getFinalSignal(
   const gap = Math.abs(bull.score - bear.score)
   const top = Math.max(bull.score, bear.score)
   const dominant =
-    bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : 'none'
+    bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : CONFIDENCE_NONE
   const scoreMax =
     dominant === 'bull'
       ? Math.max(bull.max, 1)
@@ -40,7 +61,7 @@ export function getFinalSignal(
         : Math.max(bull.max, bear.max, 1)
 
   const ratio = scoreMax > 0 ? top / scoreMax : 0
-  let confidence: 'strong' | 'moderate' | 'weak' | 'none' = 'none'
+  let confidence: 'strong' | 'moderate' | 'weak' | 'none' = CONFIDENCE_NONE
 
   const strongThreshold = config.strongThreshold ?? 14
   const moderateThreshold = config.moderateThreshold ?? 10
@@ -54,20 +75,20 @@ export function getFinalSignal(
     top >= moderateThreshold ||
     (ratio >= 0.5 && top >= Math.min(moderateThreshold, 6))
 
-  if (satisfiesStrong && gap >= strongGap) confidence = 'strong'
-  else if (satisfiesModerate && gap >= moderateGap) confidence = 'moderate'
-  else if (satisfiesModerate) confidence = 'weak'
+  if (satisfiesStrong && gap >= strongGap) confidence = CONFIDENCE_STRONG
+  else if (satisfiesModerate && gap >= moderateGap) confidence = CONFIDENCE_MODERATE
+  else if (satisfiesModerate) confidence = CONFIDENCE_WEAK
 
-  const minConf = config.minConfidence ?? 'moderate'
+  const minConf = config.minConfidence ?? CONFIDENCE_MODERATE
   const shouldTrade =
-    confidence === 'strong' ||
-    (minConf === 'moderate' && confidence === 'moderate')
+    confidence === CONFIDENCE_STRONG ||
+    (minConf === CONFIDENCE_MODERATE && confidence === CONFIDENCE_MODERATE)
 
-  if (!shouldTrade || dominant === 'none') {
+  if (!shouldTrade || dominant === CONFIDENCE_NONE) {
     return {
-      signal: 'NO_TRADE',
+      signal: SIGNAL_NO_TRADE,
       confidence,
-      positionSize: 'none',
+      positionSize: CONFIDENCE_NONE,
       v3: data.v3,
       v4,
       bullScore: bull.score,
@@ -76,21 +97,21 @@ export function getFinalSignal(
     }
   }
 
-  const signal = dominant === 'bull' ? 'BUY_CE' : 'BUY_PE'
-  const positionSize = confidence === 'strong' ? 'full' : 'half'
+  const signal = dominant === 'bull' ? SIGNAL_BUY_CE : SIGNAL_BUY_PE
+  const positionSize = confidence === CONFIDENCE_STRONG ? POSITION_SIZE_FULL : POSITION_SIZE_HALF
 
   // Prevent entering a trade that would immediately trigger exit conditions
-  const isBullishBias = signal === 'BUY_CE'
+  const isBullishBias = signal === SIGNAL_BUY_CE
   const adRatio = data.vrd?.advancesDeclines?.ratio
   const isImmediateExit = isBullishBias
-    ? v4 === 'Sell' || data.v3 === 'sell' || (adRatio != null && adRatio < 0.8)
-    : v4 === 'Buy' || data.v3 === 'buy' || (adRatio != null && adRatio > 1.5)
+    ? v4 === SIGNAL_SELL || data.v3 === ORDER_TYPE_SELL || (adRatio != null && adRatio < 0.8)
+    : v4 === SIGNAL_BUY || data.v3 === ORDER_TYPE_BUY || (adRatio != null && adRatio > 1.5)
 
   if (isImmediateExit) {
     return {
-      signal: 'NO_TRADE',
-      confidence: 'none',
-      positionSize: 'none',
+      signal: SIGNAL_NO_TRADE,
+      confidence: CONFIDENCE_NONE,
+      positionSize: CONFIDENCE_NONE,
       v3: data.v3,
       v4,
       bullScore: bull.score,
@@ -125,7 +146,7 @@ export function shouldExit(
     for (const leg of position.legs) {
       const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
       const legPnl =
-        leg.tradeType === 'selling'
+        leg.tradeType === TRADE_TYPE_SELLING
           ? (leg.entryPrice - legCurrentPrice) * leg.quantity
           : (legCurrentPrice - leg.entryPrice) * leg.quantity
       totalPnl += legPnl
@@ -133,7 +154,7 @@ export function shouldExit(
     }
     pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
   } else {
-    const isSelling = position.tradeType === 'selling'
+    const isSelling = position.tradeType === TRADE_TYPE_SELLING
     pct = isSelling
       ? ((position.entryPrice - currentPrice) / position.entryPrice) * 100
       : ((currentPrice - position.entryPrice) / position.entryPrice) * 100
@@ -148,16 +169,16 @@ export function shouldExit(
     }
 
   const v4 = getV4Signal(currentData.indicators)
-  const isSellingMode = position.tradeType === 'selling'
+  const isSellingMode = position.tradeType === TRADE_TYPE_SELLING
   const isBullishBias = isSellingMode
-    ? position.direction === 'PE'
-    : position.direction === 'CE'
+    ? position.direction === LEG_DIRECTION_PE
+    : position.direction === LEG_DIRECTION_CE
 
-  const reversal = isBullishBias ? 'Sell' : 'Buy'
+  const reversal = isBullishBias ? SIGNAL_SELL : SIGNAL_BUY
   if (v4 === reversal)
     return { exit: true, reason: `V4 signal reversed to ${v4}` }
 
-  const v3Reversal = isBullishBias ? 'sell' : 'buy'
+  const v3Reversal = isBullishBias ? ORDER_TYPE_SELL : ORDER_TYPE_BUY
   if (currentData.v3 === v3Reversal)
     return { exit: true, reason: `V3 signal reversed to ${currentData.v3}` }
 
@@ -175,11 +196,11 @@ export function shouldExit(
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
 export function runHardStopChecks(vrd: VrdData | null): {
   blocked: boolean
-  blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
+  blockedDirection: LEG_DIRECTION_CE | LEG_DIRECTION_PE | 'BOTH' | 'NONE'
   reasons: string[]
 } {
   const reasons: string[] = []
-  let blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE' = 'NONE'
+  let blockedDirection: LEG_DIRECTION_CE | LEG_DIRECTION_PE | 'BOTH' | 'NONE' = 'NONE'
 
   // Only VIX is a reliable hard stop (real Upstox data). Nifty PE is now
   // synthetic (proxy-computed from indicators) and is penalised through scoring
@@ -209,39 +230,39 @@ export function runHardStopChecks(vrd: VrdData | null): {
 // ─── V4 composite signal ──────────────────────────────────────────────────────
 function getV4Signal(ind: IndicatorsResult): SignalType {
   const { ema, adx, pcr, bollinger } = ind
-  let baseSignal: SignalType = 'Hold'
+  let baseSignal: SignalType = SIGNAL_HOLD
 
   // All 4 agree
   if (
-    ema === 'Buy' &&
-    (adx === 'Buy' || adx === 'Hold') &&
-    pcr === 'Buy' &&
-    bollinger.signal === 'Buy'
+    ema === SIGNAL_BUY &&
+    (adx === SIGNAL_BUY || adx === SIGNAL_HOLD) &&
+    pcr === SIGNAL_BUY &&
+    bollinger.signal === SIGNAL_BUY
   ) {
-    baseSignal = 'Buy'
+    baseSignal = SIGNAL_BUY
   } else if (
-    ema === 'Sell' &&
-    (adx === 'Sell' || adx === 'Hold') &&
-    pcr === 'Sell' &&
-    bollinger.signal === 'Sell'
+    ema === SIGNAL_SELL &&
+    (adx === SIGNAL_SELL || adx === SIGNAL_HOLD) &&
+    pcr === SIGNAL_SELL &&
+    bollinger.signal === SIGNAL_SELL
   ) {
-    baseSignal = 'Sell'
+    baseSignal = SIGNAL_SELL
   } else {
     // 3 of 4 agree (relaxed)
     const buyVotes = [
-      ema === 'Buy',
-      adx === 'Buy',
-      pcr === 'Buy',
-      bollinger.signal === 'Buy',
+      ema === SIGNAL_BUY,
+      adx === SIGNAL_BUY,
+      pcr === SIGNAL_BUY,
+      bollinger.signal === SIGNAL_BUY,
     ].filter(Boolean).length
     const sellVotes = [
-      ema === 'Sell',
-      adx === 'Sell',
-      pcr === 'Sell',
-      bollinger.signal === 'Sell',
+      ema === SIGNAL_SELL,
+      adx === SIGNAL_SELL,
+      pcr === SIGNAL_SELL,
+      bollinger.signal === SIGNAL_SELL,
     ].filter(Boolean).length
-    if (buyVotes >= 3) baseSignal = 'Buy'
-    if (sellVotes >= 3) baseSignal = 'Sell'
+    if (buyVotes >= 3) baseSignal = SIGNAL_BUY
+    if (sellVotes >= 3) baseSignal = SIGNAL_SELL
   }
 
   return baseSignal
@@ -270,18 +291,18 @@ export function scoreBullish(
   const v4 = getV4Signal(data.indicators)
 
   // V3 (4 pts)
-  const v3p = data.v3 === 'buy' ? 4 : data.v3 === 'hold' ? 0 : -2
+  const v3p = data.v3 === ORDER_TYPE_BUY ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
   score += addScore(bd, 'V3', 'Macro Signal', data.v3, v3p, 4)
   max += 4
 
   // V4 (5 pts)
-  const v4p = v4 === 'Buy' ? 5 : v4 === 'Hold' ? 0 : -3
+  const v4p = v4 === SIGNAL_BUY ? 5 : v4 === SIGNAL_HOLD ? 0 : -3
   score += addScore(bd, 'V4', 'Price Action', v4, v4p, 5)
   max += 5
 
   // EMA (3 pts)
   const emap =
-    data.indicators.ema === 'Buy' ? 3 : data.indicators.ema === 'Hold' ? 0 : -1
+    data.indicators.ema === SIGNAL_BUY ? 3 : data.indicators.ema === SIGNAL_HOLD ? 0 : -1
   score += addScore(bd, 'V4', 'EMA Crossover', data.indicators.ema, emap, 3)
   max += 3
 
@@ -289,7 +310,7 @@ export function scoreBullish(
   const rsip =
     data.indicators.rsi.signal === 'Oversold'
       ? 2
-      : data.indicators.rsi.signal === 'Hold'
+      : data.indicators.rsi.signal === SIGNAL_HOLD
         ? 1
         : -1
   score += addScore(
@@ -351,7 +372,7 @@ export function scoreBullish(
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    if (pe.bias !== 'PE') {
+    if (pe.bias !== LEG_DIRECTION_PE) {
       max += pe.max
       score += addScore(bd, 'L2', 'Nifty PE', pe.label, pe.score, pe.max)
     }
@@ -441,23 +462,23 @@ export function scoreBearish(
   let max = 0
   const v4 = getV4Signal(data.indicators)
 
-  const v3p = data.v3 === 'sell' ? 4 : data.v3 === 'hold' ? 0 : -2
+  const v3p = data.v3 === ORDER_TYPE_SELL ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
   score += addScore(bd, 'V3', 'Macro Signal', data.v3, v3p, 4)
   max += 4
 
-  const v4p = v4 === 'Sell' ? 5 : v4 === 'Hold' ? 0 : -3
+  const v4p = v4 === SIGNAL_SELL ? 5 : v4 === SIGNAL_HOLD ? 0 : -3
   score += addScore(bd, 'V4', 'Price Action', v4, v4p, 5)
   max += 5
 
   const emap =
-    data.indicators.ema === 'Sell' ? 3 : data.indicators.ema === 'Hold' ? 0 : -1
+    data.indicators.ema === SIGNAL_SELL ? 3 : data.indicators.ema === SIGNAL_HOLD ? 0 : -1
   score += addScore(bd, 'V4', 'EMA Crossover', data.indicators.ema, emap, 3)
   max += 3
 
   const rsip =
     data.indicators.rsi.signal === 'Overbought'
       ? 2
-      : data.indicators.rsi.signal === 'Hold'
+      : data.indicators.rsi.signal === SIGNAL_HOLD
         ? 1
         : -1
   score += addScore(
@@ -537,7 +558,7 @@ export function scoreBearish(
     }
 
     const pe = scoreNiftyPE(data.vrd.niftyPe?.pe ?? null)
-    if (pe.bias === 'PE') {
+    if (pe.bias === LEG_DIRECTION_PE) {
       max += pe.max
       score += addScore(
         bd,

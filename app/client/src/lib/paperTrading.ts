@@ -1,4 +1,11 @@
 import type { PaperAccountSummary } from './types'
+import {
+  API_PAPER_ACCOUNT,
+  API_PAPER_HISTORY,
+  API_PAPER_ACCOUNT_ADJUST,
+  API_PAPER_RESET,
+} from './constants'
+
 async function parseJson<T>(res: Response): Promise<T> {
   const data = (await res.json()) as T | { error?: string }
   if (!res.ok) {
@@ -15,12 +22,12 @@ async function parseJson<T>(res: Response): Promise<T> {
 }
 
 export async function fetchPaperAccount(): Promise<PaperAccountSummary> {
-  const res = await fetch('/api/paper/account')
+  const res = await fetch(API_PAPER_ACCOUNT)
   return parseJson<PaperAccountSummary>(res)
 }
 
 export async function fetchPaperHistory(): Promise<PaperAccountSummary> {
-  const res = await fetch('/api/paper/history')
+  const res = await fetch(API_PAPER_HISTORY)
   return parseJson<PaperAccountSummary>(res)
 }
 
@@ -29,7 +36,7 @@ export async function adjustPaperAccount(input: {
   mode?: 'set' | 'adjust'
   note?: string
 }): Promise<PaperAccountSummary> {
-  const res = await fetch('/api/paper/account/adjust', {
+  const res = await fetch(API_PAPER_ACCOUNT_ADJUST, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -38,7 +45,7 @@ export async function adjustPaperAccount(input: {
 }
 
 export async function resetPaperAccount(): Promise<PaperAccountSummary> {
-  const res = await fetch('/api/paper/reset', {
+  const res = await fetch(API_PAPER_RESET, {
     method: 'POST',
   })
   return parseJson<PaperAccountSummary>(res)

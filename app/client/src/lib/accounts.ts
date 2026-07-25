@@ -1,8 +1,12 @@
 import type { BrokerAccount } from './types'
 import { ACCOUNTS_CHANGED_EVENT } from './types'
+import {
+  STORAGE_KEY_BROKER_ACCOUNTS,
+  REMOTE_STATE_KEY_BROKER_ACCOUNTS,
+} from './constants'
 
-const STORAGE_KEY = 'algo-trade:broker-accounts'
-const REMOTE_STATE_KEY = 'brokerAccounts'
+const STORAGE_KEY = STORAGE_KEY_BROKER_ACCOUNTS
+const REMOTE_STATE_KEY = REMOTE_STATE_KEY_BROKER_ACCOUNTS
 
 import { loadRemoteState, saveRemoteState } from '@/lib/clientState'
 

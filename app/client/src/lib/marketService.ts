@@ -23,6 +23,7 @@ import {
   computeMMI,
   computeStraddleIV,
 } from './syntheticCalculators'
+import { MARKET_DATA_NSE_FO_INDEX_FUTURES, MARKET_DATA_NSE_EQ_CASH } from './constants'
 
 export type SourceStatus = 'ok' | 'error' | 'stale' | 'pending' | 'unknown'
 
@@ -142,7 +143,7 @@ export async function fetchGlobalMarketData(
   sourceUpdate('upstox/news', 'pending')
 
   const [vixRes, fiiRes, diiRes, newsRes] = await Promise.allSettled([
-    safeFetch<{ vix: number | null }>('/api/market/vix', {
+    safeFetch<{ vix: number | null }>(API_MARKET_VIX, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
@@ -159,7 +160,7 @@ export async function fetchGlobalMarketData(
           sell_amount: number
         }[]
       >
-    }>('/api/market/upstox/fii', {
+    }>(API_MARKET_FII, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
@@ -174,7 +175,7 @@ export async function fetchGlobalMarketData(
           sell_amount: number
         }[]
       >
-    }>('/api/market/upstox/dii', {
+    }>(API_MARKET_DII, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
@@ -182,7 +183,7 @@ export async function fetchGlobalMarketData(
     safeFetch<{
       status: string
       data?: Record<string, UpstoxNewsItem[]>
-    }>('/api/market/upstox/news', {
+    }>(API_MARKET_NEWS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -231,7 +232,7 @@ export async function fetchGlobalMarketData(
     fiiRes.value[0]?.data
   ) {
     const fiiData = fiiRes.value[0].data
-    const indexFutures = fiiData['NSE_FO|INDEX_FUTURES'] ?? []
+    const indexFutures = fiiData[MARKET_DATA_NSE_FO_INDEX_FUTURES] ?? []
     const sortedFii = [...indexFutures].sort(
       (a, b) => b.time_stamp - a.time_stamp,
     )
@@ -340,7 +341,7 @@ export async function fetchGlobalMarketData(
     diiRes.value[0]?.data
   ) {
     const diiData = diiRes.value[0].data
-    const cashList = diiData['NSE_EQ|CASH'] ?? []
+    const cashList = diiData[MARKET_DATA_NSE_EQ_CASH] ?? []
     const latestDii = [...cashList].sort(
       (a, b) => b.time_stamp - a.time_stamp,
     )[0]
@@ -418,7 +419,7 @@ export async function fetchSymbolSentiment(
   const [pcrRes, maxPainRes] = await Promise.allSettled([
     safeFetch<{
       value: number | null
-    }>('/api/market/upstox/pcr', {
+    }>(API_MARKET_PCR, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
@@ -428,7 +429,7 @@ export async function fetchSymbolSentiment(
       data?: {
         max_pain: number
       }
-    }>('/api/market/upstox/max-pain', {
+    }>(API_MARKET_MAX_PAIN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
@@ -640,7 +641,7 @@ export async function fetchMarket(
   const [candleRes, breadthRes, contractsRes, globalRes] =
     await Promise.allSettled([
       safeFetch<{ data?: { candles?: Candle[] } }>(
-        '/api/market/candles/intraday',
+        API_MARKET_CANDLES_INTRADAY,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -656,14 +657,14 @@ export async function fetchMarket(
         declines: number
         ratio: number
         total: number
-      }>('/api/market/breadth', {
+      }>(API_MARKET_BREADTH, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       }),
       safeFetch<{
         expiries?: string[]
-      }>('/api/market/option-contracts', {
+      }>(API_MARKET_OPTION_CONTRACTS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, instrumentKey: targetInstrumentKey }),
@@ -672,7 +673,7 @@ export async function fetchMarket(
         status: string
         data?: GlobalIndexItem[]
         giftNifty: VrdData['giftNifty']
-      }>('/api/market/upstox/global-indices', {
+      }>(API_MARKET_GLOBAL_INDICES, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -748,7 +749,7 @@ export async function fetchMarket(
     `No live expiry returned for ${underlyingSymbol} from Upstox option contracts`
   for (const candidate of expiryCandidates) {
     const [data, err] = await safeFetch<{ data?: OptionData[] }>(
-      '/api/market/option-chain',
+      API_MARKET_OPTION_CHAIN,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

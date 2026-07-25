@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
 import type { NotificationType, AppNotification } from './types'
+import { STORAGE_KEY_NOTIFICATIONS } from './constants'
 
 type Listener = (n: AppNotification[]) => void
 let notifications: AppNotification[] = []
@@ -8,7 +9,7 @@ let listeners: Listener[] = []
 
 function parseSaved() {
   try {
-    const saved = localStorage.getItem('algo-trade:notifications')
+    const saved = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS)
     if (saved) {
       notifications = JSON.parse(saved) as AppNotification[]
     }
@@ -21,7 +22,7 @@ parseSaved()
 function save() {
   try {
     localStorage.setItem(
-      'algo-trade:notifications',
+      STORAGE_KEY_NOTIFICATIONS,
       JSON.stringify(notifications.slice(0, 100)),
     )
   } catch {

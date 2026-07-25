@@ -7,6 +7,7 @@ import {
   useNotifications,
   requestNotificationPermission,
 } from '@/lib/notifications'
+import { API_MARKET_INDICES } from '@/lib/constants'
 import { useAuth0 } from '@auth0/auth0-react'
 import { isAuth0Enabled } from '@/lib/auth0-config'
 
@@ -82,7 +83,7 @@ function useIndices(isMarketOpen: boolean) {
     const account = getAccounts().find((a) => a.accessToken)
     if (!account?.accessToken) return
     try {
-      const res = await fetch('/api/market/indices', {
+      const res = await fetch(API_MARKET_INDICES, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: account.accessToken }),

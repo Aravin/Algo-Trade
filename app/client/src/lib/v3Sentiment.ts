@@ -12,6 +12,11 @@ import {
   globalNiftyMapping,
   marketStrategyMapping,
 } from './types'
+import {
+  ORDER_TYPE_BUY,
+  ORDER_TYPE_SELL,
+  ORDER_TYPE_HOLD,
+} from './constants'
 
 // Symbols to exclude from global sentiment scoring (none currently needed for Upstox)
 
@@ -79,9 +84,9 @@ export function evaluateNiftySentiment(
 
 export function evaluatePCR(pcr: number): PcrZone {
   if (pcr >= 1.6) return 'overbought'
-  if (pcr > 1) return 'buy'
+  if (pcr > 1) return ORDER_TYPE_BUY
   if (pcr <= 0.6) return 'oversold'
-  if (pcr < 1) return 'sell'
+  if (pcr < 1) return ORDER_TYPE_SELL
   return 'neutral'
 }
 
@@ -97,12 +102,12 @@ export function getV3Signal(
       v.globalSentiment === globalSentiment &&
       v.marketSentiment === niftySentiment,
   )
-  if (!globalMap?.canTrade) return 'hold'
+  if (!globalMap?.canTrade) return ORDER_TYPE_HOLD
   const strategyMap = marketStrategyMapping.find(
     (v) =>
       v.marketSentiment === niftySentiment &&
       v.putCallRatio === pcr &&
       v.orderType !== null,
   )
-  return (strategyMap?.orderType as V3OrderType) ?? 'hold'
+  return (strategyMap?.orderType as V3OrderType) ?? ORDER_TYPE_HOLD
 }

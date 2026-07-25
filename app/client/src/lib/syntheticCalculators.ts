@@ -4,9 +4,10 @@ import type {
   IndicatorsResult,
   ActivePosition,
 } from '@/lib/types'
+import { STORAGE_KEY_PROXY_HISTORY } from './constants'
 
 const KEYS = {
-  proxyHistory: 'algo-trade:proxy-history',
+  proxyHistory: STORAGE_KEY_PROXY_HISTORY,
 }
 
 export function clamp(value: number, min: number, max: number): number {

@@ -1,3 +1,5 @@
+import { API_CLIENT_STATE } from './constants'
+
 interface ClientStateResponse<T> {
   value: T | null
 }
@@ -8,7 +10,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 
 export async function loadRemoteState<T>(key: string): Promise<T | null> {
   const response = await fetch(
-    `/api/client-state?key=${encodeURIComponent(key)}`,
+    `${API_CLIENT_STATE}?key=${encodeURIComponent(key)}`,
   )
   if (!response.ok) {
     throw new Error(
@@ -20,7 +22,7 @@ export async function loadRemoteState<T>(key: string): Promise<T | null> {
 }
 
 export async function saveRemoteState<T>(key: string, value: T): Promise<void> {
-  const response = await fetch('/api/client-state', {
+  const response = await fetch(API_CLIENT_STATE, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key, value }),

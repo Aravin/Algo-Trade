@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
+import { STORAGE_KEY_BOT_POSITION } from '@/lib/constants'
 
 function fmtCurrency(value: number, signed = false) {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
@@ -177,9 +178,7 @@ export function HistoryPage() {
 
                   if (trade.status === 'OPEN') {
                     try {
-                      const rawPos = localStorage.getItem(
-                        'algo-trade:bot-position',
-                      )
+                      const rawPos = localStorage.getItem(STORAGE_KEY_BOT_POSITION)
                       if (rawPos) {
                         const botPos = JSON.parse(rawPos) as {
                           instrumentKey?: string

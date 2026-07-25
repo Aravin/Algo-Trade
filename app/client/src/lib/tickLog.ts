@@ -1,3 +1,5 @@
+import { STORAGE_KEY_TICK_LOG, MAX_TICKS } from './constants'
+
 /**
  * tickLog.ts — Rolling per-tick score log for threshold backtesting.
  *
@@ -23,8 +25,7 @@ export interface TickRecord {
   moderateGap: number
 }
 
-const KEY = 'algo-trade:tick-log'
-const MAX_TICKS = 500
+const KEY = STORAGE_KEY_TICK_LOG
 
 export function appendTick(record: TickRecord): void {
   try {

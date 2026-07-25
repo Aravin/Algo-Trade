@@ -33,6 +33,14 @@ import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { cn, isToday, normalizeLiveStatus } from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
+import {
+  STORAGE_KEY_LIVE_TRADES_PAGE_MODE,
+  STORAGE_KEY_BOT_POSITION,
+  STORAGE_KEY_BOT_STATE,
+  API_UPSTOX_FUNDS,
+  API_ORDER_LIST,
+  API_MARKET_QUOTES,
+} from '@/lib/constants'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,7 +115,7 @@ interface Dataset {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MODE_STORAGE_KEY = 'algo-trade:livetradespage-mode'
+const MODE_STORAGE_KEY = STORAGE_KEY_LIVE_TRADES_PAGE_MODE
 
 function activeModeDefault(): TradeMode {
   try {
@@ -200,7 +208,7 @@ interface UpstoxFundsResponse {
 }
 
 async function fetchFunds(token: string): Promise<UpstoxFundsV3> {
-  const res = await fetch('/api/broker/upstox/funds', {
+  const res = await fetch(API_UPSTOX_FUNDS, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
@@ -224,7 +232,7 @@ interface UpstoxOrderResponse {
 type OrderPayload = UpstoxOrderResponse | LiveOrder[]
 
 async function fetchOrders(token: string): Promise<LiveOrder[]> {
-  const res = await fetch('/api/order/list', {
+  const res = await fetch(API_ORDER_LIST, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
@@ -262,7 +270,7 @@ async function fetchQuotes(
   token: string,
   instrumentKeys: string,
 ): Promise<Record<string, { last_price?: number }>> {
-  const res = await fetch('/api/market/quotes', {
+  const res = await fetch(API_MARKET_QUOTES, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, instrumentKeys }),
@@ -363,7 +371,7 @@ function buildPaperDataset(
 
     if (ltp === null) {
       try {
-        const rawPos = localStorage.getItem('algo-trade:bot-position')
+        const rawPos = localStorage.getItem(STORAGE_KEY_BOT_POSITION)
         if (rawPos) {
           const botPos = JSON.parse(rawPos) as {
             instrumentKey?: string
@@ -971,7 +979,7 @@ export function LiveTradesPage() {
   const token = getAccounts().find((a) => a.accessToken)?.accessToken ?? null
 
   const [botState, setBotState] = useState<string | null>(() =>
-    localStorage.getItem('algo-trade:bot-state'),
+    localStorage.getItem(STORAGE_KEY_BOT_STATE),
   )
   const [activeConfigMode, setActiveConfigMode] = useState<TradeMode>(
     () => getStrategyConfig().executionMode,
@@ -979,7 +987,7 @@ export function LiveTradesPage() {
 
   useEffect(() => {
     const handleStorage = () => {
-      setBotState(localStorage.getItem('algo-trade:bot-state'))
+      setBotState(localStorage.getItem(STORAGE_KEY_BOT_STATE))
       setActiveConfigMode(getStrategyConfig().executionMode)
     }
     window.addEventListener('storage', handleStorage)
