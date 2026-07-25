@@ -1,4 +1,5 @@
 import { ACCOUNTS_CHANGED_EVENT } from '@/lib/types'
+import { STORAGE_KEY_LIVE_TRADES_PAGE_MODE, STORAGE_KEY_STRATEGY_CONFIG, API_PAPER_ACCOUNT, API_ORDER_LIST } from '@/lib/constants'
 import { useEffect, useState } from 'react'
 import {
   Clock,
@@ -85,13 +86,13 @@ function useActiveTradesCount() {
 
     function getCurrentMode(): 'live' | 'paper' {
       try {
-        const stored = localStorage.getItem('algo-trade:livetradespage-mode')
+        const stored = localStorage.getItem(STORAGE_KEY_LIVE_TRADES_PAGE_MODE)
         if (stored === 'live' || stored === 'paper') return stored
       } catch {
         // ignore
       }
       try {
-        const configRaw = localStorage.getItem('algo-trade:strategy-config')
+        const configRaw = localStorage.getItem(STORAGE_KEY_STRATEGY_CONFIG)
         if (configRaw) {
           const parsed = JSON.parse(configRaw) as {
             executionMode?: string
@@ -113,7 +114,7 @@ function useActiveTradesCount() {
       try {
         const mode = getCurrentMode()
         if (mode === 'paper') {
-          const res = await fetch('/api/paper/account')
+          const res = await fetch(API_PAPER_ACCOUNT)
           if (!res.ok) return
           const summary: PaperAccountResponse = await res.json()
           if (active && typeof summary?.openTradeCount === 'number') {
@@ -133,7 +134,7 @@ function useActiveTradesCount() {
             if (active) setCount(0)
             return
           }
-          const res = await fetch('/api/order/list', {
+          const res = await fetch(API_ORDER_LIST, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token }),

@@ -1,9 +1,13 @@
 import { loadRemoteState, saveRemoteState } from '@/lib/clientState'
 import type { StrategyConfig } from './types'
 import { DEFAULT_CONFIG } from './types'
+import {
+  STORAGE_KEY_STRATEGY_CONFIG,
+  REMOTE_STATE_KEY_STRATEGY_CONFIG,
+} from './constants'
 
-const KEY = 'algo-trade:strategy-config'
-const REMOTE_STATE_KEY = 'strategyConfig'
+const KEY = STORAGE_KEY_STRATEGY_CONFIG
+const REMOTE_STATE_KEY = REMOTE_STATE_KEY_STRATEGY_CONFIG
 
 function readStoredStrategyConfig(): Partial<StrategyConfig> | null {
   const raw = localStorage.getItem(KEY)

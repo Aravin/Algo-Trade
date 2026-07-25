@@ -8,6 +8,7 @@ import { AuthService } from '@/lib/auth'
 import { isAuth0Enabled } from '@/lib/auth0-config'
 import { ArrowRight } from 'lucide-react'
 import { AppLogo } from '@/components/ui/app-logo'
+import { ALGO_TRADE_PREFIX } from '@/lib/constants'
 import './App.css'
 
 const BrokerAccountsPage = lazy(() =>
@@ -98,17 +99,17 @@ function App() {
     const currentUserId = auth0Enabled
       ? (user?.sub ?? 'local-dev-user')
       : 'local-dev-user'
-    const storedUser = localStorage.getItem('algo-trade:active-user')
+    const storedUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER)
     if (storedUser !== currentUserId) {
       const keysToRemove: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
-        if (key?.startsWith('algo-trade:')) {
+        if (key?.startsWith(ALGO_TRADE_PREFIX + ':')) {
           keysToRemove.push(key)
         }
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key))
-      localStorage.setItem('algo-trade:active-user', currentUserId)
+      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, currentUserId)
     }
 
     let cancelled = false

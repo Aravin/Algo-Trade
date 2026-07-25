@@ -43,6 +43,24 @@ import {
   fetchGlobalMarketData,
   fetchSymbolSentiment,
 } from '@/lib/marketService'
+import {
+  STORAGE_KEY_BOT_STATE,
+  STORAGE_KEY_BOT_POSITION,
+  STORAGE_KEY_BOT_POSITIONS,
+  STORAGE_KEY_BOT_TRADES_TODAY,
+  STORAGE_KEY_BOT_TRADES_PER_SYMBOL,
+  STORAGE_KEY_BOT_TRADES_DATE,
+  STORAGE_KEY_VRD_CACHE,
+  STORAGE_KEY_BOT_LOGS,
+  STORAGE_KEY_BOT_SNAPSHOT,
+  STORAGE_KEY_BOT_EXIT_TIMES,
+  MAX_LOGS,
+  VRD_CACHE_MAX_MS,
+  COOLDOWN_MS,
+  API_PAPER_TRADES_ENTER,
+  API_PAPER_TRADES_EXIT,
+  API_ORDER_PLACE,
+} from '@/lib/constants'
 
 export type { SourceStatus, BotLog, GlobalIndexItem }
 
@@ -76,19 +94,19 @@ export interface BotStatus {
 
 // ─── LocalStorage keys ─────────────────────────────────────────────────────────
 const KEYS = {
-  state: 'algo-trade:bot-state',
-  position: 'algo-trade:bot-position',
-  positions: 'algo-trade:bot-positions',
-  trades: 'algo-trade:bot-trades-today',
-  tradesPerSymbol: 'algo-trade:bot-trades-per-symbol',
-  date: 'algo-trade:bot-trades-date',
-  vrdCache: 'algo-trade:vrd-cache', // { data: VrdData; savedAt: string }
-  logs: 'algo-trade:bot-logs', // BotLog[] (last 200)
-  snapshot: 'algo-trade:bot-snapshot',
-  exitTimes: 'algo-trade:bot-last-exit-times',
+  state: STORAGE_KEY_BOT_STATE,
+  position: STORAGE_KEY_BOT_POSITION,
+  positions: STORAGE_KEY_BOT_POSITIONS,
+  trades: STORAGE_KEY_BOT_TRADES_TODAY,
+  tradesPerSymbol: STORAGE_KEY_BOT_TRADES_PER_SYMBOL,
+  date: STORAGE_KEY_BOT_TRADES_DATE,
+  vrdCache: STORAGE_KEY_VRD_CACHE, // { data: VrdData; savedAt: string }
+  logs: STORAGE_KEY_BOT_LOGS, // BotLog[] (last 200)
+  snapshot: STORAGE_KEY_BOT_SNAPSHOT,
+  exitTimes: STORAGE_KEY_BOT_EXIT_TIMES,
 }
-const MAX_LOGS = 200
-const VRD_CACHE_MAX_MS = 30 * 60 * 1000 // 30 minutes
+
+
 
 function loadExitTimes(): Record<string, number> {
   try {
@@ -873,7 +891,7 @@ export function useStrategyBot(token: string | null) {
               const [paperData, paperErr] = await safeFetch<{
                 trade?: PaperTrade
                 account?: PaperAccountSummary['account']
-              }>('/api/paper/trades/enter', {
+              }>(API_PAPER_TRADES_ENTER, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -922,7 +940,7 @@ export function useStrategyBot(token: string | null) {
               const [orderData, orderErr] = await safeFetch<{
                 status?: string
                 data?: { order_id?: string }
-              }>('/api/order/place', {
+              }>(API_ORDER_PLACE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1014,7 +1032,7 @@ export function useStrategyBot(token: string | null) {
               for (const leg of positionLegs) {
                 if (leg.paperTradeId) {
                   const [, rollbackErr] = await safeFetch(
-                    '/api/paper/trades/exit',
+                    API_PAPER_TRADES_EXIT,
                     {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -1051,7 +1069,7 @@ export function useStrategyBot(token: string | null) {
               const failedExitLegs: PositionLeg[] = []
               for (const leg of positionLegs) {
                 const exitTxType = leg.tradeType === 'selling' ? 'BUY' : 'SELL'
-                const [, exitErr] = await safeFetch('/api/order/place', {
+                const [, exitErr] = await safeFetch(API_ORDER_PLACE, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -1245,7 +1263,7 @@ export function useStrategyBot(token: string | null) {
                 ),
               )
               const [, paperExitErr] = await safeFetch(
-                '/api/paper/trades/exit',
+                API_PAPER_TRADES_EXIT,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -1302,7 +1320,7 @@ export function useStrategyBot(token: string | null) {
                   `[${sym}] exit triggered: ${reason} — placing ${exitTxType} for ${leg.instrumentKey}`,
                 ),
               )
-              const [, sellErr] = await safeFetch('/api/order/place', {
+              const [, sellErr] = await safeFetch(API_ORDER_PLACE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

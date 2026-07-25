@@ -2,6 +2,7 @@ import type { BrokerPurpose } from '@/lib/types'
 import { useEffect, useState } from 'react'
 import { CheckCircle, Loader2, XCircle } from 'lucide-react'
 import { addAccount, updateAccount } from '@/lib/accounts'
+import { API_UPSTOX_TOKEN } from '@/lib/constants'
 
 interface PendingAccount {
   id: string
@@ -48,7 +49,7 @@ export function BrokerCallbackPage() {
 
     const pending = JSON.parse(raw) as PendingAccount
 
-    fetch('/api/broker/upstox/token', {
+    fetch(API_UPSTOX_TOKEN, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
