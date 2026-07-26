@@ -23,7 +23,21 @@ import {
   computeMMI,
   computeStraddleIV,
 } from './syntheticCalculators'
-import { MARKET_DATA_NSE_FO_INDEX_FUTURES, MARKET_DATA_NSE_EQ_CASH } from './constants'
+import {
+  MARKET_DATA_NSE_FO_INDEX_FUTURES,
+  MARKET_DATA_NSE_EQ_CASH,
+  API_MARKET_VIX,
+  API_MARKET_FII,
+  API_MARKET_DII,
+  API_MARKET_NEWS,
+  API_MARKET_PCR,
+  API_MARKET_MAX_PAIN,
+  API_MARKET_CANDLES_INTRADAY,
+  API_MARKET_BREADTH,
+  API_MARKET_OPTION_CONTRACTS,
+  API_MARKET_GLOBAL_INDICES,
+  API_MARKET_OPTION_CHAIN,
+} from './constants'
 
 export type SourceStatus = 'ok' | 'error' | 'stale' | 'pending' | 'unknown'
 
