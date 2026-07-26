@@ -10,7 +10,7 @@ export type Env = PaperTradeEnv
 
 export interface PaperAccountRow {
   id: string
-  mode: string
+  mode: PaperAccountMode
   balance: number
   currency: string
   updated_at: string
@@ -18,7 +18,7 @@ export interface PaperAccountRow {
 
 export interface PaperStatementRow {
   id: string
-  entry_type: string
+  entry_type: PaperEntryType
   amount: number
   balance_before: number
   balance_after: number
@@ -27,12 +27,23 @@ export interface PaperStatementRow {
   created_at: string
 }
 
+export type PaperTradeStatus = 'OPEN' | 'CLOSED' | 'CANCELLED'
+export type PaperTradeDirection = 'CE' | 'PE'
+export type PaperEntryType =
+  | 'seed'
+  | 'reset'
+  | 'paper_entry'
+  | 'paper_exit'
+  | 'manual_set'
+  | 'manual_adjust'
+export type PaperAccountMode = 'paper' | 'live'
+
 export interface PaperTradeRow {
   id: string
   account_id: string
-  status: string
+  status: PaperTradeStatus
   instrument_key: string
-  direction: string
+  direction: PaperTradeDirection
   quantity: number
   entry_price: number
   entry_value: number

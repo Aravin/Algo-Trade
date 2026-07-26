@@ -16,8 +16,6 @@ export async function handleGlobalIndices(): Promise<Response> {
   try {
     upstream = await fetchWithTimeout(GLOBAL_INDICES_URL, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         Accept: 'application/json',
       },
     })
@@ -60,7 +58,7 @@ export async function handleGlobalIndices(): Promise<Response> {
 
   const normalized = allItems.map((item) => ({
     symbol: item.displayName,
-    last_price: item.price ?? 0,
+    last_price: item.price ?? null,
     change_per: item.change ?? 0,
   }))
 

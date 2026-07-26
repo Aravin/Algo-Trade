@@ -855,11 +855,11 @@ export async function fetchMarket(
   }
 
   const totalPut = optionChain.reduce(
-    (sum, item) => sum + item.put_options.market_data.oi,
+    (sum, item) => sum + (item.put_options.market_data.oi ?? 0),
     0,
   )
   const totalCall = optionChain.reduce(
-    (sum, item) => sum + item.call_options.market_data.oi,
+    (sum, item) => sum + (item.call_options.market_data.oi ?? 0),
     0,
   )
   if (totalCall > 0) {

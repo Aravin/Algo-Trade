@@ -6,24 +6,53 @@ import type {
 } from './types'
 import { nowIso, makeId, getLotSizeForSymbol } from './utils'
 
-const PAPER_STARTING_CREDIT = 15000_00 // in paise (₹15000)
+const PAPER_STARTING_CREDIT = 15000_00
+const PAPER_BROKERAGE_PAISE = 20_00
+
+function toPaise(value: number): number {
+  return Math.round(value * 100)
+}
+
+function toRupees(paise: number): number {
+  return Math.round(paise) / 100
+}
 
 export function calculateOptionCharges(
   tradeValuePaise: number,
   isSelling: boolean,
 ): { totalCharges: number; brokerage: number; statutoryTaxes: number } {
-  const brokerage = 20_00 // ₹20 in paise
+  const brokerage = PAPER_BROKERAGE_PAISE
   const stt = isSelling ? Math.round(tradeValuePaise * 0.001) : 0
   const stampDuty = !isSelling ? Math.round(tradeValuePaise * 0.00003) : 0
-  const exchangeFee = Math.round(tradeValuePaise * 0.0005)
+  const exchangeFee = Math.round(tradeValuePaise * 0.0003503)
   const gst = Math.round((brokerage + exchangeFee) * 0.18)
   const statutoryTaxes = stt + stampDuty + exchangeFee + gst
   const totalCharges = brokerage + statutoryTaxes
   return { totalCharges, brokerage, statutoryTaxes }
 }
 
-function toRupees(paise: number): number {
-  return Math.round(paise) / 100
+function toResponseAccount(row: PaperAccountRow): PaperAccountRow {
+  return { ...row, balance: toRupees(row.balance) }
+}
+
+function toResponseTrade(row: PaperTradeRow): PaperTradeRow {
+  return {
+    ...row,
+    entry_price: toRupees(row.entry_price),
+    entry_value: toRupees(row.entry_value),
+    exit_price: row.exit_price != null ? toRupees(row.exit_price) : null,
+    exit_value: row.exit_value != null ? toRupees(row.exit_value) : null,
+    realized_pnl: row.realized_pnl != null ? toRupees(row.realized_pnl) : null,
+  }
+}
+
+function toResponseStatement(row: PaperStatementRow): PaperStatementRow {
+  return {
+    ...row,
+    amount: toRupees(row.amount),
+    balance_before: toRupees(row.balance_before),
+    balance_after: toRupees(row.balance_after),
+  }
 }
 
 export async function ensurePaperAccount(
@@ -35,7 +64,7 @@ export async function ensurePaperAccount(
   const accountResult = await env.PAPER_TRADING_DB.prepare(
     'INSERT OR IGNORE INTO paper_accounts (id, mode, balance, currency, updated_at) VALUES (?, ?, ?, ?, ?)',
   )
-    .bind(userId, 'paper', toRupees(PAPER_STARTING_CREDIT), 'INR', createdAt)
+    .bind(userId, 'paper', PAPER_STARTING_CREDIT, 'INR', createdAt)
     .run()
 
   if (accountResult.meta.changes === 1) {
@@ -46,9 +75,9 @@ export async function ensurePaperAccount(
         makeId('stmt'),
         userId,
         'seed',
-        toRupees(PAPER_STARTING_CREDIT),
+        PAPER_STARTING_CREDIT,
         0,
-        toRupees(PAPER_STARTING_CREDIT),
+        PAPER_STARTING_CREDIT,
         'Initial paper trading credit',
         JSON.stringify({ source: 'system-seed' }),
         createdAt,
@@ -66,15 +95,14 @@ export async function ensurePaperAccount(
   return row
 }
 
-export async function getPaperAccountSummary(
+async function fetchAccountSummary(
   env: Env,
-  userId: string,
+  account: PaperAccountRow,
 ): Promise<{
   account: PaperAccountRow
   recentEntries: PaperStatementRow[]
   openTradeCount: number
 }> {
-  const account = await ensurePaperAccount(env, userId)
   const recentEntries = await env.PAPER_TRADING_DB.prepare(
     'SELECT id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at FROM paper_statement_entries WHERE account_id = ? ORDER BY created_at DESC LIMIT 20',
   )
@@ -91,6 +119,18 @@ export async function getPaperAccountSummary(
     recentEntries: recentEntries.results ?? [],
     openTradeCount: Number(openTradeCountRow?.count ?? 0),
   }
+}
+
+export async function getPaperAccountSummary(
+  env: Env,
+  userId: string,
+): Promise<{
+  account: PaperAccountRow
+  recentEntries: PaperStatementRow[]
+  openTradeCount: number
+}> {
+  const account = await ensurePaperAccount(env, userId)
+  return fetchAccountSummary(env, account)
 }
 
 export async function listPaperTrades(
@@ -112,10 +152,15 @@ export async function handlePaperAccount(
 ): Promise<Response> {
   try {
     const summary = await getPaperAccountSummary(env, userId)
-    return Response.json(summary)
+    return Response.json({
+      ...summary,
+      account: toResponseAccount(summary.account),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+    })
   } catch (error) {
+    console.error('Failed to load paper account:', error)
     return Response.json(
-      { error: `Failed to load paper account: ${String(error)}` },
+      { error: 'Failed to load paper account' },
       { status: 500 },
     )
   }
@@ -130,10 +175,16 @@ export async function handlePaperHistory(
       getPaperAccountSummary(env, userId),
       listPaperTrades(env, userId),
     ])
-    return Response.json({ ...summary, trades })
+    return Response.json({
+      ...summary,
+      account: toResponseAccount(summary.account),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+      trades: trades.map(toResponseTrade),
+    })
   } catch (error) {
+    console.error('Failed to load paper history:', error)
     return Response.json(
-      { error: `Failed to load paper history: ${String(error)}` },
+      { error: 'Failed to load paper history' },
       { status: 500 },
     )
   }
@@ -168,54 +219,107 @@ export async function handlePaperAccountAdjust(
 
   try {
     const account = await ensurePaperAccount(env, userId)
-    const balanceBeforePaise = Math.round(account.balance * 100)
-    const amountPaise = Math.round(amount * 100)
-    const balanceAfterPaise =
-      mode === 'set' ? amountPaise : balanceBeforePaise + amountPaise
-    if (balanceAfterPaise < 0) {
+    const amountPaise = toPaise(amount)
+    const updatedAt = nowIso()
+
+    if (mode === 'set') {
+      if (amountPaise < 0) {
+        return Response.json(
+          { error: 'Paper credit cannot go below zero' },
+          { status: 400 },
+        )
+      }
+      const balanceAfterPaise = amountPaise
+
+      const results = await env.PAPER_TRADING_DB.batch([
+        env.PAPER_TRADING_DB.prepare(
+          `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
+           SELECT ?, ?, ?, ? - balance, balance, ?, ?, ?, ?
+           FROM paper_accounts WHERE id = ?`,
+        ).bind(
+          makeId('stmt'),
+          account.id,
+          'manual_set',
+          balanceAfterPaise,
+          balanceAfterPaise,
+          body.note ?? 'Manual paper credit set',
+          JSON.stringify({ source: 'admin-ui', requestedAmount: amount, mode }),
+          updatedAt,
+          account.id,
+        ),
+        env.PAPER_TRADING_DB.prepare(
+          'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
+        ).bind(balanceAfterPaise, updatedAt, account.id),
+      ])
+      if (results[0].meta.changes === 0) {
+        return Response.json({ error: 'Account not found' }, { status: 404 })
+      }
+
+      const freshAccount = await env.PAPER_TRADING_DB.prepare(
+        'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
+      )
+        .bind(account.id)
+        .first<PaperAccountRow>()
+      const summary = await fetchAccountSummary(env, account)
+      return Response.json({
+        ...summary,
+        account: toResponseAccount(freshAccount ?? account),
+        recentEntries: summary.recentEntries.map(toResponseStatement),
+      })
+    }
+
+    if (account.balance + amountPaise < 0) {
       return Response.json(
         { error: 'Paper credit cannot go below zero' },
         { status: 400 },
       )
     }
 
-    const updatedAt = nowIso()
-    const delta =
-      mode === 'set' ? balanceAfterPaise - balanceBeforePaise : amountPaise
-    const result = await env.PAPER_TRADING_DB.prepare(
-      'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
-    )
-      .bind(toRupees(balanceAfterPaise), updatedAt, account.id)
-      .run()
-
-    if (result.meta.changes === 0) {
+    const results = await env.PAPER_TRADING_DB.batch([
+      env.PAPER_TRADING_DB.prepare(
+        `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
+         SELECT ?, ?, ?, ?, balance, balance + ?, ?, ?, ?
+         FROM paper_accounts WHERE id = ?`,
+      ).bind(
+        makeId('stmt'),
+        account.id,
+        'manual_adjust',
+        amountPaise,
+        amountPaise,
+        body.note ?? 'Manual paper credit adjustment',
+        JSON.stringify({ source: 'admin-ui', requestedAmount: amount, mode }),
+        updatedAt,
+        account.id,
+      ),
+      env.PAPER_TRADING_DB.prepare(
+        'UPDATE paper_accounts SET balance = balance + ?, updated_at = ? WHERE id = ?',
+      ).bind(amountPaise, updatedAt, account.id),
+    ])
+    if (results[0].meta.changes === 0) {
       return Response.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    await env.PAPER_TRADING_DB.prepare(
-      'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    const freshAccount = await env.PAPER_TRADING_DB.prepare(
+      'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
     )
-      .bind(
-        makeId('stmt'),
-        account.id,
-        mode === 'set' ? 'manual_set' : 'manual_adjust',
-        toRupees(delta),
-        account.balance,
-        toRupees(balanceAfterPaise),
-        body.note ??
-          (mode === 'set'
-            ? 'Manual paper credit set'
-            : 'Manual paper credit adjustment'),
-        JSON.stringify({ source: 'admin-ui', requestedAmount: amount, mode }),
-        updatedAt,
-      )
-      .run()
-
-    const summary = await getPaperAccountSummary(env, userId)
-    return Response.json(summary)
+      .bind(account.id)
+      .first<PaperAccountRow>()
+    const summary = await fetchAccountSummary(env, account)
+    return Response.json({
+      ...summary,
+      account: toResponseAccount(
+        freshAccount ?? {
+          ...account,
+          balance: account.balance + amountPaise,
+          updated_at: updatedAt,
+        },
+      ),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+    })
   } catch (error) {
+    console.error('Failed to update paper account:', error)
     return Response.json(
-      { error: `Failed to update paper account: ${String(error)}` },
+      { error: 'Failed to update paper account' },
       { status: 500 },
     )
   }
@@ -228,6 +332,22 @@ export async function handlePaperReset(
   try {
     const account = await ensurePaperAccount(env, userId)
     const updatedAt = nowIso()
+
+    const openTradeCountRow = await env.PAPER_TRADING_DB.prepare(
+      'SELECT COUNT(*) as count FROM paper_trades WHERE account_id = ? AND status = ?',
+    )
+      .bind(account.id, 'OPEN')
+      .first<{ count: number }>()
+    const openTradeCount = Number(openTradeCountRow?.count ?? 0)
+    if (openTradeCount > 0) {
+      return Response.json(
+        {
+          error: `Cannot reset account with ${openTradeCount} open trade(s). Close all trades first.`,
+        },
+        { status: 409 },
+      )
+    }
+
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
         'DELETE FROM paper_statement_entries WHERE account_id = ?',
@@ -236,31 +356,39 @@ export async function handlePaperReset(
         'DELETE FROM paper_trades WHERE account_id = ?',
       ).bind(account.id),
       env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
-      ).bind(toRupees(PAPER_STARTING_CREDIT), updatedAt, account.id),
-      env.PAPER_TRADING_DB.prepare(
-        'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
+         SELECT ?, ?, ?, ? - balance, balance, ?, ?, ?, ?
+         FROM paper_accounts WHERE id = ?`,
       ).bind(
         makeId('stmt'),
         account.id,
         'reset',
-        toRupees(PAPER_STARTING_CREDIT - Math.round(account.balance * 100)),
-        account.balance,
-        toRupees(PAPER_STARTING_CREDIT),
+        PAPER_STARTING_CREDIT,
+        PAPER_STARTING_CREDIT,
         'Paper account reset to starting credit',
         JSON.stringify({ source: 'admin-ui-reset' }),
         updatedAt,
+        account.id,
       ),
+      env.PAPER_TRADING_DB.prepare(
+        'UPDATE paper_accounts SET balance = ?, updated_at = ? WHERE id = ?',
+      ).bind(PAPER_STARTING_CREDIT, updatedAt, account.id),
     ])
 
     const [summary, trades] = await Promise.all([
       getPaperAccountSummary(env, userId),
       listPaperTrades(env, userId),
     ])
-    return Response.json({ ...summary, trades })
+    return Response.json({
+      ...summary,
+      account: toResponseAccount(summary.account),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+      trades: trades.map(toResponseTrade),
+    })
   } catch (error) {
+    console.error('Failed to reset paper account:', error)
     return Response.json(
-      { error: `Failed to reset paper account: ${String(error)}` },
+      { error: 'Failed to reset paper account' },
       { status: 500 },
     )
   }
@@ -324,75 +452,37 @@ export async function handlePaperTradeEnter(
 
   try {
     const account = await ensurePaperAccount(env, userId)
-    const entryValuePaise = Math.round(entryPrice * quantity * 100)
+    const entryPricePaise = toPaise(entryPrice)
+    const entryValuePaise = Math.round(entryPricePaise * quantity)
     const tradeType = metadataObj?.tradeType ?? 'buying'
     const isSelling = tradeType === 'selling'
     const charges = calculateOptionCharges(entryValuePaise, isSelling)
 
-    const marginPerLotPaise = Math.round((body.marginPerLot ?? 4000) * 100)
-    const marginBlocked = isSelling
+    const marginPerLotPaise = toPaise(body.marginPerLot ?? 100000)
+    const marginBlockedPaise = isSelling
       ? (quantity / lotSize) * marginPerLotPaise
       : 0
 
     const netChangePaise = isSelling
-      ? entryValuePaise - charges.totalCharges - marginBlocked
+      ? entryValuePaise - charges.totalCharges - marginBlockedPaise
       : -(entryValuePaise + charges.totalCharges)
-
-    if (netChangePaise >= 0) {
-      const result = await env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_accounts SET balance = balance + ?, updated_at = ? WHERE id = ?',
-      )
-        .bind(toRupees(netChangePaise), nowIso(), account.id)
-        .run()
-      if (result.meta.changes === 0) {
-        return Response.json({ error: 'Account not found' }, { status: 404 })
-      }
-    } else {
-      const deductPaise = -netChangePaise
-      const result = await env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_accounts SET balance = balance - ?, updated_at = ? WHERE id = ? AND balance >= ?',
-      )
-        .bind(
-          toRupees(deductPaise),
-          nowIso(),
-          account.id,
-          toRupees(deductPaise),
-        )
-        .run()
-      if (result.meta.changes === 0) {
-        const current = await env.PAPER_TRADING_DB.prepare(
-          'SELECT balance FROM paper_accounts WHERE id = ?',
-        )
-          .bind(account.id)
-          .first<{ balance: number }>()
-        return Response.json(
-          {
-            error: `Insufficient paper credit. Required ${toRupees(deductPaise)}, available ${current?.balance ?? account.balance}`,
-          },
-          { status: 400 },
-        )
-      }
-    }
 
     const tradeId = makeId('paper_trade')
     const createdAt = nowIso()
-    const balanceAfter = await env.PAPER_TRADING_DB.prepare(
-      'SELECT balance FROM paper_accounts WHERE id = ?',
-    )
-      .bind(account.id)
-      .first<{ balance: number }>()
 
     const tradeMetadata = {
       ...(typeof body.metadata === 'object' && body.metadata !== null
         ? body.metadata
         : {}),
       entryCharges: charges,
-      marginBlocked: toRupees(marginBlocked),
+      marginBlocked: toRupees(marginBlockedPaise),
     }
 
-    await env.PAPER_TRADING_DB.batch([
+    const results = await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
-        'INSERT INTO paper_trades (id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, opened_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO paper_trades (id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, opened_at, metadata_json)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE ? >= 0 OR (SELECT balance FROM paper_accounts WHERE id = ?) >= ?`,
       ).bind(
         tradeId,
         account.id,
@@ -400,20 +490,25 @@ export async function handlePaperTradeEnter(
         body.instrumentKey,
         body.direction,
         quantity,
-        entryPrice,
-        toRupees(entryValuePaise),
+        entryPricePaise,
+        entryValuePaise,
         createdAt,
         JSON.stringify(tradeMetadata),
+        netChangePaise,
+        account.id,
+        -netChangePaise,
       ),
       env.PAPER_TRADING_DB.prepare(
-        'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
+         SELECT ?, ?, ?, ?, balance, balance + ?, ?, ?, ?
+         FROM paper_accounts
+         WHERE id = ? AND (? >= 0 OR balance >= ?)`,
       ).bind(
         makeId('stmt'),
         account.id,
         'paper_entry',
-        toRupees(netChangePaise),
-        account.balance,
-        balanceAfter?.balance ?? toRupees(PAPER_STARTING_CREDIT),
+        netChangePaise,
+        netChangePaise,
         isSelling
           ? `Paper SELL ${body.direction} (Fee: ₹${toRupees(charges.totalCharges)})`
           : `Paper BUY ${body.direction} (Fee: ₹${toRupees(charges.totalCharges)})`,
@@ -421,24 +516,62 @@ export async function handlePaperTradeEnter(
           tradeId,
           instrumentKey: body.instrumentKey,
           quantity,
-          entryPrice,
+          entryPrice: toRupees(entryPricePaise),
           entryValue: toRupees(entryValuePaise),
-          charges,
+          charges: {
+            totalCharges: toRupees(charges.totalCharges),
+            brokerage: toRupees(charges.brokerage),
+            statutoryTaxes: toRupees(charges.statutoryTaxes),
+          },
         }),
         createdAt,
+        account.id,
+        netChangePaise,
+        -netChangePaise,
+      ),
+      env.PAPER_TRADING_DB.prepare(
+        `UPDATE paper_accounts SET balance = balance + ?, updated_at = ?
+         WHERE id = ? AND (? >= 0 OR balance >= ?)`,
+      ).bind(
+        netChangePaise,
+        createdAt,
+        account.id,
+        netChangePaise,
+        -netChangePaise,
       ),
     ])
 
-    const trade = await env.PAPER_TRADING_DB.prepare(
-      'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE id = ?',
-    )
-      .bind(tradeId)
-      .first<PaperTradeRow>()
-    const summary = await getPaperAccountSummary(env, userId)
-    return Response.json({ trade, ...summary })
+    if (results[0].meta.changes === 0) {
+      return Response.json(
+        { error: 'Insufficient paper credit' },
+        { status: 400 },
+      )
+    }
+
+    const [trade, freshAccount, summary] = await Promise.all([
+      env.PAPER_TRADING_DB.prepare(
+        'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE id = ?',
+      )
+        .bind(tradeId)
+        .first<PaperTradeRow>(),
+      env.PAPER_TRADING_DB.prepare(
+        'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
+      )
+        .bind(account.id)
+        .first<PaperAccountRow>(),
+      fetchAccountSummary(env, account),
+    ])
+    if (!freshAccount) throw new Error('Account vanished')
+    return Response.json({
+      trade: trade ? toResponseTrade(trade) : null,
+      ...summary,
+      account: toResponseAccount(freshAccount),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+    })
   } catch (error) {
+    console.error('Failed to enter paper trade:', error)
     return Response.json(
-      { error: `Failed to enter paper trade: ${String(error)}` },
+      { error: 'Failed to enter paper trade' },
       { status: 500 },
     )
   }
@@ -453,7 +586,6 @@ export async function handlePaperTradeExit(
     tradeId?: string
     exitPrice?: number
     metadata?: unknown
-    isRollback?: boolean
   }
   try {
     body = await request.json()
@@ -468,14 +600,6 @@ export async function handlePaperTradeExit(
       { status: 400 },
     )
   }
-
-  const isRollback =
-    Boolean(body.isRollback) ||
-    Boolean(
-      typeof body.metadata === 'object' &&
-      body.metadata !== null &&
-      (body.metadata as Record<string, unknown>).isRollback,
-    )
 
   try {
     const account = await ensurePaperAccount(env, userId)
@@ -517,7 +641,7 @@ export async function handlePaperTradeExit(
         if (meta?.entryCharges)
           entryCharges = meta.entryCharges as typeof entryCharges
         if (typeof meta?.marginBlocked === 'number')
-          marginBlockedPaise = Math.round(meta.marginBlocked * 100)
+          marginBlockedPaise = toPaise(meta.marginBlocked)
       } catch {
         /* ignore invalid metadata */
       }
@@ -525,65 +649,22 @@ export async function handlePaperTradeExit(
 
     const isSelling = tradeType === 'selling'
     const closedAt = nowIso()
-    const exitValuePaise = Math.round(exitPrice * trade.quantity * 100)
-    const exitCharges = isRollback
-      ? { totalCharges: 0, brokerage: 0, statutoryTaxes: 0 }
-      : calculateOptionCharges(exitValuePaise, !isSelling)
+    const exitPricePaise = toPaise(exitPrice)
+    const exitValuePaise = Math.round(exitPricePaise * trade.quantity)
+    const exitCharges = calculateOptionCharges(exitValuePaise, !isSelling)
 
-    const totalTradeFees = isRollback
-      ? 0
-      : Math.round(entryCharges.totalCharges + exitCharges.totalCharges)
-
-    const entryValuePaise = Math.round(trade.entry_value * 100)
-    const grossPnlPaise = isRollback
-      ? 0
-      : isSelling
-        ? entryValuePaise - exitValuePaise
-        : exitValuePaise - entryValuePaise
-    const realizedPnlPaise = isRollback ? 0 : grossPnlPaise - totalTradeFees
-
-    const netChangePaise = isRollback
-      ? isSelling
-        ? -entryValuePaise + entryCharges.totalCharges + marginBlockedPaise
-        : entryValuePaise + entryCharges.totalCharges
-      : isSelling
-        ? -exitValuePaise - exitCharges.totalCharges + marginBlockedPaise
-        : exitValuePaise - exitCharges.totalCharges
-
-    if (netChangePaise < 0) {
-      const deductPaise = -netChangePaise
-      const result = await env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_accounts SET balance = balance - ?, updated_at = ? WHERE id = ? AND balance >= ?',
-      )
-        .bind(
-          toRupees(deductPaise),
-          closedAt,
-          account.id,
-          toRupees(deductPaise),
-        )
-        .run()
-      if (result.meta.changes === 0) {
-        return Response.json(
-          { error: 'Insufficient paper credit for exit charges' },
-          { status: 400 },
-        )
-      }
-    } else {
-      const result = await env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_accounts SET balance = balance + ?, updated_at = ? WHERE id = ?',
-      )
-        .bind(toRupees(netChangePaise), closedAt, account.id)
-        .run()
-      if (result.meta.changes === 0) {
-        return Response.json({ error: 'Account not found' }, { status: 404 })
-      }
-    }
-
-    const balanceAfter = await env.PAPER_TRADING_DB.prepare(
-      'SELECT balance FROM paper_accounts WHERE id = ?',
+    const totalTradeFeesPaise = Math.round(
+      entryCharges.totalCharges + exitCharges.totalCharges,
     )
-      .bind(account.id)
-      .first<{ balance: number }>()
+
+    const grossPnlPaise = isSelling
+      ? trade.entry_value - exitValuePaise
+      : exitValuePaise - trade.entry_value
+    const realizedPnlPaise = grossPnlPaise - totalTradeFeesPaise
+
+    const netChangePaise = isSelling
+      ? -exitValuePaise - exitCharges.totalCharges + marginBlockedPaise
+      : exitValuePaise - exitCharges.totalCharges
 
     const mergedMetadata = {
       ...(trade.metadata_json
@@ -592,58 +673,100 @@ export async function handlePaperTradeExit(
       ...(typeof body.metadata === 'object' && body.metadata !== null
         ? body.metadata
         : {}),
-      exitCharges,
-      totalTradeFees: toRupees(totalTradeFees),
+      exitCharges: {
+        totalCharges: toRupees(exitCharges.totalCharges),
+        brokerage: toRupees(exitCharges.brokerage),
+        statutoryTaxes: toRupees(exitCharges.statutoryTaxes),
+      },
+      totalTradeFees: toRupees(totalTradeFeesPaise),
       grossPnl: toRupees(grossPnlPaise),
     }
 
-    await env.PAPER_TRADING_DB.batch([
+    const results = await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
-        'UPDATE paper_trades SET status = ?, exit_price = ?, exit_value = ?, realized_pnl = ?, closed_at = ?, metadata_json = ? WHERE id = ?',
-      ).bind(
-        'CLOSED',
-        exitPrice,
-        toRupees(exitValuePaise),
-        toRupees(realizedPnlPaise),
-        closedAt,
-        JSON.stringify(mergedMetadata),
-        trade.id,
-      ),
-      env.PAPER_TRADING_DB.prepare(
-        'INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
+         SELECT ?, ?, ?, ?, balance, balance + ?, ?, ?, ?
+         FROM paper_accounts
+         WHERE id = ? AND (SELECT status FROM paper_trades WHERE id = ?) = 'OPEN'`,
       ).bind(
         makeId('stmt'),
         account.id,
         'paper_exit',
-        toRupees(netChangePaise),
-        account.balance,
-        balanceAfter?.balance ?? toRupees(PAPER_STARTING_CREDIT),
+        netChangePaise,
+        netChangePaise,
         `Paper EXIT ${trade.direction} (Fee: ₹${toRupees(exitCharges.totalCharges)})`,
         JSON.stringify({
           tradeId: trade.id,
           instrumentKey: trade.instrument_key,
           quantity: trade.quantity,
-          exitPrice,
+          exitPrice: toRupees(exitPricePaise),
           exitValue: toRupees(exitValuePaise),
           grossPnl: toRupees(grossPnlPaise),
-          totalTradeFees: toRupees(totalTradeFees),
+          totalTradeFees: toRupees(totalTradeFeesPaise),
           realizedPnl: toRupees(realizedPnlPaise),
-          exitCharges,
+          exitCharges: {
+            totalCharges: toRupees(exitCharges.totalCharges),
+            brokerage: toRupees(exitCharges.brokerage),
+            statutoryTaxes: toRupees(exitCharges.statutoryTaxes),
+          },
         }),
         closedAt,
+        account.id,
+        trade.id,
+      ),
+      env.PAPER_TRADING_DB.prepare(
+        `UPDATE paper_accounts SET balance = balance + ?, updated_at = ?
+         WHERE id = ? AND (SELECT status FROM paper_trades WHERE id = ?) = 'OPEN'`,
+      ).bind(netChangePaise, closedAt, account.id, trade.id),
+      env.PAPER_TRADING_DB.prepare(
+        `UPDATE paper_trades SET status = ?, exit_price = ?, exit_value = ?, realized_pnl = ?, closed_at = ?, metadata_json = ?
+         WHERE id = ? AND status = ?`,
+      ).bind(
+        'CLOSED',
+        exitPricePaise,
+        exitValuePaise,
+        realizedPnlPaise,
+        closedAt,
+        JSON.stringify(mergedMetadata),
+        trade.id,
+        'OPEN',
       ),
     ])
 
-    const updatedTrade = await env.PAPER_TRADING_DB.prepare(
-      'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE id = ?',
-    )
-      .bind(trade.id)
-      .first<PaperTradeRow>()
-    const summary = await getPaperAccountSummary(env, userId)
-    return Response.json({ trade: updatedTrade, ...summary })
+    if (results[2].meta.changes === 0) {
+      return Response.json(
+        {
+          error: 'Paper trade is already closed',
+          code: 'TRADE_ALREADY_CLOSED',
+        },
+        { status: 400 },
+      )
+    }
+
+    const [updatedTrade, freshAccount, summary] = await Promise.all([
+      env.PAPER_TRADING_DB.prepare(
+        'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades WHERE id = ?',
+      )
+        .bind(trade.id)
+        .first<PaperTradeRow>(),
+      env.PAPER_TRADING_DB.prepare(
+        'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
+      )
+        .bind(account.id)
+        .first<PaperAccountRow>(),
+      fetchAccountSummary(env, account),
+    ])
+    if (!freshAccount) throw new Error('Account vanished')
+    return Response.json({
+      trade: updatedTrade ? toResponseTrade(updatedTrade) : null,
+      ...summary,
+      account: toResponseAccount(freshAccount),
+      recentEntries: summary.recentEntries.map(toResponseStatement),
+    })
   } catch (error) {
+    console.error('Failed to exit paper trade:', error)
     return Response.json(
-      { error: `Failed to exit paper trade: ${String(error)}` },
+      { error: 'Failed to exit paper trade' },
       { status: 500 },
     )
   }

@@ -20,34 +20,38 @@ export class AuthService {
   }
 }
 
-const originalFetch = window.fetch
-window.fetch = async function (input, init) {
-  const url =
-    typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url
+const originalFetch = typeof window !== 'undefined' ? window.fetch : undefined
 
-  const isSameOriginApiCall = (() => {
-    if (url.startsWith('/')) return url.startsWith('/api/')
-    try {
-      const parsedUrl = new URL(url)
-      return (
-        parsedUrl.origin === window.location.origin &&
-        parsedUrl.pathname.startsWith('/api/')
-      )
-    } catch {
-      return false
+if (typeof window !== 'undefined') {
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url
+
+    const isSameOriginApiCall = (() => {
+      if (url.startsWith('/')) return url.startsWith('/api/')
+      try {
+        const parsedUrl = new URL(url)
+        return (
+          parsedUrl.origin === window.location.origin &&
+          parsedUrl.pathname.startsWith('/api/')
+        )
+      } catch {
+        return false
+      }
+    })()
+    if (!isSameOriginApiCall || !originalFetch)
+      return originalFetch ? originalFetch(input, init) : fetch(input, init)
+
+    const headers = new Headers(init?.headers ?? {})
+    const token = await AuthService.getToken()
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
     }
-  })()
-  if (!isSameOriginApiCall) return originalFetch(input, init)
 
-  const headers = new Headers(init?.headers ?? {})
-  const token = await AuthService.getToken()
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+    return originalFetch(input, { ...init, headers })
   }
-
-  return originalFetch(input, { ...init, headers })
 }

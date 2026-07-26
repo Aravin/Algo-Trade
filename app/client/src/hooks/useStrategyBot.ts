@@ -389,10 +389,24 @@ export function useStrategyBot(token: string | null) {
   }, [])
 
   // ── Main tick ────────────────────────────────────────────────────────────────
+  const abortRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const tick = useCallback(async () => {
     if (!token) return
     if (isTickingRef.current) return
     isTickingRef.current = true
+
+    abortRef.current?.abort()
+    const abort = new AbortController()
+    abortRef.current = abort
+
     const cur = statusRef.current
     if (cur.state === 'STOPPED' || cur.state === 'IDLE') {
       isTickingRef.current = false
@@ -610,19 +624,28 @@ export function useStrategyBot(token: string | null) {
           (p) => p !== null,
         )
         if (!hasOpenPos && !cur.position) {
-          updateStatus({ state: 'STOPPED' })
+          updateStatus({
+            state: 'STOPPED',
+            indicators,
+            allSignalData,
+            finalSignal,
+            hardStop,
+            sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
+            lastUpdated: new Date().toLocaleTimeString('en-IN'),
+          })
           return
         }
       }
 
       // Entry cutoff check
-      const [lh, lm] = config.lastEntryTime.split(':').map(Number)
-      const nowIST = new Date(
-        new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }),
-      )
+      const [lh, lm] = (config.lastEntryTime ?? '15:15').split(':').map(Number)
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const nowIST = new Date(Date.now() + istOffset)
       const afterCutoff =
-        nowIST.getHours() > lh ||
-        (nowIST.getHours() === lh && nowIST.getMinutes() >= lm)
+        Number.isFinite(lh) && Number.isFinite(lm)
+          ? nowIST.getUTCHours() > lh ||
+            (nowIST.getUTCHours() === lh && nowIST.getUTCMinutes() >= lm)
+          : false
 
       const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
         ...DEFAULT_POSITIONS,
@@ -1036,10 +1059,8 @@ export function useStrategyBot(token: string | null) {
                       body: JSON.stringify({
                         tradeId: leg.paperTradeId,
                         exitPrice: leg.entryPrice,
-                        isRollback: true,
                         metadata: {
                           reason: 'Rollback due to multi-leg entry failure',
-                          isRollback: true,
                         },
                       }),
                     },
@@ -1396,7 +1417,8 @@ export function useStrategyBot(token: string | null) {
         error: null,
       })
     } catch (err) {
-      const msg = (err as Error).message
+      if (abort.signal.aborted) return
+      const msg = err instanceof Error ? err.message : String(err)
       addLogs([...tickLogs, mkLog('error', 'tick', `unhandled: ${msg}`)])
       updateStatus({ error: msg })
     } finally {
@@ -1444,21 +1466,27 @@ export function useStrategyBot(token: string | null) {
   useEffect(() => {
     if (token && (status.state === 'RUNNING' || status.state === 'ORDERED')) {
       const config = getStrategyConfig()
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      addLog(
-        mkLog('info', 'bot', `resumed from persisted state=${status.state}`),
-      )
-      void tick()
+      const resumeTimer = setTimeout(() => {
+        addLog(
+          mkLog('info', 'bot', `resumed from persisted state=${status.state}`),
+        )
+        void tick()
+      }, 0)
       intervalRef.current = setInterval(
         () => void tick(),
         config.pollingIntervalSec * 1000,
       )
+      return () => {
+        clearTimeout(resumeTimer)
+        if (intervalRef.current) clearInterval(intervalRef.current)
+        abortRef.current?.abort()
+      }
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
+      abortRef.current?.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [token, status.state, tick, addLog])
 
   return { ...status, start, stop, clearLogs }
 }

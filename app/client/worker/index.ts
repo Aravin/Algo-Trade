@@ -36,6 +36,26 @@ import { handleGlobalIndices } from './globalIndices'
 
 const MAX_BODY_BYTES = 1024 * 50
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:8787',
+  'https://algo-trade.pages.dev',
+  'https://algo-trade.com',
+]
+
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get('Origin') ?? ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  }
+}
+
 function securityHeaders(): Record<string, string> {
   return {
     'Content-Security-Policy':
@@ -51,7 +71,11 @@ const requestCounts = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX_REQUESTS = 200
 
-function checkRateLimit(clientIp: string): boolean {
+function checkRateLimit(clientIp: string): {
+  allowed: boolean
+  remaining: number
+  resetAt: number
+} {
   const now = Date.now()
   const entry = requestCounts.get(clientIp)
   if (!entry || now > entry.resetAt) {
@@ -59,11 +83,28 @@ function checkRateLimit(clientIp: string): boolean {
       count: 1,
       resetAt: now + RATE_LIMIT_WINDOW_MS,
     })
-    return true
+    return {
+      allowed: true,
+      remaining: RATE_LIMIT_MAX_REQUESTS - 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    }
   }
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) return false
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0, resetAt: entry.resetAt }
+  }
   entry.count++
-  return true
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_MAX_REQUESTS - entry.count,
+    resetAt: entry.resetAt,
+  }
+}
+
+function cleanupStaleRateEntries() {
+  const now = Date.now()
+  for (const [ip, entry] of requestCounts) {
+    if (now > entry.resetAt) requestCounts.delete(ip)
+  }
 }
 
 function validateContentType(
@@ -82,11 +123,21 @@ function jsonError(status: number, error: string): Response {
   return new Response(JSON.stringify({ error }), { status, headers })
 }
 
-function withSecurity(response: Response): Response {
+function withSecurity(
+  response: Response,
+  cors?: Record<string, string>,
+): Response {
   const headers = new Headers(response.headers)
   for (const [key, value] of Object.entries(securityHeaders())) {
     if (!headers.has(key)) {
       headers.set(key, value)
+    }
+  }
+  if (cors) {
+    for (const [key, value] of Object.entries(cors)) {
+      if (!headers.has(key)) {
+        headers.set(key, value)
+      }
     }
   }
   return new Response(response.body, {
@@ -98,24 +149,52 @@ function withSecurity(response: Response): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (Math.random() < 0.05) cleanupStaleRateEntries()
+
     const url = new URL(request.url)
 
     const clientIp = request.headers.get('cf-connecting-ip') ?? 'unknown'
-    if (!checkRateLimit(clientIp)) {
-      return jsonError(429, 'Too many requests. Please slow down.')
+    const rateCheck = checkRateLimit(clientIp)
+    if (!rateCheck.allowed) {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Retry-After': String(
+          Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
+        ),
+        'X-RateLimit-Limit': String(RATE_LIMIT_MAX_REQUESTS),
+        'X-RateLimit-Remaining': '0',
+        ...securityHeaders(),
+      }
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please slow down.' }),
+        {
+          status: 429,
+          headers,
+        },
+      )
     }
 
-    if (request.method === 'POST' || request.method === 'PUT') {
+    if (request.method === 'OPTIONS') {
+      const headers = { ...securityHeaders(), ...corsHeaders(request) }
+      return new Response(null, { status: 204, headers })
+    }
+
+    if (
+      request.method === 'POST' ||
+      request.method === 'PUT' ||
+      request.method === 'PATCH'
+    ) {
       if (!validateContentType(request, ['application/json'])) {
         return jsonError(415, 'Content-Type must be application/json')
       }
       const cl = request.headers.get('content-length')
-      if (cl && parseInt(cl) > MAX_BODY_BYTES) {
+      if (cl && parseInt(cl, 10) > MAX_BODY_BYTES) {
         return jsonError(413, 'Request body too large')
       }
     }
 
-    const captureResponse: (resp: Response) => Response = withSecurity
+    const captureResponse: (resp: Response) => Response = (resp) =>
+      withSecurity(resp, corsHeaders(request))
 
     // ── Public proxy routes (no Auth0 token required) ──────────────
     if (
@@ -204,7 +283,7 @@ export default {
     }
 
     if (url.pathname === '/api/order/place' && request.method === 'POST')
-      return captureResponse(await handlePlaceOrder(request))
+      return captureResponse(await handlePlaceOrder(request, userId))
     if (url.pathname === '/api/order/list' && request.method === 'POST')
       return captureResponse(await handleOrderList(request))
     if (url.pathname === '/api/client-state' && request.method === 'GET')

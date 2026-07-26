@@ -149,8 +149,9 @@ function calcStochastic(
     kValues.push(high === low ? 50 : ((close - low) / (high - low)) * 100)
   }
   const k = parseFloat((kValues[kValues.length - 1] ?? 50).toFixed(2))
+  const dValues = kValues.slice(-smoothing)
   const d = parseFloat(
-    (kValues.reduce((s, v) => s + v, 0) / kValues.length).toFixed(2),
+    (dValues.reduce((s, v) => s + v, 0) / dValues.length).toFixed(2),
   )
   let signal: SignalType = SIGNAL_HOLD
   if (k > d && k < 20) signal = SIGNAL_BUY

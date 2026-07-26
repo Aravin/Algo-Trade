@@ -7,8 +7,8 @@ export function HardStopBanner({ reasons }: { reasons: string[] }) {
       <div>
         <p className="text-sm font-medium text-destructive">Trading Blocked</p>
         <ul className="mt-1 space-y-0.5">
-          {reasons.map((r, i) => (
-            <li key={i} className="text-xs text-destructive/80">
+          {reasons.map((r) => (
+            <li key={r} className="text-xs text-destructive/80">
               {r}
             </li>
           ))}

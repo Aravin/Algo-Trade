@@ -17,7 +17,11 @@ export async function verifyAuth0Token(
   const audience = env.AUTH0_AUDIENCE
 
   if (!domain || !audience) {
-    // If not configured, bypass authentication for local dev
+    console.warn(
+      'AUTH BYPASS: AUTH0_DOMAIN or AUTH0_AUDIENCE is not configured. ' +
+        'All requests will be treated as local-dev-user. ' +
+        'Set these environment variables in production.',
+    )
     return 'local-dev-user'
   }
 

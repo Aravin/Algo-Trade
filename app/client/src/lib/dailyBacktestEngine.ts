@@ -162,7 +162,7 @@ function generateDayCandles(
       ? 24200 + Math.floor(random() * 200)
       : 24000 + Math.floor(random() * 200)
   const candles: Candle[] = []
-  const startTime = new Date(`${dateStr}T09:30:00.000Z`).getTime()
+  const startTime = new Date(`${dateStr}T03:45:00.000Z`).getTime()
 
   let currentClose = basePrice
   for (let i = 0; i < 75; i++) {
@@ -410,7 +410,7 @@ export function generateDailyReport(
       // Check exit after 5 candles (approx 25 mins) or on target/SL
       const elapsedCandles = idx
       if (elapsedCandles % 6 === 0 || idx === candles.length - 1) {
-        const isWin = random() > 0.4 || mode !== 'sideways'
+        const isWin = random() > 0.4
         const gainPct = isWin
           ? 0.18 + random() * 0.05
           : -0.098 - random() * 0.02
@@ -475,10 +475,20 @@ export function generateDailyReport(
     grossLoss > 0
       ? Number((grossProfit / grossLoss).toFixed(2))
       : grossProfit > 0
-        ? 99.0
+        ? Number.POSITIVE_INFINITY
         : 0.0
 
-  const maxDrawdownPct = losingTrades > 0 ? 3.98 : 0.0
+  let maxDrawdownPct = 0.0
+  if (trades.length > 0) {
+    let peak = 0
+    let runningPnl = 0
+    for (const t of trades) {
+      runningPnl += t.netPnl
+      if (runningPnl > peak) peak = runningPnl
+      const dd = peak - runningPnl
+      if (peak > 0) maxDrawdownPct = Math.max(maxDrawdownPct, (dd / peak) * 100)
+    }
+  }
 
   return {
     dateStr,

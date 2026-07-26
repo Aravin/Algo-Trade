@@ -42,7 +42,12 @@ export function getLotSizeForSymbol(
   if (upper.includes('TATAMOTORS')) return 1425
   if (upper.includes('TATASTEEL')) return 5500
   if (upper.includes('BHARTIARTL')) return 475
-  if (upper.includes('LT') || upper.includes('LARSEN')) return 300
+  if (
+    upper.includes('LARSEN') ||
+    upper === 'LT' ||
+    /(?<=^|[&\s,])LT(?=$|[&\s,])/.test(upper)
+  )
+    return 300
   if (upper.includes('ITC')) return 1600
   if (upper.includes('MARUTI')) return 100
   if (upper.includes('BAJFINANCE')) return 125

@@ -547,7 +547,10 @@ export async function handleUpstoxPcr(request: Request): Promise<Response> {
   )
 }
 
-export async function handlePlaceOrder(request: Request): Promise<Response> {
+export async function handlePlaceOrder(
+  request: Request,
+  userId?: string,
+): Promise<Response> {
   let body: {
     token: string
     instrumentKey: string
@@ -567,6 +570,12 @@ export async function handlePlaceOrder(request: Request): Promise<Response> {
   ) {
     return Response.json({ error: 'Missing required fields' }, { status: 400 })
   }
+  if (!Number.isInteger(body.quantity) || body.quantity <= 0) {
+    return Response.json(
+      { error: 'Quantity must be a positive integer' },
+      { status: 400 },
+    )
+  }
   const orderPayload = {
     instrument_token: body.instrumentKey,
     quantity: body.quantity,
@@ -578,7 +587,7 @@ export async function handlePlaceOrder(request: Request): Promise<Response> {
     trigger_price: 0,
     disclosed_quantity: 0,
     is_amo: false,
-    tag: 'algo-v5',
+    tag: userId ? `algo-v5-${userId.slice(0, 12)}` : 'algo-v5',
   }
   let upstream: Response
   try {

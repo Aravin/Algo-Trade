@@ -28,13 +28,31 @@ export async function readClientState<T>(
   return JSON.parse(row.value_json) as T
 }
 
+const MAX_KEY_LENGTH = 128
+const MAX_VALUE_BYTES = 1024 * 50
+const KEY_PATTERN = /^[a-zA-Z0-9_\-./]+$/
+
 export async function writeClientState(
   env: Env,
   userId: string,
   key: string,
   value: unknown,
 ): Promise<void> {
+  if (!key || key.length > MAX_KEY_LENGTH) {
+    throw new Error(
+      `State key must be between 1 and ${MAX_KEY_LENGTH} characters`,
+    )
+  }
+  if (!KEY_PATTERN.test(key)) {
+    throw new Error('State key contains invalid characters')
+  }
   await ensureClientStateTable(env)
+  const valueJson = JSON.stringify(value)
+  if (new TextEncoder().encode(valueJson).length > MAX_VALUE_BYTES) {
+    throw new Error(
+      `State value exceeds maximum size of ${MAX_VALUE_BYTES} bytes`,
+    )
+  }
   await env.PAPER_TRADING_DB.prepare(
     `
       INSERT INTO client_state (user_id, state_key, value_json, updated_at)
@@ -44,7 +62,7 @@ export async function writeClientState(
         updated_at = excluded.updated_at
     `,
   )
-    .bind(userId, key, JSON.stringify(value), nowIso())
+    .bind(userId, key, valueJson, nowIso())
     .run()
 }
 
@@ -65,8 +83,9 @@ export async function handleClientStateGet(
     const value = await readClientState<unknown>(env, userId, key)
     return Response.json({ value })
   } catch (error) {
+    console.error('Failed to load client state:', error)
     return Response.json(
-      { error: `Failed to load client state: ${String(error)}` },
+      { error: 'Failed to load client state' },
       { status: 500 },
     )
   }
@@ -77,11 +96,15 @@ export async function handleClientStatePut(
   env: Env,
   userId: string,
 ): Promise<Response> {
-  const body = (await request.json().catch(() => null)) as {
-    key?: string
-    value?: unknown
-  } | null
-  const key = body?.key?.trim()
+  const rawBody = await request.json().catch(() => null)
+  if (typeof rawBody !== 'object' || rawBody === null) {
+    return Response.json(
+      { error: 'Request body must be a JSON object' },
+      { status: 400 },
+    )
+  }
+  const body = rawBody as { key?: string; value?: unknown }
+  const key = typeof body.key === 'string' ? body.key.trim() : ''
 
   if (!key) {
     return Response.json(
@@ -94,9 +117,8 @@ export async function handleClientStatePut(
     await writeClientState(env, userId, key, body?.value ?? null)
     return Response.json({ ok: true })
   } catch (error) {
-    return Response.json(
-      { error: `Failed to save client state: ${String(error)}` },
-      { status: 500 },
-    )
+    const msg = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Failed to save client state:', error)
+    return Response.json({ error: msg }, { status: 400 })
   }
 }

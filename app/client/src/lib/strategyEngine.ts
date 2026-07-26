@@ -73,10 +73,10 @@ export function getFinalSignal(
 
   const satisfiesStrong =
     top >= strongThreshold ||
-    (ratio >= 0.7 && top >= Math.min(strongThreshold, 10))
+    (ratio >= 0.7 && top >= Math.max(strongThreshold, 10))
   const satisfiesModerate =
     top >= moderateThreshold ||
-    (ratio >= 0.5 && top >= Math.min(moderateThreshold, 6))
+    (ratio >= 0.5 && top >= Math.max(moderateThreshold, 6))
 
   if (satisfiesStrong && gap >= strongGap) confidence = CONFIDENCE_STRONG
   else if (satisfiesModerate && gap >= moderateGap)
@@ -163,10 +163,11 @@ export function shouldExit(
     }
     pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
   } else {
+    const entryPrice = position.entryPrice || 1
     const isSelling = position.tradeType === TRADE_TYPE_SELLING
     pct = isSelling
-      ? ((position.entryPrice - currentPrice) / position.entryPrice) * 100
-      : ((currentPrice - position.entryPrice) / position.entryPrice) * 100
+      ? ((position.entryPrice - currentPrice) / entryPrice) * 100
+      : ((currentPrice - position.entryPrice) / entryPrice) * 100
   }
 
   if (pct >= config.maxProfitPct)

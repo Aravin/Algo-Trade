@@ -95,8 +95,9 @@ export function getAccountConnectionState(
   try {
     const parts = account.accessToken.split('.')
     if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1])) as { exp?: number }
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
+      const base64url = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+      const payload = JSON.parse(atob(base64url)) as { exp?: number }
+      if (payload.exp != null && payload.exp * 1000 < Date.now()) {
         return 'expired'
       }
     }

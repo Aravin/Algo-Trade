@@ -48,10 +48,9 @@
 
 ## 3. Fast Lookup: Database Migrations & Schemas
 
-| Migration File           | Description                                       | Relative File Path                                                                                                                               |
-| :----------------------- | :------------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0001_paper_trading.sql` | `paper_accounts` & `paper_trades` SQLite tables   | [`migrations/0001_paper_trading.sql`](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/migrations/0001_paper_trading.sql) |
-| `0002_client_state.sql`  | `client_state` key-value persistent storage table | [`migrations/0002_client_state.sql`](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/migrations/0002_client_state.sql)   |
+| Migration File     | Description                                                                                      | Relative File Path                                                                                                                   |
+| :----------------- | :----------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
+| `0001_initial.sql` | Consolidated schema: `paper_accounts`, `paper_trades`, `paper_statement_entries`, `client_state` | [`migrations/0001_initial.sql`](file:///Users/aravind_appadurai/personal-projects/Algo-Trade/app/client/migrations/0001_initial.sql) |
 
 ---
 

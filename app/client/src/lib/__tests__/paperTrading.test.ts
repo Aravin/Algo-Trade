@@ -9,14 +9,14 @@ describe('paperTrading calculateOptionCharges', () => {
 
       // STT on selling options = 0.1% of ₹1,00,000 = ₹100.00
       // Stamp Duty on selling = ₹0
-      // Exchange Fee = 0.05% of ₹1,00,000 = ₹50.00
-      // GST = 18% of (brokerage ₹20 + exchangeFee ₹50) = ₹12.60
-      // Statutory Taxes = ₹100 + ₹0 + ₹50 + ₹12.60 = ₹162.60
-      // Total Charges = brokerage ₹2000 + ₹162.60 = ₹182.60
+      // Exchange Fee = 0.03503% of ₹1,00,000 = ₹35.03
+      // GST = 18% of (brokerage ₹20 + exchangeFee ₹35.03) = ₹9.91
+      // Statutory Taxes = ₹100 + ₹0 + ₹35.03 + ₹9.91 = ₹144.94
+      // Total Charges = brokerage ₹2000 + ₹144.94 = ₹164.94
       // NOTE: brokerage is in paise (₹20 = 2000 paise)
       expect(charges.brokerage).toBe(2000)
-      expect(charges.statutoryTaxes).toBe(16260)
-      expect(charges.totalCharges).toBe(18260)
+      expect(charges.statutoryTaxes).toBe(14494)
+      expect(charges.totalCharges).toBe(16494)
     })
 
     it('does NOT charge STT or Stamp Duty on BUYING options', () => {
@@ -25,14 +25,14 @@ describe('paperTrading calculateOptionCharges', () => {
 
       // STT on buying options = ₹0
       // Stamp Duty on buying = 0.003% of ₹50,000 = ₹1.50
-      // Exchange Fee = 0.05% of ₹50,000 = ₹25.00
-      // GST = 18% of (brokerage ₹20 + exchangeFee ₹25) = ₹8.10
-      // Statutory Taxes = ₹0 + ₹150 + ₹2500 + ₹810 = ₹3460
-      // Total Charges = brokerage ₹2000 + ₹3460 = ₹5460
+      // Exchange Fee = 0.03503% of ₹50,000 = ₹17.52
+      // GST = 18% of (brokerage ₹20 + exchangeFee ₹17.52) = ₹6.75
+      // Statutory Taxes = ₹0 + ₹150 + ₹1752 + ₹675 = ₹2577
+      // Total Charges = brokerage ₹2000 + ₹2577 = ₹4577
       // NOTE: all values are in paise
       expect(charges.brokerage).toBe(2000)
-      expect(charges.statutoryTaxes).toBe(3460)
-      expect(charges.totalCharges).toBe(5460)
+      expect(charges.statutoryTaxes).toBe(2577)
+      expect(charges.totalCharges).toBe(4577)
     })
 
     it('handles small lot trade value correctly without negative or rounding errors', () => {

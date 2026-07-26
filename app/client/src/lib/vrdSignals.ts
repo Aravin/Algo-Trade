@@ -271,7 +271,13 @@ function matchesKeyword(content: string, kw: string): boolean {
 export function classifyNews(items: UpstoxNewsItem[]): NewsAlert[] {
   const alerts: NewsAlert[] = []
   const ONE_DAY_MS = 24 * 60 * 60 * 1000
-  const now = Date.now()
+  let now: number
+  try {
+    const serverTime = new Date().toISOString()
+    now = new Date(serverTime).getTime()
+  } catch {
+    now = Date.now()
+  }
   const seenHeadlines = new Set<string>()
 
   for (const item of items) {
