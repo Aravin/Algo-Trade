@@ -20,7 +20,6 @@ export class AuthService {
   }
 }
 
-// Global fetch interceptor setup
 const originalFetch = window.fetch
 window.fetch = async function (input, init) {
   const url =
@@ -30,23 +29,25 @@ window.fetch = async function (input, init) {
         ? input.href
         : input.url
 
-  // Only intercept API calls to /api/ on the same origin
-  if (
-    url.startsWith('/api/') ||
-    url.startsWith(window.location.origin + '/api/') ||
-    (!url.startsWith('http://') &&
-      !url.startsWith('https://') &&
-      url.includes('/api/'))
-  ) {
-    const headers = new Headers(init?.headers ?? {})
-
-    const token = await AuthService.getToken()
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`)
+  const isSameOriginApiCall = (() => {
+    if (url.startsWith('/')) return url.startsWith('/api/')
+    try {
+      const parsedUrl = new URL(url)
+      return (
+        parsedUrl.origin === window.location.origin &&
+        parsedUrl.pathname.startsWith('/api/')
+      )
+    } catch {
+      return false
     }
+  })()
+  if (!isSameOriginApiCall) return originalFetch(input, init)
 
-    return originalFetch(input, { ...init, headers })
+  const headers = new Headers(init?.headers ?? {})
+  const token = await AuthService.getToken()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
   }
 
-  return originalFetch(input, init)
+  return originalFetch(input, { ...init, headers })
 }

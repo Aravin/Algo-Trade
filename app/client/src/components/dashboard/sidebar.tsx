@@ -1,5 +1,10 @@
 import { ACCOUNTS_CHANGED_EVENT } from '@/lib/types'
-import { STORAGE_KEY_LIVE_TRADES_PAGE_MODE, STORAGE_KEY_STRATEGY_CONFIG, API_PAPER_ACCOUNT, API_ORDER_LIST } from '@/lib/constants'
+import {
+  STORAGE_KEY_LIVE_TRADES_PAGE_MODE,
+  STORAGE_KEY_STRATEGY_CONFIG,
+  API_PAPER_ACCOUNT,
+  API_ORDER_LIST,
+} from '@/lib/constants'
 import { useEffect, useState } from 'react'
 import {
   Clock,

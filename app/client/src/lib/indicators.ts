@@ -123,7 +123,11 @@ function calcRSI(
   const rs = avgGain / avgLoss
   const value = parseFloat((100 - 100 / (1 + rs)).toFixed(2))
   const signal: MomentumType =
-    value >= overbought ? MOMENTUM_OVERBOUGHT : value <= oversold ? MOMENTUM_OVERSOLD : SIGNAL_HOLD
+    value >= overbought
+      ? MOMENTUM_OVERBOUGHT
+      : value <= oversold
+        ? MOMENTUM_OVERSOLD
+        : SIGNAL_HOLD
   return { value, signal }
 }
 
@@ -240,7 +244,8 @@ function calcOiPCR(optionChain: OptionData[]): {
   if (totalCallOI === 0) return { signal: SIGNAL_HOLD, value: 0 }
   const pcr = parseFloat((totalPutOI / totalCallOI).toFixed(3))
   // PCR > 1.0: more puts = put writers active = support = bullish
-  const signal: SignalType = pcr >= 1.0 ? SIGNAL_BUY : pcr <= 0.7 ? SIGNAL_SELL : SIGNAL_HOLD
+  const signal: SignalType =
+    pcr >= 1.0 ? SIGNAL_BUY : pcr <= 0.7 ? SIGNAL_SELL : SIGNAL_HOLD
   return { signal, value: pcr }
 }
 

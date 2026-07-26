@@ -1,10 +1,14 @@
 import type { Env } from './types'
 import { nowIso } from './utils'
 
+let _tableEnsured = false
+
 export async function ensureClientStateTable(env: Env): Promise<void> {
+  if (_tableEnsured) return
   await env.PAPER_TRADING_DB.prepare(
     'CREATE TABLE IF NOT EXISTS client_state (user_id TEXT NOT NULL, state_key TEXT NOT NULL, value_json TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (user_id, state_key))',
   ).run()
+  _tableEnsured = true
 }
 
 export async function readClientState<T>(

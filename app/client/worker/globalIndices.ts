@@ -1,10 +1,20 @@
 const GLOBAL_INDICES_URL = 'https://www.vrdnation.com/pulse/api/dashboard'
 
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs = 8000,
+): Promise<Response> {
+  return fetch(input, {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(timeoutMs),
+  })
+}
+
 export async function handleGlobalIndices(): Promise<Response> {
   let upstream: Response
   try {
-    upstream = await fetch(GLOBAL_INDICES_URL, {
-      signal: AbortSignal.timeout(8000),
+    upstream = await fetchWithTimeout(GLOBAL_INDICES_URL, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',

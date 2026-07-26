@@ -51,7 +51,11 @@ export function getFinalSignal(
   const gap = Math.abs(bull.score - bear.score)
   const top = Math.max(bull.score, bear.score)
   const dominant =
-    bull.score > bear.score ? 'bull' : bear.score > bull.score ? 'bear' : CONFIDENCE_NONE
+    bull.score > bear.score
+      ? 'bull'
+      : bear.score > bull.score
+        ? 'bear'
+        : CONFIDENCE_NONE
   const scoreMax =
     dominant === 'bull'
       ? Math.max(bull.max, 1)
@@ -75,7 +79,8 @@ export function getFinalSignal(
     (ratio >= 0.5 && top >= Math.min(moderateThreshold, 6))
 
   if (satisfiesStrong && gap >= strongGap) confidence = CONFIDENCE_STRONG
-  else if (satisfiesModerate && gap >= moderateGap) confidence = CONFIDENCE_MODERATE
+  else if (satisfiesModerate && gap >= moderateGap)
+    confidence = CONFIDENCE_MODERATE
   else if (satisfiesModerate) confidence = CONFIDENCE_WEAK
 
   const minConf = config.minConfidence ?? CONFIDENCE_MODERATE
@@ -97,14 +102,19 @@ export function getFinalSignal(
   }
 
   const signal = dominant === 'bull' ? SIGNAL_BUY_CE : SIGNAL_BUY_PE
-  const positionSize = confidence === CONFIDENCE_STRONG ? POSITION_SIZE_FULL : POSITION_SIZE_HALF
+  const positionSize =
+    confidence === CONFIDENCE_STRONG ? POSITION_SIZE_FULL : POSITION_SIZE_HALF
 
   // Prevent entering a trade that would immediately trigger exit conditions
   const isBullishBias = signal === SIGNAL_BUY_CE
   const adRatio = data.vrd?.advancesDeclines?.ratio
   const isImmediateExit = isBullishBias
-    ? v4 === SIGNAL_SELL || data.v3 === ORDER_TYPE_SELL || (adRatio != null && adRatio < 0.8)
-    : v4 === SIGNAL_BUY || data.v3 === ORDER_TYPE_BUY || (adRatio != null && adRatio > 1.5)
+    ? v4 === SIGNAL_SELL ||
+      data.v3 === ORDER_TYPE_SELL ||
+      (adRatio != null && adRatio < 0.8)
+    : v4 === SIGNAL_BUY ||
+      data.v3 === ORDER_TYPE_BUY ||
+      (adRatio != null && adRatio > 1.5)
 
   if (isImmediateExit) {
     return {
@@ -290,7 +300,8 @@ export function scoreBullish(
   const v4 = getV4Signal(data.indicators)
 
   // V3 (4 pts)
-  const v3p = data.v3 === ORDER_TYPE_BUY ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
+  const v3p =
+    data.v3 === ORDER_TYPE_BUY ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
   score += addScore(bd, 'V3', 'Macro Signal', data.v3, v3p, 4)
   max += 4
 
@@ -301,7 +312,11 @@ export function scoreBullish(
 
   // EMA (3 pts)
   const emap =
-    data.indicators.ema === SIGNAL_BUY ? 3 : data.indicators.ema === SIGNAL_HOLD ? 0 : -1
+    data.indicators.ema === SIGNAL_BUY
+      ? 3
+      : data.indicators.ema === SIGNAL_HOLD
+        ? 0
+        : -1
   score += addScore(bd, 'V4', 'EMA Crossover', data.indicators.ema, emap, 3)
   max += 3
 
@@ -461,7 +476,8 @@ export function scoreBearish(
   let max = 0
   const v4 = getV4Signal(data.indicators)
 
-  const v3p = data.v3 === ORDER_TYPE_SELL ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
+  const v3p =
+    data.v3 === ORDER_TYPE_SELL ? 4 : data.v3 === ORDER_TYPE_HOLD ? 0 : -2
   score += addScore(bd, 'V3', 'Macro Signal', data.v3, v3p, 4)
   max += 4
 
@@ -470,7 +486,11 @@ export function scoreBearish(
   max += 5
 
   const emap =
-    data.indicators.ema === SIGNAL_SELL ? 3 : data.indicators.ema === SIGNAL_HOLD ? 0 : -1
+    data.indicators.ema === SIGNAL_SELL
+      ? 3
+      : data.indicators.ema === SIGNAL_HOLD
+        ? 0
+        : -1
   score += addScore(bd, 'V4', 'EMA Crossover', data.indicators.ema, emap, 3)
   max += 3
 

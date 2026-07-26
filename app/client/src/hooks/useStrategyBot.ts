@@ -105,8 +105,6 @@ const KEYS = {
   exitTimes: STORAGE_KEY_BOT_EXIT_TIMES,
 }
 
-
-
 function loadExitTimes(): Record<string, number> {
   try {
     return JSON.parse(localStorage.getItem(KEYS.exitTimes) ?? '{}') as Record<
@@ -725,8 +723,8 @@ export function useStrategyBot(token: string | null) {
           }
 
           const lastExit = lastExitTimesRef.current[sym] ?? 0
-          const COOLDOWN_MS = 60 * 1000 // 1 minute cooldown
-          if (Date.now() - lastExit < COOLDOWN_MS) {
+          const cooldownMs = (config.exitCooldownSec ?? 60) * 1000
+          if (Date.now() - lastExit < cooldownMs) {
             continue
           }
 
@@ -1261,18 +1259,15 @@ export function useStrategyBot(token: string | null) {
                   `[${sym}] exit triggered: ${reason} — closing paper trade leg ${leg.instrumentKey}`,
                 ),
               )
-              const [, paperExitErr] = await safeFetch(
-                API_PAPER_TRADES_EXIT,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    tradeId: leg.paperTradeId,
-                    exitPrice: leg.currentPrice ?? currentPrice,
-                    metadata: { reason },
-                  }),
-                },
-              )
+              const [, paperExitErr] = await safeFetch(API_PAPER_TRADES_EXIT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tradeId: leg.paperTradeId,
+                  exitPrice: leg.currentPrice ?? currentPrice,
+                  metadata: { reason },
+                }),
+              })
               if (paperExitErr) {
                 const isTerminalClosed =
                   paperExitErr.includes('TRADE_ALREADY_CLOSED') ||

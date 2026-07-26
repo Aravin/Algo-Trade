@@ -35,23 +35,23 @@ Then, run the following commands to automatically fix and verify your changes:
 
 1. **Format Code**:
    ```bash
-   npm run format
+   yarn format
    ```
 2. **Lint & Fix**:
    ```bash
-   npm run lint:fix
+   yarn lint:fix
    ```
 3. **Typecheck** (Fix any TypeScript errors that appear):
    ```bash
-   npm run typecheck
+   yarn typecheck
    ```
 4. **Unit Tests** (Ensure strategy algorithms remain unbroken):
    ```bash
-   npm run test
+   yarn test
    ```
 5. **Final Validation Check**:
    ```bash
-   npm run validate
+   yarn validate
    ```
 
 > **Note**: Do not commit broken pre-commit hooks or bypass husky checks. If a typecheck fails, you must investigate and fix the TypeScript error rather than ignoring it.

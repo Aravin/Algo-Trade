@@ -178,7 +178,9 @@ export function HistoryPage() {
 
                   if (trade.status === 'OPEN') {
                     try {
-                      const rawPos = localStorage.getItem(STORAGE_KEY_BOT_POSITION)
+                      const rawPos = localStorage.getItem(
+                        STORAGE_KEY_BOT_POSITION,
+                      )
                       if (rawPos) {
                         const botPos = JSON.parse(rawPos) as {
                           instrumentKey?: string

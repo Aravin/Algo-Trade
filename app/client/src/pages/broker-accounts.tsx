@@ -182,9 +182,7 @@ function ReauthorizeInline({ account }: { account: BrokerAccount }) {
       `upstox-pending-${account.id}`,
       JSON.stringify(pending),
     )
-    const oauthUrl = new URL(
-      UPSTOX_AUTH_URL,
-    )
+    const oauthUrl = new URL(UPSTOX_AUTH_URL)
     oauthUrl.searchParams.set('response_type', 'code')
     oauthUrl.searchParams.set('client_id', account.apiKey)
     oauthUrl.searchParams.set('redirect_uri', redirectUri)
@@ -589,9 +587,7 @@ function UpstoxForm({
           `upstox-pending-${existing.id}`,
           JSON.stringify(pending),
         )
-        const oauthUrl = new URL(
-          UPSTOX_AUTH_URL,
-        )
+        const oauthUrl = new URL(UPSTOX_AUTH_URL)
         oauthUrl.searchParams.set('response_type', 'code')
         oauthUrl.searchParams.set('client_id', apiKey.trim())
         oauthUrl.searchParams.set('redirect_uri', redirectUri.trim())
@@ -640,9 +636,7 @@ function UpstoxForm({
         mode: 'create' as const,
       }
       localStorage.setItem(`upstox-pending-${id}`, JSON.stringify(pending))
-      const oauthUrl = new URL(
-        UPSTOX_AUTH_URL,
-      )
+      const oauthUrl = new URL(UPSTOX_AUTH_URL)
       oauthUrl.searchParams.set('response_type', 'code')
       oauthUrl.searchParams.set('client_id', apiKey.trim())
       oauthUrl.searchParams.set('redirect_uri', redirectUri.trim())
@@ -1002,8 +996,30 @@ export function BrokerAccountsPage() {
         setEditingAccount(null)
       }
     }
+    const cleanupInterval = setInterval(() => {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('upstox-pending-')) {
+          const entry = localStorage.getItem(key)
+          if (entry) {
+            try {
+              const pending = JSON.parse(entry) as { mode?: string }
+              if (pending.mode === 'create' || pending.mode === 'reauth') {
+                localStorage.removeItem(key)
+              }
+            } catch {
+              localStorage.removeItem(key)
+            }
+          }
+        }
+      }
+    }, 120000)
+
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      clearInterval(cleanupInterval)
+    }
   }, [])
 
   const handleRemove = (id: string) => {

@@ -213,6 +213,7 @@ export interface StrategyConfig {
   tradeType: 'buying' | 'selling' | 'both'
   brentCrudeExtremeThreshold: number
   brentCrudeOverhangThreshold: number
+  exitCooldownSec?: number
 }
 
 // Paper Trading

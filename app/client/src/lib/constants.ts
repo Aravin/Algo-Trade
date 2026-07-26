@@ -5,12 +5,14 @@ export const STORAGE_KEY_BROKER_ACCOUNTS = 'algo-trade:broker-accounts'
 export const STORAGE_KEY_NOTIFICATIONS = 'algo-trade:notifications'
 export const STORAGE_KEY_TICK_LOG = 'algo-trade:tick-log'
 export const STORAGE_KEY_ACTIVE_USER = 'algo-trade:active-user'
-export const STORAGE_KEY_LIVE_TRADES_PAGE_MODE = 'algo-trade:livetradespage-mode'
+export const STORAGE_KEY_LIVE_TRADES_PAGE_MODE =
+  'algo-trade:livetradespage-mode'
 export const STORAGE_KEY_BOT_STATE = 'algo-trade:bot-state'
 export const STORAGE_KEY_BOT_POSITION = 'algo-trade:bot-position'
 export const STORAGE_KEY_BOT_POSITIONS = 'algo-trade:bot-positions'
 export const STORAGE_KEY_BOT_TRADES_TODAY = 'algo-trade:bot-trades-today'
-export const STORAGE_KEY_BOT_TRADES_PER_SYMBOL = 'algo-trade:bot-trades-per-symbol'
+export const STORAGE_KEY_BOT_TRADES_PER_SYMBOL =
+  'algo-trade:bot-trades-per-symbol'
 export const STORAGE_KEY_BOT_TRADES_DATE = 'algo-trade:bot-trades-date'
 export const STORAGE_KEY_VRD_CACHE = 'algo-trade:vrd-cache'
 export const STORAGE_KEY_BOT_LOGS = 'algo-trade:bot-logs'
@@ -48,10 +50,14 @@ export const API_MARKET_QUOTES = '/api/market/quotes'
 export const API_MARKET_INDICES = '/api/market/indices'
 
 export const MCP_UPSTOX_URL = 'https://mcp.upstox.com/mcp'
-export const UPSTOX_MCP_DOCS_URL = 'https://upstox.com/developer/api-documentation/mcp-integration'
-export const UPSTOX_AUTH_URL = 'https://api.upstox.com/v2/login/authorization/dialog'
-export const UPSTOX_DEVELOPER_APPS_URL = 'https://account.upstox.com/developer/apps#analytics'
-export const UPSTOX_DEVELOPER_APPS_BASE_URL = 'https://account.upstox.com/developer/apps'
+export const UPSTOX_MCP_DOCS_URL =
+  'https://upstox.com/developer/api-documentation/mcp-integration'
+export const UPSTOX_AUTH_URL =
+  'https://api.upstox.com/v2/login/authorization/dialog'
+export const UPSTOX_DEVELOPER_APPS_URL =
+  'https://account.upstox.com/developer/apps#analytics'
+export const UPSTOX_DEVELOPER_APPS_BASE_URL =
+  'https://account.upstox.com/developer/apps'
 
 export const SIGNAL_BUY_CE = 'BUY_CE'
 export const SIGNAL_BUY_PE = 'BUY_PE'

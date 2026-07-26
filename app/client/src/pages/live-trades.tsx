@@ -1044,7 +1044,6 @@ export function LiveTradesPage() {
     } catch {
       // ignore
     }
-    void load(m)
   }
 
   useEffect(() => {

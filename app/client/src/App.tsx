@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense, Component } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
 import { hydrateAccounts } from '@/lib/accounts'
@@ -10,6 +10,46 @@ import { ArrowRight } from 'lucide-react'
 import { AppLogo } from '@/components/ui/app-logo'
 import { ALGO_TRADE_PREFIX, STORAGE_KEY_ACTIVE_USER } from '@/lib/constants'
 import './App.css'
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode
+}
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-dvh items-center justify-center bg-background p-6 text-center">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground mb-2">
+              Something went wrong
+            </h1>
+            <p className="text-sm text-muted-foreground mb-4">
+              {this.state.error?.message ?? 'An unexpected error occurred.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-xs font-medium"
+            >
+              Reload application
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const BrokerAccountsPage = lazy(() =>
   import('@/pages/broker-accounts').then((m) => ({
@@ -42,7 +82,35 @@ function Placeholder({ title }: { title: string }) {
   )
 }
 
-function App() {
+function AuthGate() {
+  const auth0Enabled = isAuth0Enabled()
+  if (!auth0Enabled) {
+    return <AppContent auth0Props={null} />
+  }
+  return <Auth0AppContent />
+}
+
+function Auth0AppContent() {
+  const auth0 = useAuth0()
+  const auth0Props: Auth0Props = {
+    getAccessTokenSilently: auth0.getAccessTokenSilently,
+    isAuthenticated: auth0.isAuthenticated,
+    isLoading: auth0.isLoading,
+    loginWithRedirect: auth0.loginWithRedirect,
+    user: auth0.user,
+  }
+  return <AppContent auth0Props={auth0Props} />
+}
+
+interface Auth0Props {
+  getAccessTokenSilently: () => Promise<string>
+  isAuthenticated: boolean
+  isLoading: boolean
+  loginWithRedirect: () => Promise<void>
+  user?: { sub?: string }
+}
+
+function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
   const isBrokerCallback = window.location.pathname === '/broker/callback'
   const urlParams = new URLSearchParams(window.location.search)
   const initialPage = !isBrokerCallback
@@ -59,7 +127,13 @@ function App() {
     isLoading,
     loginWithRedirect,
     user,
-  } = useAuth0()
+  } = auth0Props ?? {
+    getAccessTokenSilently: () => Promise.resolve(''),
+    isAuthenticated: false,
+    isLoading: false,
+    loginWithRedirect: () => Promise.resolve(),
+    user: undefined,
+  }
 
   // Register Auth0 token getter if enabled
   useEffect(() => {
@@ -224,6 +298,14 @@ function App() {
         </main>
       </div>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AuthGate />
+    </ErrorBoundary>
   )
 }
 

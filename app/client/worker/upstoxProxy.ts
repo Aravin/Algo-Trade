@@ -111,7 +111,15 @@ export async function handleUpstoxToken(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -142,7 +150,15 @@ export async function handleUpstoxProfile(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -180,7 +196,15 @@ export async function handleMarketIndices(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -211,7 +235,15 @@ export async function handleUpstoxFunds(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -246,7 +278,15 @@ export async function handleIntraday(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -296,7 +336,15 @@ export async function handleHistoricalCandles(
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -332,11 +380,20 @@ export async function handleOptionContracts(
     )
   }
 
-  const raw = await upstream.json<{ data?: { expiry?: string }[] }>()
+  let raw: unknown
+  try {
+    raw = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   const today = formatIsoDate()
+  const data = (raw as { data?: { expiry?: string }[] })?.data ?? []
   const expiries = [
     ...new Set(
-      (raw.data ?? [])
+      data
         .map((item) => item.expiry)
         .filter(
           (value): value is string =>
@@ -344,10 +401,7 @@ export async function handleOptionContracts(
         ),
     ),
   ].sort()
-  return Response.json(
-    { data: raw.data ?? [], expiries },
-    { status: upstream.status },
-  )
+  return Response.json({ data, expiries }, { status: upstream.status })
 }
 
 export async function handleMarketQuotes(request: Request): Promise<Response> {
@@ -379,7 +433,15 @@ export async function handleMarketQuotes(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -417,7 +479,15 @@ export async function handleOptionChain(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -462,7 +532,15 @@ export async function handleUpstoxPcr(request: Request): Promise<Response> {
     )
   }
 
-  const raw = await upstream.json()
+  let raw: unknown
+  try {
+    raw = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(
     { value: extractLatestPcrValue(raw), raw },
     { status: upstream.status },
@@ -519,7 +597,15 @@ export async function handlePlaceOrder(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -549,7 +635,15 @@ export async function handleOrderList(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -577,11 +671,18 @@ export async function handleVix(request: Request): Promise<Response> {
   } catch {
     return Response.json({ error: 'Failed to reach Upstox' }, { status: 502 })
   }
-  const raw = await upstream.json<{
-    status?: string
-    data?: Record<string, { last_price?: number }>
-  }>()
-  const entry = Object.values(raw?.data ?? {})[0]
+  let raw: unknown
+  try {
+    raw = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
+  const entry = Object.values(
+    (raw as { data?: Record<string, { last_price?: number }> })?.data ?? {},
+  )[0]
   return Response.json({ vix: entry?.last_price ?? null })
 }
 
@@ -661,13 +762,23 @@ export async function handleBreadth(request: Request): Promise<Response> {
   } catch {
     return Response.json({ error: 'Failed to reach Upstox' }, { status: 502 })
   }
-  const raw = await upstream.json<{
-    status?: string
-    data?: Record<string, { net_change?: number; last_price?: number }>
-  }>()
-  if (!raw?.data)
+  let raw: unknown
+  try {
+    raw = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
+  const data = (
+    raw as {
+      data?: Record<string, { net_change?: number; last_price?: number }>
+    }
+  )?.data
+  if (!data)
     return Response.json({ error: 'No data from Upstox', raw }, { status: 502 })
-  const stocks = Object.values(raw.data)
+  const stocks = Object.values(data)
   const advances = stocks.filter((s) => (s.net_change ?? 0) > 0).length
   const declines = stocks.filter((s) => (s.net_change ?? 0) < 0).length
   const ratio =
@@ -725,7 +836,15 @@ export async function handleUpstoxFii(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -769,7 +888,15 @@ export async function handleUpstoxDii(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -814,7 +941,15 @@ export async function handleUpstoxMaxPain(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -860,7 +995,15 @@ export async function handleUpstoxNews(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -903,7 +1046,15 @@ export async function handleUpstoxOi(request: Request): Promise<Response> {
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -950,7 +1101,15 @@ export async function handleUpstoxChangeOi(
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }
 
@@ -997,6 +1156,14 @@ export async function handleUpstoxSmartlistFutures(
     )
   }
 
-  const data = await upstream.json()
+  let data: unknown
+  try {
+    data = await upstream.json()
+  } catch {
+    return Response.json(
+      { error: 'Invalid response from Upstox API' },
+      { status: 502 },
+    )
+  }
   return Response.json(data, { status: upstream.status })
 }

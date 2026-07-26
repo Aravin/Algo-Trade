@@ -12,11 +12,7 @@ import {
   globalNiftyMapping,
   marketStrategyMapping,
 } from './types'
-import {
-  ORDER_TYPE_BUY,
-  ORDER_TYPE_SELL,
-  ORDER_TYPE_HOLD,
-} from './constants'
+import { ORDER_TYPE_BUY, ORDER_TYPE_SELL, ORDER_TYPE_HOLD } from './constants'
 
 // Symbols to exclude from global sentiment scoring (none currently needed for Upstox)
 

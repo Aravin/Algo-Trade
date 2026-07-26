@@ -8,9 +8,11 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
     globals: true,
     isolate: false,
     fileParallelism: false,
+    environment: 'jsdom',
+    setupFiles: [],
+    css: false,
   },
 })
