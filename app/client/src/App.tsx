@@ -8,7 +8,7 @@ import { AuthService } from '@/lib/auth'
 import { isAuth0Enabled } from '@/lib/auth0-config'
 import { ArrowRight } from 'lucide-react'
 import { AppLogo } from '@/components/ui/app-logo'
-import { ALGO_TRADE_PREFIX } from '@/lib/constants'
+import { ALGO_TRADE_PREFIX, STORAGE_KEY_ACTIVE_USER } from '@/lib/constants'
 import './App.css'
 
 const BrokerAccountsPage = lazy(() =>

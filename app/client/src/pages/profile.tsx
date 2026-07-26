@@ -19,6 +19,8 @@ import {
   STORAGE_KEY_BOT_LOGS,
   STORAGE_KEY_BOT_SNAPSHOT,
   STORAGE_KEY_PROXY_HISTORY,
+  API_UPSTOX_PROFILE,
+  API_UPSTOX_FUNDS,
 } from '@/lib/constants'
 
 // ─── Types ───────────────────────────────────────────────────────

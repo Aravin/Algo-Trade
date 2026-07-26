@@ -24,7 +24,6 @@ import {
   CONFIDENCE_NONE,
   POSITION_SIZE_FULL,
   POSITION_SIZE_HALF,
-  POSITION_SIZE_NONE,
   LEG_DIRECTION_CE,
   LEG_DIRECTION_PE,
 } from './constants'
@@ -196,11 +195,11 @@ export function shouldExit(
 // ─── Hard stop checks (Layer 0) ───────────────────────────────────────────────
 export function runHardStopChecks(vrd: VrdData | null): {
   blocked: boolean
-  blockedDirection: LEG_DIRECTION_CE | LEG_DIRECTION_PE | 'BOTH' | 'NONE'
+  blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
   reasons: string[]
 } {
   const reasons: string[] = []
-  let blockedDirection: LEG_DIRECTION_CE | LEG_DIRECTION_PE | 'BOTH' | 'NONE' = 'NONE'
+  let blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE' = 'NONE'
 
   // Only VIX is a reliable hard stop (real Upstox data). Nifty PE is now
   // synthetic (proxy-computed from indicators) and is penalised through scoring
