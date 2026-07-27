@@ -28,7 +28,7 @@ import {
 } from '@/lib/strategyEngine'
 import { getStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
-import { scoreStraddleIV } from '@/lib/vrdSignals'
+
 import { appendTick } from '@/lib/tickLog'
 import {
   isStaticIpRestrictionError,
@@ -147,8 +147,8 @@ function loadLogs(): BotLog[] {
 function saveLogs(logs: BotLog[]) {
   try {
     localStorage.setItem(KEYS.logs, JSON.stringify(logs.slice(-MAX_LOGS)))
-  } catch {
-    /* ignore */
+  } catch (error) {
+    console.error('Failed to save logs to localStorage', error)
   }
 }
 
@@ -159,8 +159,8 @@ function saveVrdCache(data: VrdData) {
       KEYS.vrdCache,
       JSON.stringify({ data, savedAt: new Date().toISOString() }),
     )
-  } catch {
-    /* ignore */
+  } catch (error) {
+    console.error('Failed to save VRD cache to localStorage', error)
   }
 }
 function loadVrdCache(): VrdData | null {
@@ -181,8 +181,8 @@ function loadVrdCache(): VrdData | null {
 function saveSnapshot(snapshot: BotSnapshot) {
   try {
     localStorage.setItem(KEYS.snapshot, JSON.stringify(snapshot))
-  } catch {
-    /* ignore */
+  } catch (error) {
+    console.error('Failed to save snapshot to localStorage', error)
   }
 }
 
@@ -325,7 +325,7 @@ export function useStrategyBot(token: string | null) {
     ...loadPersisted(),
   }))
   const isTickingRef = useRef(false)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastExitTimesRef = useRef<Record<string, number>>(loadExitTimes())
   const statusRef = useRef<BotStatus>(status)
   useLayoutEffect(() => {
@@ -640,12 +640,17 @@ export function useStrategyBot(token: string | null) {
 
       // Entry cutoff check
       const [lh, lm] = (config.lastEntryTime ?? '15:15').split(':').map(Number)
-      const istOffset = 5.5 * 60 * 60 * 1000
-      const nowIST = new Date(Date.now() + istOffset)
+      const timeStr = new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour12: false,
+        hourCycle: 'h23',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      const [currentHour, currentMinute] = timeStr.split(':').map(Number)
       const afterCutoff =
         Number.isFinite(lh) && Number.isFinite(lm)
-          ? nowIST.getUTCHours() > lh ||
-            (nowIST.getUTCHours() === lh && nowIST.getUTCMinutes() >= lm)
+          ? currentHour > lh || (currentHour === lh && currentMinute >= lm)
           : false
 
       const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
@@ -777,46 +782,51 @@ export function useStrategyBot(token: string | null) {
             direction: 'CE' | 'PE'
             tradeType: 'buying' | 'selling'
           }
+
           const legsToPlace: LegSetup[] = []
-          let activeTradeType: 'buying' | 'selling' = 'buying'
-          if (config.tradeType === 'both') {
-            const percentAboveAvg = symbolVrds[sym]?.straddleIv?.percentAboveAvg
-            if (percentAboveAvg !== undefined && percentAboveAvg !== null) {
-              const iv = scoreStraddleIV(percentAboveAvg)
-              activeTradeType = iv.preferBuy ? 'buying' : 'selling'
-            } else {
-              activeTradeType = 'buying'
-            }
-          } else {
-            activeTradeType = config.tradeType
+
+          if (config.tradeType === 'buying' || config.tradeType === 'both') {
+            legsToPlace.push({
+              direction: symSig.signal === 'BUY_CE' ? 'CE' : 'PE',
+              tradeType: 'buying',
+            })
+          }
+          if (config.tradeType === 'selling' || config.tradeType === 'both') {
+            legsToPlace.push({
+              direction: symSig.signal === 'BUY_CE' ? 'PE' : 'CE',
+              tradeType: 'selling',
+            })
           }
 
-          legsToPlace.push({
-            direction:
-              activeTradeType === 'selling'
-                ? symSig.signal === 'BUY_CE'
-                  ? 'PE'
-                  : 'CE'
-                : symSig.signal === 'BUY_CE'
-                  ? 'CE'
-                  : 'PE',
-            tradeType: activeTradeType,
-          })
-
           let totalReq = 0
+          let missingStrike = false
           for (const leg of legsToPlace) {
             const strike = getOtmStrike(
               symMarket.optionChain,
               leg.direction,
               config.otmSkip,
             )
-            if (!strike) continue
+            if (!strike) {
+              missingStrike = true
+              break
+            }
             const ltp =
               leg.direction === 'CE'
                 ? strike.call_options.market_data.ltp
                 : strike.put_options.market_data.ltp
-            const legReq = leg.tradeType === 'selling' ? 4000 : ltp
+            const legReq = ltp
             totalReq += legReq
+          }
+
+          if (missingStrike) {
+            addLog(
+              mkLog(
+                'warn',
+                'order',
+                `[${sym}] no OTM strike found for one or more legs`,
+              ),
+            )
+            continue
           }
 
           const executionMode: ExecutionMode = config.executionMode
@@ -983,8 +993,8 @@ export function useStrategyBot(token: string | null) {
                     (p) => p !== null,
                   )
                   if (!hasActivePos) {
-                    if (intervalRef.current) clearInterval(intervalRef.current)
-                    intervalRef.current = null
+                    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+                    timeoutRef.current = null
                     updateStatus({
                       state: 'STOPPED',
                       error:
@@ -1040,7 +1050,8 @@ export function useStrategyBot(token: string | null) {
               entryTime: new Date().toISOString(),
               tradeId: Date.now(),
               executionMode,
-              tradeType: activeTradeType,
+              tradeType: config.tradeType,
+              paperTradeId: positionLegs[0]?.paperTradeId,
               legs: positionLegs,
               underlyingSymbol: sym,
             }
@@ -1131,7 +1142,7 @@ export function useStrategyBot(token: string | null) {
                   entryTime: new Date().toISOString(),
                   tradeId: Date.now(),
                   executionMode,
-                  tradeType: activeTradeType,
+                  tradeType: 'buying',
                   legs: failedExitLegs,
                   underlyingSymbol: sym,
                 }
@@ -1428,13 +1439,28 @@ export function useStrategyBot(token: string | null) {
   }, [token, updateStatus, addLogs, addLog])
 
   // ── Start / stop ─────────────────────────────────────────────────────────────
+  const scheduleNext = useCallback(() => {
+    function loop() {
+      const config = getStrategyConfig()
+      timeoutRef.current = setTimeout(() => {
+        void tick().finally(() => {
+          const state = statusRef.current.state
+          if (state === 'RUNNING' || state === 'ORDERED') {
+            loop()
+          }
+        })
+      }, config.pollingIntervalSec * 1000)
+    }
+    loop()
+  }, [tick])
+
   const start = useCallback(() => {
     if (!token) {
       addLog(mkLog('error', 'bot', 'cannot start — no broker token'))
       return
     }
     const config = getStrategyConfig()
-    if (intervalRef.current) clearInterval(intervalRef.current)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
     addLog(
       mkLog(
         'info',
@@ -1443,16 +1469,17 @@ export function useStrategyBot(token: string | null) {
       ),
     )
     updateStatus({ state: 'RUNNING', error: null })
-    void tick()
-    intervalRef.current = setInterval(
-      () => void tick(),
-      config.pollingIntervalSec * 1000,
-    )
-  }, [token, tick, updateStatus, addLog])
+    void tick().finally(() => {
+      const state = statusRef.current.state
+      if (state === 'RUNNING' || state === 'ORDERED') {
+        scheduleNext()
+      }
+    })
+  }, [token, tick, updateStatus, addLog, scheduleNext])
 
   const stop = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    intervalRef.current = null
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = null
     addLog(mkLog('info', 'bot', 'stopped by user'))
     updateStatus({
       state: 'IDLE',
@@ -1466,28 +1493,28 @@ export function useStrategyBot(token: string | null) {
   // ── Resume on mount if was running ──────────────────────────────────────────
   useEffect(() => {
     if (token && (status.state === 'RUNNING' || status.state === 'ORDERED')) {
-      const config = getStrategyConfig()
       const resumeTimer = setTimeout(() => {
         addLog(
           mkLog('info', 'bot', `resumed from persisted state=${status.state}`),
         )
-        void tick()
+        void tick().finally(() => {
+          const state = statusRef.current.state
+          if (state === 'RUNNING' || state === 'ORDERED') {
+            scheduleNext()
+          }
+        })
       }, 0)
-      intervalRef.current = setInterval(
-        () => void tick(),
-        config.pollingIntervalSec * 1000,
-      )
       return () => {
         clearTimeout(resumeTimer)
-        if (intervalRef.current) clearInterval(intervalRef.current)
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
         abortRef.current?.abort()
       }
     }
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
       abortRef.current?.abort()
     }
-  }, [token, status.state, tick, addLog])
+  }, [token, status.state, tick, addLog, scheduleNext])
 
   return { ...status, start, stop, clearLogs }
 }

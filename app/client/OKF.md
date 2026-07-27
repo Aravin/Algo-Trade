@@ -22,31 +22,24 @@ Defined in `src/lib/types.ts`:
 
 ```typescript
 export interface StrategyConfig {
-  id: string
-  name: string
-  symbol: string // e.g. "NSE_INDEX|Nifty 50", "NSE_INDEX|Nifty Bank"
-  tradeType: 'LONG' | 'SHORT' | 'BOTH'
-  maxLossPerDay: number // Emergency Hard Stop limit in INR
-  targetProfitPerDay: number // Daily profit target in INR
-  orderQuantity: number // Fixed lot or quantity
-  timeframe: string // e.g. "1m", "5m", "15m"
-
-  // Indicator Weights & Thresholds
-  minScoreToTrade: number // e.g. 65 (out of 100)
-  trailingSlPct: number // Trailing stop loss percentage
-  targetPct: number // Fixed profit target percentage
-  stopLossPct: number // Fixed stop loss percentage
-
-  // Strategy Modules Enable Switches
-  useVwap: boolean
-  useSupertrend: boolean
-  useEmaCrossover: boolean
-  useRsi: boolean
-  useBollingerBands: boolean
-  usePcr: boolean
-  useMarketBreadth: boolean
-  useVix: boolean
-  useInstitutionalFlows: boolean
+  underlyingMode: UnderlyingMode
+  multiSymbolExecutionMode?: 'independent' | 'consensus' | 'best_signal'
+  strongThreshold: number
+  moderateThreshold: number
+  strongGap: number
+  moderateGap: number
+  maxProfitPct: number
+  maxLossPct: number
+  maxTradesPerDay: number
+  lastEntryTime: string
+  pollingIntervalSec: number
+  minConfidence: 'strong' | 'moderate'
+  otmSkip: number
+  executionMode: ExecutionMode
+  tradeType: 'buying' | 'selling' | 'both'
+  brentCrudeExtremeThreshold: number
+  brentCrudeOverhangThreshold: number
+  exitCooldownSec?: number
 }
 ```
 
