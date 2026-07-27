@@ -160,7 +160,7 @@ export async function handlePaperAccount(
   } catch (error) {
     console.error('Failed to load paper account:', error)
     return Response.json(
-      { error: 'Failed to load paper account' },
+      { error: 'Failed to load paper account', details: String(error) },
       { status: 500 },
     )
   }
@@ -184,7 +184,7 @@ export async function handlePaperHistory(
   } catch (error) {
     console.error('Failed to load paper history:', error)
     return Response.json(
-      { error: 'Failed to load paper history' },
+      { error: 'Failed to load paper history', details: String(error) },
       { status: 500 },
     )
   }
