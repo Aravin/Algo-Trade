@@ -488,6 +488,7 @@ export function useStrategyBot(token: string | null) {
         (e) => tickLogs.push(e),
         srcUpd,
         primaryMarket.optionChain,
+        targetSymbols,
       )
 
       // Evaluate & record signals for all active target symbols in parallel

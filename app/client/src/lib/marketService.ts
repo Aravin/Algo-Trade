@@ -150,11 +150,16 @@ export async function fetchGlobalMarketData(
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
   primaryOptionChain: OptionData[],
+  targetSymbols: UnderlyingSymbol[],
 ): Promise<GlobalSentimentData> {
   sourceUpdate('vix', 'pending')
   sourceUpdate('upstox/fii', 'pending')
   sourceUpdate('upstox/dii', 'pending')
   sourceUpdate('upstox/news', 'pending')
+
+  const instrumentKeys = targetSymbols
+    .map((sym) => UNDERLYING_INSTRUMENT_KEYS[sym])
+    .join(',')
 
   const [vixRes, fiiRes, diiRes, newsRes] = await Promise.allSettled([
     safeFetch<{ vix: number | null }>(API_MARKET_VIX, {
@@ -203,7 +208,7 @@ export async function fetchGlobalMarketData(
       body: JSON.stringify({
         token,
         category: 'instrument_keys',
-        instrumentKeys: 'NSE_INDEX|Nifty 50',
+        instrumentKeys,
       }),
     }),
   ])
