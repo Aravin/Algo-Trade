@@ -73,7 +73,7 @@ export function mkLog(
 
 // ─── Safe JSON fetch — returns [data, null] or [null, errorMsg] ───────────────
 export async function safeFetch<T>(
-  input: RequestInfo,
+  input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<[T | null, string | null]> {
   try {
@@ -151,6 +151,7 @@ export async function fetchGlobalMarketData(
   sourceUpdate: (k: string, s: SourceStatus) => void,
   primaryOptionChain: OptionData[],
   targetSymbols: UnderlyingSymbol[],
+  abortSignal?: AbortSignal,
 ): Promise<GlobalSentimentData> {
   sourceUpdate('vix', 'pending')
   sourceUpdate('upstox/fii', 'pending')
@@ -166,6 +167,7 @@ export async function fetchGlobalMarketData(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
+      signal: abortSignal,
     }),
     safeFetch<{
       status: string
@@ -183,6 +185,7 @@ export async function fetchGlobalMarketData(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
+      signal: abortSignal,
     }),
     safeFetch<{
       status: string
@@ -198,6 +201,7 @@ export async function fetchGlobalMarketData(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
+      signal: abortSignal,
     }),
     safeFetch<{
       status: string
@@ -210,6 +214,7 @@ export async function fetchGlobalMarketData(
         category: 'instrument_keys',
         instrumentKeys,
       }),
+      signal: abortSignal,
     }),
   ])
 
@@ -428,6 +433,7 @@ export async function fetchSymbolSentiment(
   } | null,
   giftNifty: VrdData['giftNifty'],
   globalData: GlobalSentimentData,
+  abortSignal?: AbortSignal,
 ): Promise<VrdData> {
   sourceUpdate(`upstox/pcr/${underlyingSymbol}`, 'pending')
   sourceUpdate(`upstox/max-pain/${underlyingSymbol}`, 'pending')
@@ -442,6 +448,7 @@ export async function fetchSymbolSentiment(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
+      signal: abortSignal,
     }),
     safeFetch<{
       status: string
@@ -452,6 +459,7 @@ export async function fetchSymbolSentiment(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, expiry: latestExpiry, instrumentKey }),
+      signal: abortSignal,
     }),
   ])
 
@@ -627,6 +635,7 @@ export async function fetchMarket(
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
   underlyingSymbol: UnderlyingSymbol = 'NIFTY 50',
+  abortSignal?: AbortSignal,
 ): Promise<{
   underlyingSymbol: UnderlyingSymbol
   candles: Candle[]
@@ -669,6 +678,7 @@ export async function fetchMarket(
             instrumentKey: targetInstrumentKey,
             interval: '1minute',
           }),
+          signal: abortSignal,
         },
       ),
       safeFetch<{
@@ -680,6 +690,7 @@ export async function fetchMarket(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
+        signal: abortSignal,
       }),
       safeFetch<{
         expiries?: string[]
@@ -687,6 +698,7 @@ export async function fetchMarket(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, instrumentKey: targetInstrumentKey }),
+        signal: abortSignal,
       }),
       safeFetch<{
         status: string
@@ -696,6 +708,7 @@ export async function fetchMarket(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
+        signal: abortSignal,
       }),
     ])
 
@@ -777,6 +790,7 @@ export async function fetchMarket(
           expiryDate: candidate,
           instrumentKey: targetInstrumentKey,
         }),
+        signal: abortSignal,
       },
     )
     if (err) {
@@ -910,9 +924,12 @@ export async function fetchMarketForSymbols(
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
   symbols: UnderlyingSymbol[],
+  abortSignal?: AbortSignal,
 ): Promise<Record<UnderlyingSymbol, Awaited<ReturnType<typeof fetchMarket>>>> {
   const results = await Promise.allSettled(
-    symbols.map((sym) => fetchMarket(token, addLog, sourceUpdate, sym)),
+    symbols.map((sym) =>
+      fetchMarket(token, addLog, sourceUpdate, sym, abortSignal),
+    ),
   )
   const map = {} as Record<
     UnderlyingSymbol,

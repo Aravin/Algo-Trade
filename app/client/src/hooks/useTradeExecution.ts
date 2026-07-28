@@ -1,0 +1,748 @@
+import { useCallback } from 'react'
+import type {
+  ActivePosition,
+  PositionLeg,
+  FinalSignal,
+  UnderlyingSymbol,
+  VrdData,
+  IndicatorsResult,
+  AllSignalData,
+  OptionData,
+} from '@/lib/types'
+import type { StrategyConfig } from '@/lib/types'
+import {
+  API_PAPER_TRADES_ENTER,
+  API_PAPER_TRADES_EXIT,
+  API_ORDER_PLACE,
+} from '@/lib/constants'
+import {
+  safeFetch,
+  mkLog,
+  type BotLog,
+  type fetchMarket,
+} from '@/lib/marketService'
+import { getOtmStrike } from '@/lib/indicators'
+import { notify } from '@/lib/notifications'
+import {
+  isStaticIpRestrictionError,
+  isPaperPosition,
+  getLotSizeForSymbol,
+} from '@/lib/syntheticCalculators'
+import { fetchPaperAccount } from '@/lib/paperTrading'
+import { shouldExit } from '@/lib/strategyEngine'
+
+export interface ExecutionContext {
+  token: string
+  config: StrategyConfig
+  targetSymbols: UnderlyingSymbol[]
+  allowedSymbols: UnderlyingSymbol[]
+  marketMap: Record<string, Awaited<ReturnType<typeof fetchMarket>>>
+  symbolSignals: Partial<Record<UnderlyingSymbol, FinalSignal | null>>
+  symbolIndicators: Partial<Record<UnderlyingSymbol, IndicatorsResult | null>>
+  symbolVrds: Partial<Record<UnderlyingSymbol, VrdData>>
+  primaryMarket: Awaited<ReturnType<typeof fetchMarket>>
+  primaryVrdData: VrdData | null
+  indicators: IndicatorsResult
+  hardStop: { blocked: boolean; blockedDirection?: string; reasons: string[] }
+  afterCutoff: boolean
+  curPositions: Record<UnderlyingSymbol, ActivePosition | null>
+  curTradesPerSym: Partial<Record<UnderlyingSymbol, number>>
+  lastExitTimes: Record<string, number>
+  addLog: (log: BotLog) => void
+  onStaticIpError: () => void
+  abortSignal?: AbortSignal
+}
+
+export function useTradeExecution() {
+  const evaluateAndEnter = useCallback(
+    async (ctx: ExecutionContext): Promise<Set<UnderlyingSymbol>> => {
+      const {
+        token,
+        config,
+        allowedSymbols,
+        marketMap,
+        symbolSignals,
+        symbolVrds,
+        hardStop,
+        afterCutoff,
+        curPositions,
+        curTradesPerSym,
+        lastExitTimes,
+        addLog,
+        onStaticIpError,
+        abortSignal,
+      } = ctx
+
+      const newlyEnteredPositions = new Set<UnderlyingSymbol>()
+      if (afterCutoff) return newlyEnteredPositions
+
+      const mode = config.multiSymbolExecutionMode ?? 'independent'
+      let candidates: { symbol: UnderlyingSymbol; signal: FinalSignal }[] = []
+
+      if (mode === 'consensus') {
+        const activeSigs = allowedSymbols
+          .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+          .filter(
+            (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+              Boolean(item.sig) &&
+              (item.sig?.signal === 'BUY_CE' || item.sig?.signal === 'BUY_PE'),
+          )
+        if (
+          activeSigs.length === allowedSymbols.length &&
+          activeSigs.every((s) => s.sig.signal === activeSigs[0].sig.signal)
+        ) {
+          candidates = activeSigs
+            .filter((item) => !curPositions[item.sym])
+            .map((item) => ({ symbol: item.sym, signal: item.sig }))
+        }
+      } else if (mode === 'best_signal') {
+        const hasAnyOpenPosition = Object.values(curPositions).some(
+          (p) => p !== null,
+        )
+        if (!hasAnyOpenPosition) {
+          const eligible = allowedSymbols
+            .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+            .filter(
+              (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+                Boolean(item.sig) &&
+                !curPositions[item.sym] &&
+                (item.sig?.signal === 'BUY_CE' ||
+                  item.sig?.signal === 'BUY_PE'),
+            )
+          if (eligible.length > 0) {
+            eligible.sort(
+              (a, b) =>
+                Math.max(b.sig.bullScore, b.sig.bearScore) -
+                Math.max(a.sig.bullScore, a.sig.bearScore),
+            )
+            candidates = [{ symbol: eligible[0].sym, signal: eligible[0].sig }]
+          }
+        }
+      } else {
+        candidates = allowedSymbols
+          .map((sym) => ({ sym, sig: symbolSignals[sym] }))
+          .filter(
+            (item): item is { sym: UnderlyingSymbol; sig: FinalSignal } =>
+              Boolean(item.sig) &&
+              !curPositions[item.sym] &&
+              (item.sig?.signal === 'BUY_CE' || item.sig?.signal === 'BUY_PE'),
+          )
+          .map((item) => ({ symbol: item.sym, signal: item.sig }))
+      }
+
+      for (const candidate of candidates) {
+        const { symbol: sym, signal: symSig } = candidate
+        const symTradesCount = curTradesPerSym[sym] ?? 0
+        if (symTradesCount >= config.maxTradesPerDay) {
+          addLog(
+            mkLog(
+              'warn',
+              'bot',
+              `[${sym}] max trades/day (${config.maxTradesPerDay}) reached — skipping entry`,
+            ),
+          )
+          continue
+        }
+
+        const lastExit = lastExitTimes[sym] ?? 0
+        const cooldownMs = (config.exitCooldownSec ?? 60) * 1000
+        if (Date.now() - lastExit < cooldownMs) {
+          continue
+        }
+
+        if (
+          hardStop.blocked &&
+          (hardStop.blockedDirection === 'BOTH' ||
+            (hardStop.blockedDirection === 'CE' &&
+              symSig.signal === 'BUY_CE') ||
+            (hardStop.blockedDirection === 'PE' && symSig.signal === 'BUY_PE'))
+        ) {
+          addLog(
+            mkLog(
+              'warn',
+              'bot',
+              `[${sym}] Entry ${symSig.signal} blocked by hard stop: ${hardStop.reasons.join(', ')}`,
+            ),
+          )
+          continue
+        }
+
+        const symMarket = marketMap[sym]
+        if (!symMarket?.optionChain.length) continue
+
+        const legsToPlace: {
+          direction: 'CE' | 'PE'
+          tradeType: 'buying' | 'selling'
+        }[] = []
+
+        let resolvedTradeType = config.tradeType
+        if (resolvedTradeType === 'both') {
+          const vix = symbolVrds[sym]?.vix ?? 0
+          const straddleElevated =
+            symbolVrds[sym]?.straddleIv?.elevated ?? false
+          if (vix >= 18 || straddleElevated) {
+            resolvedTradeType = 'selling'
+          } else {
+            resolvedTradeType = 'buying'
+          }
+        }
+
+        if (resolvedTradeType === 'buying') {
+          legsToPlace.push({
+            direction: symSig.signal === 'BUY_CE' ? 'CE' : 'PE',
+            tradeType: 'buying',
+          })
+        }
+        if (resolvedTradeType === 'selling') {
+          legsToPlace.push({
+            direction: symSig.signal === 'BUY_CE' ? 'PE' : 'CE',
+            tradeType: 'selling',
+          })
+        }
+
+        let totalReq = 0
+        let missingStrike = false
+        for (const leg of legsToPlace) {
+          const strike = getOtmStrike(
+            symMarket.optionChain,
+            leg.direction,
+            config.otmSkip,
+          )
+          if (!strike) {
+            missingStrike = true
+            break
+          }
+          const ltp =
+            leg.direction === 'CE'
+              ? strike.call_options.market_data.ltp
+              : strike.put_options.market_data.ltp
+          const lotSize = getLotSizeForSymbol(
+            symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
+          )
+          const legReq = leg.tradeType === 'selling' ? 100000 / lotSize : ltp
+          totalReq += legReq
+        }
+
+        if (missingStrike) {
+          addLog(
+            mkLog(
+              'warn',
+              'order',
+              `[${sym}] no OTM strike found for one or more legs`,
+            ),
+          )
+          continue
+        }
+
+        const executionMode = config.executionMode
+        const lotSize = getLotSizeForSymbol(
+          symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
+        )
+        let qty = symSig.positionSize === 'full' ? lotSize * 2 : lotSize
+
+        let paperBalance: number | null = null
+        if (executionMode === 'paper') {
+          try {
+            const summary = await fetchPaperAccount()
+            paperBalance = summary.account.balance
+          } catch (error) {
+            addLog(
+              mkLog(
+                'warn',
+                'paper',
+                `Unable to read paper balance before entry: ${(error as Error).message}`,
+              ),
+            )
+          }
+
+          if (paperBalance !== null && totalReq > 0) {
+            const lotReq = totalReq * lotSize
+            const affordableLots = Math.floor(paperBalance / lotReq)
+            const affordableQty = affordableLots * lotSize
+            if (affordableQty <= 0) {
+              addLog(
+                mkLog(
+                  'warn',
+                  'paper',
+                  `Skipping paper entry for ${sym}: balance ₹${paperBalance.toFixed(2)} cannot afford 1 lot`,
+                ),
+              )
+              continue
+            }
+            if (affordableQty < qty) {
+              qty = affordableQty
+            }
+          }
+        }
+
+        const positionLegs: PositionLeg[] = []
+        let success = true
+        let firstInstrumentKey = ''
+        let firstDirection: 'CE' | 'PE' = 'CE'
+        let firstEntryPrice = 0
+
+        for (const leg of legsToPlace) {
+          const strike = getOtmStrike(
+            symMarket.optionChain,
+            leg.direction,
+            config.otmSkip,
+          )
+          if (!strike) {
+            success = false
+            break
+          }
+          const instrumentKey =
+            leg.direction === 'CE'
+              ? strike.call_options.instrument_key
+              : strike.put_options.instrument_key
+          const ltp =
+            leg.direction === 'CE'
+              ? strike.call_options.market_data.ltp
+              : strike.put_options.market_data.ltp
+
+          if (!firstInstrumentKey) {
+            firstInstrumentKey = instrumentKey
+            firstDirection = leg.direction
+            firstEntryPrice = ltp
+          }
+
+          const side = leg.tradeType === 'selling' ? 'SELL' : 'BUY'
+          addLog(
+            mkLog(
+              'info',
+              'order',
+              `[${sym}] placing ${side} ${leg.direction} ${instrumentKey} qty=${qty} ltp=${ltp}`,
+            ),
+          )
+
+          let paperTradeId: string | undefined
+          if (executionMode === 'paper') {
+            const [paperData, paperErr] = await safeFetch<{
+              trade?: { id: string }
+            }>(API_PAPER_TRADES_ENTER, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instrumentKey,
+                direction: leg.direction,
+                quantity: qty,
+                entryPrice: ltp,
+                metadata: {
+                  signal: symSig.signal,
+                  confidence: symSig.confidence,
+                  tradeType: leg.tradeType,
+                  tradingSymbol:
+                    leg.direction === 'CE'
+                      ? strike.call_options.trading_symbol
+                      : strike.put_options.trading_symbol,
+                  strikePrice: strike.strike_price,
+                  expiry: strike.expiry,
+                  underlyingSymbol: sym,
+                },
+              }),
+              signal: abortSignal,
+            })
+            if (paperErr || !paperData?.trade?.id) {
+              addLog(
+                mkLog(
+                  'error',
+                  'paper',
+                  `[${sym}] Paper ${side} failed: ${paperErr}`,
+                ),
+              )
+              success = false
+              break
+            }
+            paperTradeId = paperData.trade.id
+            notify(
+              `Paper Trade Executed [${sym}]`,
+              `Paper ${side} ${leg.direction} placed`,
+              'success',
+            )
+          } else {
+            const [orderData, orderErr] = await safeFetch<{
+              data?: { order_id: string }
+              status?: string
+            }>(API_ORDER_PLACE, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token,
+                instrumentKey,
+                transactionType: side,
+                quantity: qty,
+              }),
+              signal: abortSignal,
+            })
+            if (
+              orderErr ||
+              (!orderData?.data?.order_id && orderData?.status !== 'success')
+            ) {
+              addLog(
+                mkLog('error', 'order', `[${sym}] ${side} failed: ${orderErr}`),
+              )
+              success = false
+              if (isStaticIpRestrictionError(orderErr)) {
+                onStaticIpError()
+              }
+              break
+            }
+            notify(
+              `Trade Executed [${sym}]`,
+              `${side} ${leg.direction} placed`,
+              'success',
+            )
+          }
+
+          positionLegs.push({
+            instrumentKey,
+            direction: leg.direction,
+            entryPrice: ltp,
+            currentPrice: ltp,
+            unrealizedPnl: 0,
+            quantity: qty,
+            tradeType: leg.tradeType,
+            paperTradeId,
+            status: 'OPEN',
+          })
+        }
+
+        if (success) {
+          curPositions[sym] = {
+            instrumentKey: firstInstrumentKey,
+            direction: firstDirection,
+            entryPrice: firstEntryPrice,
+            currentPrice: firstEntryPrice,
+            unrealizedPnl: 0,
+            quantity: qty,
+            entryTime: new Date().toISOString(),
+            tradeId: Date.now(),
+            executionMode,
+            tradeType: resolvedTradeType,
+            paperTradeId: positionLegs[0]?.paperTradeId,
+            legs: positionLegs,
+            underlyingSymbol: sym,
+          }
+          curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+          newlyEnteredPositions.add(sym)
+        } else if (positionLegs.length > 0) {
+          if (executionMode === 'paper') {
+            for (const leg of positionLegs) {
+              if (leg.paperTradeId) {
+                const [, rollbackErr] = await safeFetch(API_PAPER_TRADES_EXIT, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tradeId: leg.paperTradeId,
+                    exitPrice: leg.currentPrice ?? leg.entryPrice, // Fix: use current price
+                    metadata: {
+                      reason: 'Rollback due to multi-leg entry failure',
+                    },
+                  }),
+                  signal: abortSignal,
+                })
+                if (rollbackErr) {
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'paper',
+                      `[${sym}] Rollback failed for leg ${leg.instrumentKey}`,
+                    ),
+                  )
+                }
+              }
+            }
+          } else {
+            addLog(
+              mkLog(
+                'warn',
+                'order',
+                `[${sym}] Attempting emergency exit for executed legs...`,
+              ),
+            )
+            const failedExitLegs: PositionLeg[] = []
+            for (const leg of positionLegs) {
+              const exitTxType = leg.tradeType === 'selling' ? 'BUY' : 'SELL'
+              const [, exitErr] = await safeFetch(API_ORDER_PLACE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token,
+                  instrumentKey: leg.instrumentKey,
+                  transactionType: exitTxType,
+                  quantity: leg.quantity,
+                }),
+                signal: abortSignal,
+              })
+              if (exitErr) {
+                failedExitLegs.push({ ...leg, status: 'OPEN' })
+              }
+            }
+            if (failedExitLegs.length > 0) {
+              notify(
+                `Multi-Leg Alert [${sym}]`,
+                `Failed to emergency close legs`,
+                'error',
+              )
+              curPositions[sym] = {
+                instrumentKey: firstInstrumentKey,
+                direction: firstDirection,
+                entryPrice: firstEntryPrice,
+                currentPrice: firstEntryPrice,
+                unrealizedPnl: 0,
+                quantity: qty,
+                entryTime: new Date().toISOString(),
+                tradeId: Date.now(),
+                executionMode,
+                tradeType: resolvedTradeType,
+                legs: failedExitLegs,
+                underlyingSymbol: sym,
+              }
+              curTradesPerSym[sym] = (curTradesPerSym[sym] ?? 0) + 1
+            }
+          }
+        }
+      }
+
+      return newlyEnteredPositions
+    },
+    [],
+  )
+
+  const evaluateAndExit = useCallback(
+    async (
+      ctx: ExecutionContext,
+      newlyEnteredPositions: Set<UnderlyingSymbol>,
+    ): Promise<void> => {
+      const {
+        token,
+        config,
+        targetSymbols,
+        marketMap,
+        symbolIndicators,
+        symbolVrds,
+        primaryMarket,
+        primaryVrdData,
+        indicators,
+        hardStop,
+        afterCutoff,
+        curPositions,
+        lastExitTimes,
+        addLog,
+        abortSignal,
+      } = ctx
+
+      for (const sym of targetSymbols) {
+        if (newlyEnteredPositions.has(sym)) continue
+        const pos = curPositions[sym]
+        if (!pos) continue
+        const symMarket = marketMap[sym]
+        const symOptionChain: OptionData[] = symMarket?.optionChain ?? []
+        const posKey = pos.instrumentKey
+        const match = symOptionChain.find(
+          (o) =>
+            o.call_options.instrument_key === posKey ||
+            o.put_options.instrument_key === posKey,
+        )
+        const currentPrice = match
+          ? pos.direction === 'CE'
+            ? match.call_options.market_data.ltp
+            : match.put_options.market_data.ltp
+          : (pos.currentPrice ?? pos.entryPrice)
+
+        let updatedLegs: PositionLeg[] | undefined
+        let totalUnrealizedPnl = 0
+
+        if (pos.legs && pos.legs.length > 0) {
+          updatedLegs = pos.legs.map((leg) => {
+            const isExited = leg.status === 'CLOSED'
+            let legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+
+            if (!isExited) {
+              const legKey = leg.instrumentKey
+              const legMatch = symOptionChain.find(
+                (o) =>
+                  o.call_options.instrument_key === legKey ||
+                  o.put_options.instrument_key === legKey,
+              )
+              if (legMatch) {
+                legCurrentPrice =
+                  leg.direction === 'CE'
+                    ? legMatch.call_options.market_data.ltp
+                    : legMatch.put_options.market_data.ltp
+              }
+            }
+
+            const legUrPnl =
+              leg.tradeType === 'selling'
+                ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+                : (legCurrentPrice - leg.entryPrice) * leg.quantity
+            totalUnrealizedPnl += legUrPnl
+
+            return {
+              ...leg,
+              currentPrice: legCurrentPrice,
+              unrealizedPnl: legUrPnl,
+            }
+          })
+        } else {
+          const isSelling = pos.tradeType === 'selling'
+          totalUnrealizedPnl = isSelling
+            ? (pos.entryPrice - currentPrice) * pos.quantity
+            : (currentPrice - pos.entryPrice) * pos.quantity
+        }
+
+        curPositions[sym] = {
+          ...pos,
+          currentPrice,
+          unrealizedPnl: totalUnrealizedPnl,
+          legs: updatedLegs,
+        }
+
+        const symSigData: AllSignalData = {
+          v3: symMarket?.v3 ?? primaryMarket.v3,
+          indicators: symbolIndicators[sym] ?? indicators,
+          vrd: symbolVrds[sym] ?? primaryVrdData ?? null,
+          globalIndices:
+            symMarket?.globalIndices ?? primaryMarket.globalIndices,
+        }
+        const { exit: signalExit, reason: signalReason } = shouldExit(
+          pos,
+          symSigData,
+          currentPrice,
+          config,
+        )
+        const exit =
+          signalExit ||
+          afterCutoff ||
+          (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
+        const reason = afterCutoff
+          ? `EOD forced exit`
+          : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
+            ? `Hard Stop triggered`
+            : signalReason
+
+        if (exit) {
+          const allLegs =
+            updatedLegs && updatedLegs.length > 0
+              ? updatedLegs
+              : [
+                  {
+                    instrumentKey: pos.instrumentKey,
+                    direction: pos.direction,
+                    entryPrice: pos.entryPrice,
+                    quantity: pos.quantity,
+                    tradeType:
+                      pos.tradeType === 'selling'
+                        ? ('selling' as const)
+                        : ('buying' as const),
+                    paperTradeId: pos.paperTradeId,
+                    currentPrice,
+                    status: 'OPEN' as const,
+                  },
+                ]
+
+          let allLegsCleared = true
+
+          for (const leg of allLegs) {
+            if (leg.status === 'CLOSED') {
+              continue
+            }
+            const isSelling = leg.tradeType === 'selling'
+            const exitTxType = isSelling ? 'BUY' : 'SELL'
+            if (isPaperPosition(pos)) {
+              addLog(
+                mkLog(
+                  'info',
+                  'paper',
+                  `[${sym}] closing paper trade leg ${leg.instrumentKey}`,
+                ),
+              )
+              const [, paperExitErr] = await safeFetch(API_PAPER_TRADES_EXIT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tradeId: leg.paperTradeId,
+                  exitPrice: leg.currentPrice ?? currentPrice,
+                  metadata: { reason },
+                }),
+                signal: abortSignal,
+              })
+              if (paperExitErr) {
+                const isTerminalClosed =
+                  paperExitErr.includes('TRADE_ALREADY_CLOSED') ||
+                  paperExitErr.includes('TRADE_NOT_FOUND') ||
+                  /^HTTP (400|404)\b/i.test(paperExitErr)
+                if (isTerminalClosed) {
+                  addLog(
+                    mkLog(
+                      'warn',
+                      'paper',
+                      `[${sym}] Leg ${leg.instrumentKey} was already closed on server.`,
+                    ),
+                  )
+                  leg.status = 'CLOSED'
+                } else {
+                  addLog(
+                    mkLog(
+                      'error',
+                      'paper',
+                      `[${sym}] Paper ${exitTxType} failed: ${paperExitErr}`,
+                    ),
+                  )
+                  allLegsCleared = false
+                }
+              } else {
+                leg.status = 'CLOSED'
+              }
+            } else {
+              addLog(
+                mkLog(
+                  'info',
+                  'order',
+                  `[${sym}] placing ${exitTxType} for ${leg.instrumentKey}`,
+                ),
+              )
+              const [, sellErr] = await safeFetch(API_ORDER_PLACE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  token,
+                  instrumentKey: leg.instrumentKey,
+                  transactionType: exitTxType,
+                  quantity: leg.quantity,
+                }),
+                signal: abortSignal,
+              })
+              if (sellErr) {
+                addLog(
+                  mkLog(
+                    'error',
+                    'order',
+                    `[${sym}] ${exitTxType} failed: ${sellErr}`,
+                  ),
+                )
+                allLegsCleared = false
+              } else {
+                leg.status = 'CLOSED'
+              }
+            }
+          }
+          if (allLegsCleared) {
+            curPositions[sym] = null
+            lastExitTimes[sym] = Date.now()
+            addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
+          } else {
+            curPositions[sym] = {
+              ...pos,
+              legs: allLegs,
+            }
+          }
+        }
+      }
+    },
+    [],
+  )
+
+  return { evaluateAndEnter, evaluateAndExit }
+}

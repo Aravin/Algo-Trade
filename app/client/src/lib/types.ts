@@ -173,6 +173,7 @@ export interface PositionLeg {
   paperTradeId?: string
   currentPrice?: number
   unrealizedPnl?: number
+  status?: 'OPEN' | 'CLOSED'
 }
 
 export interface ActivePosition {
