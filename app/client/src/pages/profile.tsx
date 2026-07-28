@@ -19,6 +19,10 @@ import {
   STORAGE_KEY_BOT_LOGS,
   STORAGE_KEY_BOT_SNAPSHOT,
   STORAGE_KEY_PROXY_HISTORY,
+  STORAGE_KEY_BOT_POSITIONS,
+  STORAGE_KEY_BOT_TRADES_PER_SYMBOL,
+  STORAGE_KEY_BOT_EXIT_TIMES,
+  STORAGE_KEY_TICK_LOG,
   API_UPSTOX_PROFILE,
   API_UPSTOX_FUNDS,
 } from '@/lib/constants'
@@ -498,6 +502,10 @@ function BotResetSection() {
     localStorage.removeItem(STORAGE_KEY_BOT_LOGS)
     localStorage.removeItem(STORAGE_KEY_BOT_SNAPSHOT)
     localStorage.removeItem(STORAGE_KEY_PROXY_HISTORY)
+    localStorage.removeItem(STORAGE_KEY_BOT_POSITIONS)
+    localStorage.removeItem(STORAGE_KEY_BOT_TRADES_PER_SYMBOL)
+    localStorage.removeItem(STORAGE_KEY_BOT_EXIT_TIMES)
+    localStorage.removeItem(STORAGE_KEY_TICK_LOG)
 
     setTimeout(() => {
       window.location.reload()
