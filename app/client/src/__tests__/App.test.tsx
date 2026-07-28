@@ -1,6 +1,13 @@
 import '@testing-library/jest-dom/vitest'
 import { it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+
+const appMocks = vi.hoisted(() => ({
+  getAccounts: vi.fn(() => []),
+  hydrateAccounts: vi.fn<() => Promise<void>>(),
+  botMounts: 0,
+  botUnmounts: 0,
+}))
 
 // auth.ts has a syntax issue with esbuild — mock it entirely
 vi.mock('@/lib/auth', () => ({
@@ -9,6 +16,30 @@ vi.mock('@/lib/auth', () => ({
     getToken: vi.fn(),
   },
 }))
+
+vi.mock('@/lib/accounts', () => ({
+  getAccounts: appMocks.getAccounts,
+  hydrateAccounts: appMocks.hydrateAccounts,
+}))
+
+vi.mock('@/lib/strategyConfig', () => ({
+  hydrateStrategyConfig: vi.fn(() => Promise.resolve()),
+}))
+
+vi.mock('@/hooks/useStrategyBot', async () => {
+  const { useEffect } = await import('react')
+  return {
+    useStrategyBot: () => {
+      useEffect(() => {
+        appMocks.botMounts += 1
+        return () => {
+          appMocks.botUnmounts += 1
+        }
+      }, [])
+      return { marker: 'root-bot' }
+    },
+  }
+})
 
 vi.mock('@auth0/auth0-react', () => ({
   useAuth0: vi.fn(() => ({
@@ -21,7 +52,12 @@ vi.mock('@auth0/auth0-react', () => ({
 }))
 
 vi.mock('@/components/dashboard/sidebar', () => ({
-  Sidebar: () => <div data-testid="sidebar">Sidebar</div>,
+  Sidebar: ({ onSelect }: { onSelect: (item: string) => void }) => (
+    <div data-testid="sidebar">
+      <button onClick={() => onSelect('strategies')}>Strategies nav</button>
+      <button onClick={() => onSelect('live-trades')}>Live nav</button>
+    </div>
+  ),
 }))
 
 vi.mock('@/components/dashboard/header', () => ({
@@ -66,11 +102,41 @@ import App from '@/App'
 beforeEach(() => {
   localStorage.clear()
   window.history.replaceState({}, '', '/')
+  appMocks.getAccounts.mockReturnValue([])
+  appMocks.hydrateAccounts.mockReset()
+  appMocks.hydrateAccounts.mockResolvedValue()
+  appMocks.botMounts = 0
+  appMocks.botUnmounts = 0
 })
 
-it('renders loading state on mount', async () => {
+it('keeps the dashboard gated until saved state hydration completes', async () => {
+  let finishHydration: (() => void) | undefined
+  appMocks.hydrateAccounts.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishHydration = resolve
+      }),
+  )
+
   render(<App />)
-  expect(
-    await screen.findByText('Restoring saved setup\u2026'),
-  ).toBeInTheDocument()
+  expect(screen.getByText('Restoring saved setup\u2026')).toBeInTheDocument()
+
+  act(() => {
+    finishHydration?.()
+  })
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+})
+
+it('keeps one bot controller mounted while dashboard pages change', async () => {
+  render(<App />)
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+  expect(appMocks.botMounts).toBe(1)
+
+  fireEvent.click(screen.getByText('Strategies nav'))
+  expect(await screen.findByText('Strategies')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('Live nav'))
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+
+  expect(appMocks.botMounts).toBe(1)
+  expect(appMocks.botUnmounts).toBe(0)
 })

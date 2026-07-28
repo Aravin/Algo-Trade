@@ -35,6 +35,8 @@ import {
 import { handleGlobalIndices } from './globalIndices'
 
 const MAX_BODY_BYTES = 1024 * 50
+const RATE_LIMIT_WINDOW_SECONDS = 60
+const RATE_LIMIT_MAX_REQUESTS = 200
 
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
@@ -67,44 +69,21 @@ function securityHeaders(): Record<string, string> {
   }
 }
 
-const requestCounts = new Map<string, { count: number; resetAt: number }>()
-const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX_REQUESTS = 200
+async function getRateLimitKey(request: Request): Promise<string> {
+  const authorization = request.headers.get('Authorization')
+  if (!authorization) {
+    const clientIp = request.headers.get('cf-connecting-ip') ?? 'unknown'
+    return `anonymous:${clientIp}`
+  }
 
-function checkRateLimit(clientIp: string): {
-  allowed: boolean
-  remaining: number
-  resetAt: number
-} {
-  const now = Date.now()
-  const entry = requestCounts.get(clientIp)
-  if (!entry || now > entry.resetAt) {
-    requestCounts.set(clientIp, {
-      count: 1,
-      resetAt: now + RATE_LIMIT_WINDOW_MS,
-    })
-    return {
-      allowed: true,
-      remaining: RATE_LIMIT_MAX_REQUESTS - 1,
-      resetAt: now + RATE_LIMIT_WINDOW_MS,
-    }
-  }
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return { allowed: false, remaining: 0, resetAt: entry.resetAt }
-  }
-  entry.count++
-  return {
-    allowed: true,
-    remaining: RATE_LIMIT_MAX_REQUESTS - entry.count,
-    resetAt: entry.resetAt,
-  }
-}
-
-function cleanupStaleRateEntries() {
-  const now = Date.now()
-  for (const [ip, entry] of requestCounts) {
-    if (now > entry.resetAt) requestCounts.delete(ip)
-  }
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(authorization),
+  )
+  const fingerprint = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+  return `authenticated:${fingerprint}`
 }
 
 function validateContentType(
@@ -149,21 +128,25 @@ function withSecurity(
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (Math.random() < 0.05) cleanupStaleRateEntries()
-
     const url = new URL(request.url)
 
-    const clientIp = request.headers.get('cf-connecting-ip') ?? 'unknown'
-    const rateCheck = checkRateLimit(clientIp)
-    if (!rateCheck.allowed) {
+    if (request.method === 'OPTIONS') {
+      const headers = { ...securityHeaders(), ...corsHeaders(request) }
+      return new Response(null, { status: 204, headers })
+    }
+
+    const rateLimitKey = await getRateLimitKey(request)
+    const { success: withinRateLimit } = await env.REQUEST_RATE_LIMITER.limit({
+      key: rateLimitKey,
+    })
+    if (!withinRateLimit) {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Retry-After': String(
-          Math.ceil((rateCheck.resetAt - Date.now()) / 1000),
-        ),
+        'Retry-After': String(RATE_LIMIT_WINDOW_SECONDS),
         'X-RateLimit-Limit': String(RATE_LIMIT_MAX_REQUESTS),
         'X-RateLimit-Remaining': '0',
         ...securityHeaders(),
+        ...corsHeaders(request),
       }
       return new Response(
         JSON.stringify({ error: 'Too many requests. Please slow down.' }),
@@ -172,11 +155,6 @@ export default {
           headers,
         },
       )
-    }
-
-    if (request.method === 'OPTIONS') {
-      const headers = { ...securityHeaders(), ...corsHeaders(request) }
-      return new Response(null, { status: 204, headers })
     }
 
     if (
@@ -273,13 +251,12 @@ export default {
       return captureResponse(await handleGlobalIndices())
 
     // ── Authenticated routes (Auth0 token required) ────────────────
-    let userId = 'local-dev-user'
-    if (url.pathname.startsWith('/api/')) {
-      const tokenUser = await verifyAuth0Token(request, env)
-      if (!tokenUser) {
-        return jsonError(401, 'Unauthorized. Invalid or missing token.')
-      }
-      userId = tokenUser
+    if (!url.pathname.startsWith('/api/')) {
+      return jsonError(404, 'Unknown route')
+    }
+    const userId = await verifyAuth0Token(request, env)
+    if (!userId) {
+      return jsonError(401, 'Unauthorized. Invalid or missing token.')
     }
 
     if (url.pathname === '/api/order/place' && request.method === 'POST')

@@ -15,7 +15,8 @@ UPSTOX_API_SECRET=
 # Production → https://<your-domain>/broker/callback
 UPSTOX_REDIRECT_URI=http://localhost:5173/broker/callback
 
-# ─── Auth0 Configurations (Optional) ────────────────────────────
-# If set, the Worker will enforce Auth0 JWT token validation.
-# AUTH0_DOMAIN=your-tenant.us.auth0.com
-# AUTH0_AUDIENCE=https://api.algo-trade.com
+# ─── Auth0 Configurations (Required) ────────────────────────────
+# Public identifiers, not secrets. The Worker rejects authenticated routes
+# when either value is missing.
+AUTH0_DOMAIN=algo-trade.us.auth0.com
+AUTH0_AUDIENCE=https://algo-trade.us.auth0.com/api/v2/

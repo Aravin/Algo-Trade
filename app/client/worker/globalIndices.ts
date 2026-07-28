@@ -35,13 +35,13 @@ export async function handleGlobalIndices(): Promise<Response> {
     )
   }
 
-  const raw = await upstream.json<{
+  const raw: {
     globalIndicesByRegion?: {
       US?: { displayName: string; price: number; change: number }[]
       ASIA?: { displayName: string; price: number; change: number }[]
       Commodities?: { displayName: string; price: number; change: number }[]
     }
-  }>()
+  } = await upstream.json()
 
   const regions = raw?.globalIndicesByRegion
   if (!regions) {

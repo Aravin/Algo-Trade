@@ -404,6 +404,7 @@ export async function handlePaperTradeEnter(
     direction?: 'CE' | 'PE'
     quantity?: number
     entryPrice?: number
+    lotSize?: number
     marginPerLot?: number
     metadata?: unknown
   }
@@ -440,7 +441,18 @@ export async function handlePaperTradeEnter(
     metadataObj?.tradingSymbol ??
     metadataObj?.underlyingSymbol ??
     body.instrumentKey
-  const lotSize = getLotSizeForSymbol(lotSymbol)
+  const requestedLotSize =
+    body.lotSize === undefined ? null : Number(body.lotSize)
+  if (
+    requestedLotSize !== null &&
+    (!Number.isInteger(requestedLotSize) || requestedLotSize <= 0)
+  ) {
+    return Response.json(
+      { error: 'lotSize must be a positive integer when provided' },
+      { status: 400 },
+    )
+  }
+  const lotSize = requestedLotSize ?? getLotSizeForSymbol(lotSymbol)
   if (quantity % lotSize !== 0) {
     return Response.json(
       {
@@ -476,6 +488,7 @@ export async function handlePaperTradeEnter(
         : {}),
       entryCharges: charges,
       marginBlocked: toRupees(marginBlockedPaise),
+      lotSize,
     }
 
     const results = await env.PAPER_TRADING_DB.batch([

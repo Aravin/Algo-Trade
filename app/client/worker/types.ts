@@ -1,12 +1,7 @@
-/// <reference types="@cloudflare/workers-types" />
+/* eslint-disable @typescript-eslint/triple-slash-reference */
+/// <reference path="../worker-configuration.d.ts" />
 
-export interface PaperTradeEnv {
-  PAPER_TRADING_DB: D1Database
-  AUTH0_DOMAIN?: string
-  AUTH0_AUDIENCE?: string
-}
-
-export type Env = PaperTradeEnv
+export type Env = Cloudflare.Env
 
 export interface PaperAccountRow {
   id: string

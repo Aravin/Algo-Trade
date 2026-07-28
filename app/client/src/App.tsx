@@ -1,8 +1,10 @@
 import { useEffect, useState, lazy, Suspense, Component } from 'react'
 import { Sidebar } from '@/components/dashboard/sidebar'
 import { Header } from '@/components/dashboard/header'
-import { hydrateAccounts } from '@/lib/accounts'
+import { getAccounts, hydrateAccounts } from '@/lib/accounts'
 import { hydrateStrategyConfig } from '@/lib/strategyConfig'
+import { useStrategyBot } from '@/hooks/useStrategyBot'
+import { ACCOUNTS_CHANGED_EVENT } from '@/lib/types'
 import { useAuth0 } from '@auth0/auth0-react'
 import { AuthService } from '@/lib/auth'
 import { isAuth0Enabled } from '@/lib/auth0-config'
@@ -119,6 +121,8 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
 
   const [activeItem, setActiveItem] = useState(initialPage)
   const [isHydrated, setIsHydrated] = useState(isBrokerCallback)
+  const [brokerToken, setBrokerToken] = useState<string | null>(null)
+  const [hydratedUserId, setHydratedUserId] = useState<string | null>(null)
 
   const auth0Enabled = isAuth0Enabled()
   const {
@@ -134,7 +138,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
     loginWithRedirect: () => Promise.resolve(),
     user: undefined,
   }
-
+  const currentUserId = auth0Enabled ? (user?.sub ?? null) : 'local-dev-user'
   // Register Auth0 token getter if enabled
   useEffect(() => {
     if (auth0Enabled) {
@@ -167,14 +171,17 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
 
   useEffect(() => {
     // If Auth0 is enabled, wait until authenticated to run hydration
-    if (isBrokerCallback || (auth0Enabled && !isAuthenticated)) return
+    if (
+      isBrokerCallback ||
+      (auth0Enabled && (!isAuthenticated || !currentUserId))
+    )
+      return
+    if (!currentUserId) return
+    const hydratingUserId = currentUserId
 
     // Prevent cross-user local storage state leaks by clearing keys on user change
-    const currentUserId = auth0Enabled
-      ? (user?.sub ?? 'local-dev-user')
-      : 'local-dev-user'
     const storedUser = localStorage.getItem(STORAGE_KEY_ACTIVE_USER)
-    if (storedUser !== currentUserId) {
+    if (storedUser !== hydratingUserId) {
       const keysToRemove: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
@@ -183,7 +190,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
         }
       }
       keysToRemove.forEach((key) => localStorage.removeItem(key))
-      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, currentUserId)
+      localStorage.setItem(STORAGE_KEY_ACTIVE_USER, hydratingUserId)
     }
 
     let cancelled = false
@@ -191,13 +198,36 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
       hydrateAccounts(),
       hydrateStrategyConfig(),
     ]).finally(() => {
-      if (!cancelled) setIsHydrated(true)
+      if (!cancelled) {
+        setBrokerToken(
+          getAccounts().find((account) => account.accessToken)?.accessToken ??
+            null,
+        )
+        setHydratedUserId(hydratingUserId)
+        setIsHydrated(true)
+      }
     })
 
     return () => {
       cancelled = true
     }
-  }, [isBrokerCallback, auth0Enabled, isAuthenticated, user, isLoading])
+  }, [isBrokerCallback, auth0Enabled, isAuthenticated, currentUserId])
+
+  useEffect(() => {
+    if (isBrokerCallback) return
+    const refreshToken = () => {
+      setBrokerToken(
+        getAccounts().find((account) => account.accessToken)?.accessToken ??
+          null,
+      )
+    }
+    window.addEventListener(ACCOUNTS_CHANGED_EVENT, refreshToken)
+    window.addEventListener('storage', refreshToken)
+    return () => {
+      window.removeEventListener(ACCOUNTS_CHANGED_EVENT, refreshToken)
+      window.removeEventListener('storage', refreshToken)
+    }
+  }, [isBrokerCallback])
 
   if (isBrokerCallback) {
     return (
@@ -214,7 +244,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
   }
 
   // Handle Auth0 loading state
-  if (auth0Enabled && isLoading) {
+  if (auth0Enabled && (isLoading || (isAuthenticated && !currentUserId))) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Connecting to session…
@@ -253,13 +283,35 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
     )
   }
 
-  if (!isHydrated) {
+  if (!isHydrated || hydratedUserId !== currentUserId) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
         Restoring saved setup…
       </div>
     )
   }
+
+  return (
+    <DashboardShell
+      activeItem={activeItem}
+      onSelect={setActiveItem}
+      brokerToken={brokerToken}
+    />
+  )
+}
+
+interface DashboardShellProps {
+  activeItem: string
+  onSelect: (item: string) => void
+  brokerToken: string | null
+}
+
+function DashboardShell({
+  activeItem,
+  onSelect,
+  brokerToken,
+}: DashboardShellProps) {
+  const strategyBot = useStrategyBot(brokerToken)
 
   const renderPage = () => {
     switch (activeItem) {
@@ -270,7 +322,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
       case 'live-trades':
         return <LiveTradesPage />
       case 'strategies':
-        return <StrategiesPage />
+        return <StrategiesPage bot={strategyBot} token={brokerToken} />
       case 'history':
         return <HistoryPage />
       case 'settings':
@@ -282,7 +334,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
 
   return (
     <div className="flex min-h-dvh bg-background">
-      <Sidebar activeItem={activeItem} onSelect={setActiveItem} />
+      <Sidebar activeItem={activeItem} onSelect={onSelect} />
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
         <main className="flex-1 overflow-y-auto">

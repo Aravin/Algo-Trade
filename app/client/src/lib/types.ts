@@ -62,6 +62,15 @@ export interface OptionData {
   }
 }
 
+export interface OptionContract {
+  instrument_key: string
+  trading_symbol: string
+  expiry: string
+  lot_size: number
+  minimum_lot?: number
+  weekly?: boolean
+}
+
 export interface IndicatorsResult {
   ema: SignalType
   adx: SignalType
@@ -169,6 +178,7 @@ export interface PositionLeg {
   direction: 'CE' | 'PE'
   entryPrice: number
   quantity: number
+  lotSize?: number
   tradeType: 'buying' | 'selling'
   paperTradeId?: string
   currentPrice?: number
@@ -181,6 +191,7 @@ export interface ActivePosition {
   direction: 'CE' | 'PE'
   entryPrice: number
   quantity: number
+  lotSize?: number
   entryTime: string
   tradeId: number
   executionMode?: ExecutionMode

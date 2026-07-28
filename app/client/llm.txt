@@ -10,7 +10,7 @@
 It features browser-executed trading logic (V5 Strategy Engine) synchronized with a Cloudflare Worker edge backend.
 
 - **Vite React UI (`src/`)**: Renders real-time strategy monitors, score breakdowns, threshold optimizers, paper trading management, broker account links, and interactive charts.
-- **Cloudflare Worker (`worker/`)**: Edge API proxy for Upstox API v2/v3, Paper Trading persistent ledger (D1 database `algo-trade-paper`), Auth0 token validation, and Client State persistence (`client_state` table).
+- **Cloudflare Worker (`worker/`)**: Edge API proxy for Upstox API v2/v3, Paper Trading persistent ledger (D1 database `algo-trade-paper`), Auth0 token validation, native binding-based request throttling, and Client State persistence (`client_state` table).
 - **Execution Engine (`src/lib/strategyEngine.ts`)**: Evaluates real-time market signals (VWAP, Supertrend, EMA 9/21, Bollinger Bands, RSI 14, PCR, FII/DII, Market Breadth, VIX, Global Markets) to produce directional buy/sell signals, score breakdowns, and execution triggers.
 
 ---
@@ -26,7 +26,7 @@ app/client/
 │   ├── paperTrading.ts         # Paper Trading ledger & trade execution engine (D1)
 │   ├── upstoxProxy.ts          # Upstox API proxy (Quotes, Option Chains, FII/DII, VIX, Orders)
 │   ├── globalIndices.ts        # Yahoo Finance / Global market sentiment scraper
-│   ├── types.ts                # Worker environment bindings (PAPER_TRADING_DB, Env)
+│   ├── types.ts                # Alias to generated Cloudflare Env bindings
 │   └── utils.ts                # Helper formatting utilities
 ├── src/
 │   ├── components/
@@ -45,7 +45,8 @@ app/client/
 │   │   │       └── hard-stop-banner.tsx     # Emergency risk banner & hard stop trigger
 │   │   └── ui/                 # Radix UI primitives & custom styled components
 │   ├── hooks/
-│   │   └── useStrategyBot.ts   # Core Hook: Real-time bot loop, market data polling, state persistence
+│   │   ├── useStrategyBot.ts   # App-root bot loop, cancellation, live arming, state persistence
+│   │   └── useTradeExecution.ts # Entry/exit dispatch and paper reconciliation
 │   ├── lib/
 │   │   ├── strategyEngine.ts   # V5 Strategy algorithm, signal evaluation & entry/exit scoring
 │   │   ├── marketService.ts    # Upstox & market proxy REST data fetchers
@@ -58,11 +59,17 @@ app/client/
 │   │   └── types.ts            # Global TypeScript interfaces for strategies, trades, quotes
 │   └── pages/                  # Route pages (live-trades, strategies, history, broker-accounts)
 ├── migrations/                 # D1 SQLite Database Migrations
-│   ├── 0001_paper_trading.sql  # Paper trading accounts & trades schema
-│   └── 0002_client_state.sql   # Client state key-value table schema
+│   └── 0001_initial.sql        # Consolidated paper ledger and client-state schema
 ├── package.json                # Dependencies & script commands
 └── wrangler.jsonc              # Cloudflare Worker configuration & D1 database bindings
 ```
+
+`useStrategyBot` is instantiated in `AppContent`, above page switching. Live
+entry is session-armed by an explicit Start confirmation. Persisted live state
+can supervise an existing position without enabling new entries. Selected
+Upstox option-contract metadata supplies execution expiry and lot size.
+Manual Stop preserves open-position state but pauses EOD and hard-stop
+supervision; the persistent strategy header warns until Resume.
 
 ---
 
@@ -106,5 +113,6 @@ app/client/
 - `yarn build` — Typecheck (`tsc -b`) and build Vite production bundle.
 - `yarn test` — Run Vitest unit tests (`src/lib/__tests__`).
 - `yarn validate` — Run typecheck, lint, format check, and unit tests.
+- `yarn cf-typegen` — Regenerate `worker-configuration.d.ts` after Worker binding changes.
 - `yarn deploy` — Build client & deploy Cloudflare Worker.
 - `yarn wrangler d1 migrations apply algo-trade-paper --local` — Apply local D1 schema.

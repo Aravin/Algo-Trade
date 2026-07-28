@@ -1,12 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStrategyBot } from '@/hooks/useStrategyBot'
 
 const LOCAL_STORAGE_PREFIX = 'algo-trade:'
+const marketMocks = vi.hoisted(() => ({
+  fetchMarketForSymbols: vi.fn(),
+}))
+
+vi.mock('@/lib/marketService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/marketService')>()
+  return {
+    ...actual,
+    fetchMarketForSymbols: marketMocks.fetchMarketForSymbols,
+  }
+})
 
 beforeEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+  marketMocks.fetchMarketForSymbols.mockReset()
+  marketMocks.fetchMarketForSymbols.mockResolvedValue({})
 })
 
 describe('useStrategyBot', () => {
@@ -24,16 +37,98 @@ describe('useStrategyBot', () => {
     expect(result.current.state).toBe('IDLE')
   })
 
-  it('should stop the bot and clear state', () => {
+  it('should stop the bot without discarding an active position', () => {
+    const position = {
+      instrumentKey: 'NSE_FO|ACTIVE',
+      direction: 'CE',
+      entryPrice: 100,
+      currentPrice: 101,
+      quantity: 65,
+      lotSize: 65,
+      entryTime: '2026-07-28T09:30:00.000Z',
+      tradeId: 1,
+      executionMode: 'paper',
+      tradeType: 'buying',
+      underlyingSymbol: 'NIFTY 50',
+    }
+    localStorage.setItem(
+      `${LOCAL_STORAGE_PREFIX}bot-positions`,
+      JSON.stringify({
+        'NIFTY 50': position,
+        BANKNIFTY: null,
+        FINNIFTY: null,
+      }),
+    )
     const { result } = renderHook(() => useStrategyBot('test-token'))
 
     act(() => {
       result.current.stop()
     })
 
-    expect(result.current.state).toBe('IDLE')
-    expect(result.current.position).toBeNull()
+    expect(result.current.state).toBe('STOPPED')
+    expect(result.current.position?.instrumentKey).toBe('NSE_FO|ACTIVE')
+    expect(result.current.positions['NIFTY 50']?.quantity).toBe(65)
     expect(result.current.error).toBeNull()
+  })
+
+  it('aborts the in-flight tick when stopped', async () => {
+    const observed: { signal?: AbortSignal } = {}
+    marketMocks.fetchMarketForSymbols.mockImplementation(
+      (...args: unknown[]) => {
+        observed.signal =
+          args[4] instanceof AbortSignal ? args[4] : (args[4] as AbortSignal)
+        return new Promise((_, reject) => {
+          observed.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'))
+          })
+        })
+      },
+    )
+    const { result } = renderHook(() => useStrategyBot('test-token'))
+
+    act(() => {
+      result.current.start()
+    })
+    await waitFor(() =>
+      expect(marketMocks.fetchMarketForSymbols).toHaveBeenCalledOnce(),
+    )
+
+    act(() => {
+      result.current.stop()
+    })
+    expect(observed.signal?.aborted).toBe(true)
+  })
+
+  it('requires explicit confirmation before arming live entries', () => {
+    localStorage.setItem(
+      `${LOCAL_STORAGE_PREFIX}strategy-config`,
+      JSON.stringify({ executionMode: 'live' }),
+    )
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { result } = renderHook(() => useStrategyBot('test-token'))
+
+    act(() => {
+      result.current.start()
+    })
+
+    expect(confirmSpy).toHaveBeenCalledOnce()
+    expect(result.current.liveArmed).toBe(false)
+    expect(result.current.state).toBe('IDLE')
+    expect(marketMocks.fetchMarketForSymbols).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-resume live entries without an open position', async () => {
+    localStorage.setItem(`${LOCAL_STORAGE_PREFIX}bot-state`, 'RUNNING')
+    localStorage.setItem(
+      `${LOCAL_STORAGE_PREFIX}strategy-config`,
+      JSON.stringify({ executionMode: 'live' }),
+    )
+
+    const { result } = renderHook(() => useStrategyBot('test-token'))
+
+    await waitFor(() => expect(result.current.state).toBe('IDLE'))
+    expect(result.current.liveArmed).toBe(false)
+    expect(marketMocks.fetchMarketForSymbols).not.toHaveBeenCalled()
   })
 
   it('should persist and load bot state from localStorage', () => {

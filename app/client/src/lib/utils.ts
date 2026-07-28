@@ -51,20 +51,20 @@ export function normalizeLiveStatus(s: string | undefined): TradeRowStatus {
 }
 
 export interface IndexExpiryInfo {
-  expiryDateStr: string // "2026-07-23"
-  formattedExpiry: string // "23 Jul 2026"
-  dayOfWeek: string // "Thursday"
-  fullLabel: string // "23 Jul 2026 (Thursday)"
+  expiryDateStr: string // "2026-07-28"
+  formattedExpiry: string // "28 Jul 2026"
+  dayOfWeek: string // "Tuesday"
+  fullLabel: string // "28 Jul 2026 (Tuesday)"
   relativeText: string // "Today (Expiry Day)", "Tomorrow", "in 2 days"
 }
 
 /**
- * Calculates the next weekly option expiry date for Indian equity indices in IST:
- * - FIN NIFTY: Tuesday (Day 2)
- * - BANK NIFTY: Wednesday (Day 3)
- * - NIFTY 50: Thursday (Day 4)
- * - MIDCAP NIFTY: Monday (Day 1)
- * - SENSEX: Friday (Day 5)
+ * Calculates a display-only fallback option expiry in IST.
+ *
+ * Live Upstox contract metadata must be preferred for trading because exchange
+ * holidays can move an expiry. NSE index derivatives expire on Tuesday:
+ * NIFTY has weekly expiries, while BANKNIFTY, FINNIFTY and MIDCPNIFTY use the
+ * last Tuesday of the expiry month. SENSEX retains its Friday fallback.
  */
 export function getUpcomingIndexExpiry(
   symbolOrName: string,
@@ -107,41 +107,53 @@ export function getUpcomingIndexExpiry(
     }
   }
 
-  const s = String(symbolOrName).toUpperCase()
-  let targetDay = 4 // Default: Nifty 50 Thursday (Day 4)
-
-  if (s.includes('FIN') || s.includes('FINANCIAL')) {
-    targetDay = 2 // Tuesday
-  } else if (s.includes('BANK')) {
-    targetDay = 3 // Wednesday
-  } else if (s.includes('MID')) {
-    targetDay = 1 // Monday
-  } else if (s.includes('SENSEX')) {
-    targetDay = 5 // Friday
-  } else if (s.includes('NIFTY')) {
-    targetDay = 4 // Thursday
-  }
-
   // Calculate IST Date
   const nowUtc = Date.now()
   const istOffsetMs = 5.5 * 60 * 60 * 1000
   const nowIst = new Date(nowUtc + istOffsetMs)
+  const s = String(symbolOrName).toUpperCase()
   const currentDay = nowIst.getUTCDay()
   const currentHour = nowIst.getUTCHours()
   const currentMinute = nowIst.getUTCMinutes()
+  const afterMarketClose = currentHour * 60 + currentMinute >= 15 * 60 + 30
+  const currentDateUtc = Date.UTC(
+    nowIst.getUTCFullYear(),
+    nowIst.getUTCMonth(),
+    nowIst.getUTCDate(),
+  )
+  const monthlyOnly =
+    s.includes('BANK') ||
+    s.includes('FIN') ||
+    s.includes('FINANCIAL') ||
+    s.includes('MID')
 
-  let diff = targetDay - currentDay
-  if (diff < 0) {
-    diff += 7
-  } else if (diff === 0) {
-    // If today is expiry day & time is past 15:30 IST, rollover to next week
-    const totalMinutes = currentHour * 60 + currentMinute
-    if (totalMinutes >= 15 * 60 + 30) {
-      diff = 7
+  let expiryIst: Date
+  if (monthlyOnly) {
+    const lastTuesday = (year: number, month: number) => {
+      const lastDay = new Date(Date.UTC(year, month + 1, 0))
+      const daysBack = (lastDay.getUTCDay() - 2 + 7) % 7
+      return new Date(Date.UTC(year, month, lastDay.getUTCDate() - daysBack))
     }
+
+    expiryIst = lastTuesday(nowIst.getUTCFullYear(), nowIst.getUTCMonth())
+    if (
+      expiryIst.getTime() < currentDateUtc ||
+      (expiryIst.getTime() === currentDateUtc && afterMarketClose)
+    ) {
+      expiryIst = lastTuesday(nowIst.getUTCFullYear(), nowIst.getUTCMonth() + 1)
+    }
+  } else {
+    const targetDay = s.includes('SENSEX') ? 5 : 2
+    let diffToTarget = targetDay - currentDay
+    if (diffToTarget < 0) {
+      diffToTarget += 7
+    } else if (diffToTarget === 0 && afterMarketClose) {
+      diffToTarget = 7
+    }
+    expiryIst = new Date(currentDateUtc + diffToTarget * 86400000)
   }
 
-  const expiryIst = new Date(nowIst.getTime() + diff * 86400000)
+  const diff = Math.round((expiryIst.getTime() - currentDateUtc) / 86400000)
   const yyyy = expiryIst.getUTCFullYear()
   const mmNum = expiryIst.getUTCMonth()
   const ddNum = expiryIst.getUTCDate()
@@ -174,7 +186,7 @@ export function getUpcomingIndexExpiry(
   const isoDay = String(ddNum).padStart(2, '0')
   const expiryDateStr = `${yyyy}-${isoMonth}-${isoDay}`
   const formattedExpiry = `${ddNum} ${months[mmNum]} ${yyyy}`
-  const dayOfWeek = days[targetDay]
+  const dayOfWeek = days[expiryIst.getUTCDay()]
   const fullLabel = `${formattedExpiry} (${dayOfWeek})`
 
   let relativeText = `in ${diff} days`

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import type {
   AllSignalData,
   ActivePosition,
@@ -42,6 +42,10 @@ export function useStrategyBot(token: string | null) {
   const lastExitTimesRef = useRef<Record<string, number>>(loadExitTimes())
   const abortRef = useRef<AbortController | null>(null)
   const mountedRef = useRef(true)
+  const stopRequestedRef = useRef(false)
+  const liveArmedRef = useRef(false)
+  const resumedTokenRef = useRef<string | null>(null)
+  const [liveArmed, setLiveArmed] = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -53,7 +57,7 @@ export function useStrategyBot(token: string | null) {
   }, [])
 
   const tick = useCallback(async () => {
-    if (!token) return
+    if (!token || stopRequestedRef.current) return
     if (isTickingRef.current) return
     isTickingRef.current = true
 
@@ -83,6 +87,8 @@ export function useStrategyBot(token: string | null) {
 
     try {
       const config = getStrategyConfig()
+      const allowEntries =
+        config.executionMode === 'paper' || liveArmedRef.current
       const allowedSymbols: UnderlyingSymbol[] =
         (config.underlyingMode ?? 'ALL_PARALLEL') === 'ALL_PARALLEL'
           ? ['NIFTY 50', 'BANKNIFTY', 'FINNIFTY']
@@ -95,6 +101,27 @@ export function useStrategyBot(token: string | null) {
         }
       })
       const targetSymbols = Array.from(targetSymbolsSet)
+      const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
+        ...DEFAULT_POSITIONS,
+        ...(cur.positions ?? {}),
+      }
+      if (
+        cur.position &&
+        !curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50']
+      ) {
+        curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50'] = cur.position
+      }
+      const curTradesPerSym: Partial<Record<UnderlyingSymbol, number>> = {
+        ...(cur.tradesCountPerSymbol ?? {}),
+      }
+      const now = new Date()
+      const currentHour = now.getHours()
+      const currentMinute = now.getMinutes()
+      const [lh, lm] = (config.lastEntryTime ?? '15:15').split(':').map(Number)
+      const afterCutoff =
+        Number.isFinite(lh) && Number.isFinite(lm)
+          ? currentHour > lh || (currentHour === lh && currentMinute >= lm)
+          : false
 
       const marketMap = await fetchMarketForSymbols(
         token,
@@ -103,6 +130,7 @@ export function useStrategyBot(token: string | null) {
         targetSymbols,
         abort.signal,
       )
+      if (abort.signal.aborted || stopRequestedRef.current) return
 
       const primaryMarket =
         marketMap['NIFTY 50'] ??
@@ -111,8 +139,64 @@ export function useStrategyBot(token: string | null) {
 
       if (!primaryMarket?.candles.length) {
         const canUseSnapshot = Boolean(
-          cur.indicators && cur.vrdData && cur.allSignalData && cur.finalSignal,
+          cur.indicators && cur.allSignalData && cur.finalSignal,
         )
+        const hasOpenPosition = Object.values(curPositions).some(
+          (position) => position !== null,
+        )
+        if (primaryMarket && hasOpenPosition) {
+          log(
+            'warn',
+            'exit',
+            'no candle data — running degraded position supervision',
+          )
+          const degradedCtx: ExecutionContext = {
+            token,
+            config,
+            targetSymbols,
+            allowedSymbols,
+            marketMap,
+            symbolSignals: cur.symbolSignals,
+            symbolIndicators: cur.symbolIndicators,
+            symbolVrds: cur.vrdData
+              ? { [primaryMarket.underlyingSymbol]: cur.vrdData }
+              : {},
+            primaryMarket,
+            primaryVrdData: cur.vrdData,
+            indicators: cur.indicators,
+            hardStop: cur.hardStop,
+            afterCutoff,
+            allowEntries: false,
+            curPositions,
+            curTradesPerSym,
+            lastExitTimes: lastExitTimesRef.current,
+            addLog,
+            onStaticIpError: () => {
+              updateStatus({
+                error:
+                  'Order placement blocked by Upstox static IP restriction while supervising an active position.',
+              })
+            },
+            abortSignal: abort.signal,
+          }
+          await evaluateAndExit(degradedCtx, new Set())
+          saveExitTimes(lastExitTimesRef.current)
+        }
+
+        const interrupted = abort.signal.aborted || stopRequestedRef.current
+        const remainingPosition =
+          curPositions['NIFTY 50'] ??
+          Object.values(curPositions).find(
+            (position): position is ActivePosition => position !== null,
+          ) ??
+          null
+        const nextState = interrupted
+          ? 'STOPPED'
+          : remainingPosition
+            ? 'ORDERED'
+            : afterCutoff || !allowEntries
+              ? 'STOPPED'
+              : 'RUNNING'
         if (canUseSnapshot) {
           const normalizedStatuses = Object.fromEntries(
             Object.entries({ ...cur.sourceStatus, ...srcUpdates }).map(
@@ -125,6 +209,9 @@ export function useStrategyBot(token: string | null) {
           log('warn', 'tick', 'no candle data — using cached snapshot')
           addLogs(tickLogs)
           updateStatus({
+            state: nextState,
+            position: remainingPosition,
+            positions: curPositions,
             sourceStatus: normalizedStatuses,
             lastUpdated: new Date().toLocaleTimeString('en-IN'),
             error: null,
@@ -134,6 +221,9 @@ export function useStrategyBot(token: string | null) {
         log('error', 'tick', 'no candle data — skipping tick')
         addLogs(tickLogs)
         updateStatus({
+          state: nextState,
+          position: remainingPosition,
+          positions: curPositions,
           sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
           lastUpdated: new Date().toLocaleTimeString('en-IN'),
           error: 'No candle data',
@@ -149,6 +239,7 @@ export function useStrategyBot(token: string | null) {
         targetSymbols,
         abort.signal,
       )
+      if (abort.signal.aborted || stopRequestedRef.current) return
 
       const symbolSignals: Partial<
         Record<UnderlyingSymbol, FinalSignal | null>
@@ -201,6 +292,7 @@ export function useStrategyBot(token: string | null) {
           )
         }),
       )
+      if (abort.signal.aborted || stopRequestedRef.current) return
 
       const primaryVrdData = symbolVrds[primaryMarket.underlyingSymbol] ?? null
       if (primaryVrdData) {
@@ -284,35 +376,14 @@ export function useStrategyBot(token: string | null) {
         }
       }
 
-      const now = new Date()
-      const currentHour = now.getHours()
-      const currentMinute = now.getMinutes()
-      const [lh, lm] = (config.lastEntryTime ?? '15:15').split(':').map(Number)
-      const afterCutoff =
-        Number.isFinite(lh) && Number.isFinite(lm)
-          ? currentHour > lh || (currentHour === lh && currentMinute >= lm)
-          : false
-
       if (afterCutoff) {
-        log(
-          'warn',
-          'bot',
-          `after last entry time ${config.lastEntryTime} — skipping new entries`,
+        addLog(
+          mkLog(
+            'warn',
+            'bot',
+            `after last entry time ${config.lastEntryTime} — skipping new entries`,
+          ),
         )
-      }
-
-      const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
-        ...DEFAULT_POSITIONS,
-        ...(cur.positions ?? {}),
-      }
-      if (
-        cur.position &&
-        !curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50']
-      ) {
-        curPositions[cur.position.underlyingSymbol ?? 'NIFTY 50'] = cur.position
-      }
-      const curTradesPerSym: Partial<Record<UnderlyingSymbol, number>> = {
-        ...(cur.tradesCountPerSymbol ?? {}),
       }
 
       const ctx: ExecutionContext = {
@@ -329,6 +400,7 @@ export function useStrategyBot(token: string | null) {
         indicators,
         hardStop,
         afterCutoff,
+        allowEntries,
         curPositions,
         curTradesPerSym,
         lastExitTimes: lastExitTimesRef.current,
@@ -362,50 +434,66 @@ export function useStrategyBot(token: string | null) {
         abortSignal: abort.signal,
       }
 
+      const persistExecutionState = (forceStopped: boolean) => {
+        saveExitTimes(lastExitTimesRef.current)
+        const hasActivePosition = Object.values(curPositions).some(
+          (position) => position !== null,
+        )
+        const totalTrades = Object.values(curTradesPerSym).reduce(
+          (acc, count) => acc + (count ?? 0),
+          0,
+        )
+        const nextState = forceStopped
+          ? ('STOPPED' as const)
+          : hasActivePosition
+            ? ('ORDERED' as const)
+            : afterCutoff || !allowEntries
+              ? ('STOPPED' as const)
+              : ('RUNNING' as const)
+        const primaryPos =
+          curPositions['NIFTY 50'] ??
+          Object.values(curPositions).find(
+            (position): position is ActivePosition => position !== null,
+          ) ??
+          null
+
+        updateStatus({
+          state: nextState,
+          position: primaryPos,
+          positions: curPositions,
+          tradesCount: totalTrades,
+          tradesCountPerSymbol: curTradesPerSym,
+          indicators,
+          symbolIndicators,
+          vrdData: primaryVrdData ?? null,
+          allSignalData,
+          finalSignal,
+          symbolSignals,
+          hardStop,
+          sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
+          lastUpdated: new Date().toLocaleTimeString('en-IN'),
+          error: undefined,
+        })
+      }
+
       const newlyEnteredPositions = await evaluateAndEnter(ctx)
+      if (abort.signal.aborted || stopRequestedRef.current) {
+        if (newlyEnteredPositions.size > 0) {
+          addLog(
+            mkLog(
+              'warn',
+              'bot',
+              'stop was requested while an order was in flight; accepted positions were retained',
+            ),
+          )
+        }
+        persistExecutionState(true)
+        return
+      }
       await evaluateAndExit(ctx, newlyEnteredPositions)
-
-      saveExitTimes(lastExitTimesRef.current)
-
-      const hasActivePosition = Object.values(curPositions).some(
-        (p) => p !== null,
-      )
-      const totalTrades = Object.values(curTradesPerSym).reduce(
-        (acc, count) => acc + (count ?? 0),
-        0,
-      )
-      const nextState = hasActivePosition
-        ? 'ORDERED'
-        : afterCutoff
-          ? 'STOPPED'
-          : 'RUNNING'
-
-      const primaryPos =
-        curPositions['NIFTY 50'] ??
-        Object.values(curPositions).find(
-          (p): p is ActivePosition => p !== null,
-        ) ??
-        null
-
-      updateStatus({
-        state: nextState,
-        position: primaryPos,
-        positions: curPositions,
-        tradesCount: totalTrades,
-        tradesCountPerSymbol: curTradesPerSym,
-        indicators,
-        symbolIndicators,
-        vrdData: primaryVrdData ?? null,
-        allSignalData,
-        finalSignal,
-        symbolSignals,
-        hardStop,
-        sourceStatus: { ...cur.sourceStatus, ...srcUpdates },
-        lastUpdated: new Date().toLocaleTimeString('en-IN'),
-        error: undefined,
-      })
+      persistExecutionState(abort.signal.aborted || stopRequestedRef.current)
     } catch (err) {
-      if (abort.signal.aborted) return
+      if (abort.signal.aborted || stopRequestedRef.current) return
       const msg = err instanceof Error ? err.message : String(err)
       addLogs([...tickLogs, mkLog('error', 'tick', `unhandled: ${msg}`)])
       updateStatus({ error: msg })
@@ -424,11 +512,15 @@ export function useStrategyBot(token: string | null) {
 
   const scheduleNext = useCallback(() => {
     function loop() {
+      if (stopRequestedRef.current) return
       const config = getStrategyConfig()
       timeoutRef.current = setTimeout(() => {
         void tick().finally(() => {
           const state = statusRef.current.state
-          if (state === 'RUNNING' || state === 'ORDERED') {
+          if (
+            !stopRequestedRef.current &&
+            (state === 'RUNNING' || state === 'ORDERED')
+          ) {
             loop()
           }
         })
@@ -443,6 +535,23 @@ export function useStrategyBot(token: string | null) {
       return
     }
     const config = getStrategyConfig()
+    if (config.executionMode === 'live') {
+      const confirmed = window.confirm(
+        'Arm LIVE trading for this session? New strategy signals can place real Upstox orders until you stop the bot or close the app.',
+      )
+      if (!confirmed) {
+        liveArmedRef.current = false
+        setLiveArmed(false)
+        addLog(mkLog('warn', 'bot', 'live start cancelled — not armed'))
+        return
+      }
+      liveArmedRef.current = true
+      setLiveArmed(true)
+    } else {
+      liveArmedRef.current = false
+      setLiveArmed(false)
+    }
+    stopRequestedRef.current = false
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     addLog(
       mkLog(
@@ -452,51 +561,100 @@ export function useStrategyBot(token: string | null) {
       ),
     )
     updateStatus({ state: 'RUNNING', error: null })
-    void tick().finally(() => {
-      const state = statusRef.current.state
-      if (state === 'RUNNING' || state === 'ORDERED') {
-        scheduleNext()
-      }
-    })
+    void Promise.resolve()
+      .then(tick)
+      .finally(() => {
+        const state = statusRef.current.state
+        if (
+          !stopRequestedRef.current &&
+          (state === 'RUNNING' || state === 'ORDERED')
+        ) {
+          scheduleNext()
+        }
+      })
   }, [token, tick, updateStatus, addLog, scheduleNext, statusRef])
 
   const stop = useCallback(() => {
+    stopRequestedRef.current = true
+    abortRef.current?.abort()
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = null
+    liveArmedRef.current = false
+    setLiveArmed(false)
+    const current = statusRef.current
+    const hasOpenPosition = Object.values(current.positions).some(
+      (position) => position !== null,
+    )
     addLog(mkLog('info', 'bot', 'stopped by user'))
     updateStatus({
-      state: 'IDLE',
-      position: null,
-      positions: { ...DEFAULT_POSITIONS },
+      state: hasOpenPosition ? 'STOPPED' : 'IDLE',
       error: null,
-      sourceStatus: {},
     })
-  }, [updateStatus, addLog])
+  }, [updateStatus, addLog, statusRef])
 
   useEffect(() => {
-    if (token && (status.state === 'RUNNING' || status.state === 'ORDERED')) {
-      const resumeTimer = setTimeout(() => {
-        addLog(
-          mkLog('info', 'bot', `resumed from persisted state=${status.state}`),
-        )
-        void tick().finally(() => {
-          const state = statusRef.current.state
-          if (state === 'RUNNING' || state === 'ORDERED') {
-            scheduleNext()
-          }
-        })
-      }, 0)
-      return () => {
-        clearTimeout(resumeTimer)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        abortRef.current?.abort()
-      }
+    if (!token) {
+      resumedTokenRef.current = null
+      return
     }
+    if (resumedTokenRef.current === token) return
+    resumedTokenRef.current = token
+
+    const persisted = statusRef.current
+    if (persisted.state !== 'RUNNING' && persisted.state !== 'ORDERED') return
+
+    const config = getStrategyConfig()
+    const hasOpenPosition = Object.values(persisted.positions).some(
+      (position) => position !== null,
+    )
+    if (config.executionMode === 'live' && !hasOpenPosition) {
+      addLog(
+        mkLog(
+          'warn',
+          'bot',
+          'persisted live run was not resumed — press Start to arm live trading for this session',
+        ),
+      )
+      updateStatus({ state: 'IDLE' })
+      return
+    }
+
+    stopRequestedRef.current = false
+    if (config.executionMode === 'live') {
+      updateStatus({ state: 'ORDERED' })
+      addLog(
+        mkLog(
+          'warn',
+          'bot',
+          'resumed live position supervision without arming new entries',
+        ),
+      )
+    } else {
+      addLog(
+        mkLog('info', 'bot', `resumed from persisted state=${persisted.state}`),
+      )
+    }
+
+    const resumeTimer = setTimeout(() => {
+      void tick().finally(() => {
+        const state = statusRef.current.state
+        if (
+          !stopRequestedRef.current &&
+          (state === 'RUNNING' || state === 'ORDERED')
+        ) {
+          scheduleNext()
+        }
+      })
+    }, 0)
+
     return () => {
+      clearTimeout(resumeTimer)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       abortRef.current?.abort()
     }
-  }, [token, status.state, tick, addLog, scheduleNext, statusRef])
+  }, [token, tick, addLog, scheduleNext, statusRef, updateStatus])
 
-  return { ...status, start, stop, clearLogs }
+  return { ...status, liveArmed, start, stop, clearLogs }
 }
+
+export type StrategyBotController = ReturnType<typeof useStrategyBot>

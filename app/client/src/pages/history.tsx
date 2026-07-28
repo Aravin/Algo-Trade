@@ -223,13 +223,21 @@ export function HistoryPage() {
 
                   let displaySymbol = trade.instrument_key
                   let metaSubtext: string | null = null
+                  let contractLotSize: number | null = null
                   try {
                     const meta = JSON.parse(trade.metadata_json ?? '{}') as {
                       tradingSymbol?: string
                       strikePrice?: number
                       expiry?: string
                       underlyingSymbol?: string
+                      lotSize?: number
                     } | null
+                    if (
+                      Number.isInteger(meta?.lotSize) &&
+                      Number(meta?.lotSize) > 0
+                    ) {
+                      contractLotSize = Number(meta?.lotSize)
+                    }
                     if (meta?.tradingSymbol || meta?.strikePrice) {
                       const underlying = meta.underlyingSymbol ?? 'NIFTY'
                       const strikeStr = meta.strikePrice
@@ -263,9 +271,11 @@ export function HistoryPage() {
                         <div>
                           <span>{trade.quantity}</span>
                           {(() => {
-                            const lotSize = getLotSizeForSymbol(
-                              displaySymbol || trade.instrument_key,
-                            )
+                            const lotSize =
+                              contractLotSize ??
+                              getLotSizeForSymbol(
+                                displaySymbol || trade.instrument_key,
+                              )
                             if (lotSize > 1) {
                               const lots = Math.round(trade.quantity / lotSize)
                               return (

@@ -42,15 +42,37 @@ export interface ExecutionContext {
   symbolVrds: Partial<Record<UnderlyingSymbol, VrdData>>
   primaryMarket: Awaited<ReturnType<typeof fetchMarket>>
   primaryVrdData: VrdData | null
-  indicators: IndicatorsResult
+  indicators: IndicatorsResult | null
   hardStop: { blocked: boolean; blockedDirection?: string; reasons: string[] }
   afterCutoff: boolean
+  allowEntries: boolean
   curPositions: Record<UnderlyingSymbol, ActivePosition | null>
   curTradesPerSym: Partial<Record<UnderlyingSymbol, number>>
   lastExitTimes: Record<string, number>
   addLog: (log: BotLog) => void
   onStaticIpError: () => void
   abortSignal?: AbortSignal
+}
+
+export function isTerminalPaperExitError(error: string): boolean {
+  return /\[(TRADE_ALREADY_CLOSED|TRADE_NOT_FOUND)\]/.test(error)
+}
+
+export function indexOptionPrices(
+  optionChain: OptionData[],
+): Map<string, number> {
+  const prices = new Map<string, number>()
+  for (const option of optionChain) {
+    prices.set(
+      option.call_options.instrument_key,
+      option.call_options.market_data.ltp,
+    )
+    prices.set(
+      option.put_options.instrument_key,
+      option.put_options.market_data.ltp,
+    )
+  }
+  return prices
 }
 
 export function useTradeExecution() {
@@ -65,6 +87,7 @@ export function useTradeExecution() {
         symbolVrds,
         hardStop,
         afterCutoff,
+        allowEntries,
         curPositions,
         curTradesPerSym,
         lastExitTimes,
@@ -74,7 +97,9 @@ export function useTradeExecution() {
       } = ctx
 
       const newlyEnteredPositions = new Set<UnderlyingSymbol>()
-      if (afterCutoff) return newlyEnteredPositions
+      if (afterCutoff || !allowEntries || abortSignal?.aborted) {
+        return newlyEnteredPositions
+      }
 
       const mode = config.multiSymbolExecutionMode ?? 'independent'
       let candidates: { symbol: UnderlyingSymbol; signal: FinalSignal }[] = []
@@ -131,6 +156,7 @@ export function useTradeExecution() {
       }
 
       for (const candidate of candidates) {
+        if (abortSignal?.aborted) break
         const { symbol: sym, signal: symSig } = candidate
         const symTradesCount = curTradesPerSym[sym] ?? 0
         if (symTradesCount >= config.maxTradesPerDay) {
@@ -216,9 +242,11 @@ export function useTradeExecution() {
             leg.direction === 'CE'
               ? strike.call_options.market_data.ltp
               : strike.put_options.market_data.ltp
-          const lotSize = getLotSizeForSymbol(
-            symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
-          )
+          const lotSize =
+            symMarket.lotSize ??
+            getLotSizeForSymbol(
+              symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
+            )
           const legReq = leg.tradeType === 'selling' ? 100000 / lotSize : ltp
           totalReq += legReq
         }
@@ -235,9 +263,11 @@ export function useTradeExecution() {
         }
 
         const executionMode = config.executionMode
-        const lotSize = getLotSizeForSymbol(
-          symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
-        )
+        const lotSize =
+          symMarket.lotSize ??
+          getLotSizeForSymbol(
+            symMarket.optionChain[0]?.call_options?.trading_symbol ?? sym,
+          )
         let qty = symSig.positionSize === 'full' ? lotSize * 2 : lotSize
 
         let paperBalance: number | null = null
@@ -254,6 +284,7 @@ export function useTradeExecution() {
               ),
             )
           }
+          if (abortSignal?.aborted) break
 
           if (paperBalance !== null && totalReq > 0) {
             const lotReq = totalReq * lotSize
@@ -282,6 +313,10 @@ export function useTradeExecution() {
         let firstEntryPrice = 0
 
         for (const leg of legsToPlace) {
+          if (abortSignal?.aborted) {
+            success = false
+            break
+          }
           const strike = getOtmStrike(
             symMarket.optionChain,
             leg.direction,
@@ -327,6 +362,7 @@ export function useTradeExecution() {
                 direction: leg.direction,
                 quantity: qty,
                 entryPrice: ltp,
+                lotSize,
                 metadata: {
                   signal: symSig.signal,
                   confidence: symSig.confidence,
@@ -340,7 +376,6 @@ export function useTradeExecution() {
                   underlyingSymbol: sym,
                 },
               }),
-              signal: abortSignal,
             })
             if (paperErr || !paperData?.trade?.id) {
               addLog(
@@ -372,7 +407,6 @@ export function useTradeExecution() {
                 transactionType: side,
                 quantity: qty,
               }),
-              signal: abortSignal,
             })
             if (
               orderErr ||
@@ -401,6 +435,7 @@ export function useTradeExecution() {
             currentPrice: ltp,
             unrealizedPnl: 0,
             quantity: qty,
+            lotSize,
             tradeType: leg.tradeType,
             paperTradeId,
             status: 'OPEN',
@@ -415,6 +450,7 @@ export function useTradeExecution() {
             currentPrice: firstEntryPrice,
             unrealizedPnl: 0,
             quantity: qty,
+            lotSize,
             entryTime: new Date().toISOString(),
             tradeId: Date.now(),
             executionMode,
@@ -439,7 +475,6 @@ export function useTradeExecution() {
                       reason: 'Rollback due to multi-leg entry failure',
                     },
                   }),
-                  signal: abortSignal,
                 })
                 if (rollbackErr) {
                   addLog(
@@ -472,7 +507,6 @@ export function useTradeExecution() {
                   transactionType: exitTxType,
                   quantity: leg.quantity,
                 }),
-                signal: abortSignal,
               })
               if (exitErr) {
                 failedExitLegs.push({ ...leg, status: 'OPEN' })
@@ -491,6 +525,7 @@ export function useTradeExecution() {
                 currentPrice: firstEntryPrice,
                 unrealizedPnl: 0,
                 quantity: qty,
+                lotSize,
                 entryTime: new Date().toISOString(),
                 tradeId: Date.now(),
                 executionMode,
@@ -533,22 +568,16 @@ export function useTradeExecution() {
       } = ctx
 
       for (const sym of targetSymbols) {
+        if (abortSignal?.aborted) break
         if (newlyEnteredPositions.has(sym)) continue
         const pos = curPositions[sym]
         if (!pos) continue
         const symMarket = marketMap[sym]
         const symOptionChain: OptionData[] = symMarket?.optionChain ?? []
+        const optionPrices = indexOptionPrices(symOptionChain)
         const posKey = pos.instrumentKey
-        const match = symOptionChain.find(
-          (o) =>
-            o.call_options.instrument_key === posKey ||
-            o.put_options.instrument_key === posKey,
-        )
-        const currentPrice = match
-          ? pos.direction === 'CE'
-            ? match.call_options.market_data.ltp
-            : match.put_options.market_data.ltp
-          : (pos.currentPrice ?? pos.entryPrice)
+        const currentPrice =
+          optionPrices.get(posKey) ?? pos.currentPrice ?? pos.entryPrice
 
         let updatedLegs: PositionLeg[] | undefined
         let totalUnrealizedPnl = 0
@@ -559,18 +588,8 @@ export function useTradeExecution() {
             let legCurrentPrice = leg.currentPrice ?? leg.entryPrice
 
             if (!isExited) {
-              const legKey = leg.instrumentKey
-              const legMatch = symOptionChain.find(
-                (o) =>
-                  o.call_options.instrument_key === legKey ||
-                  o.put_options.instrument_key === legKey,
-              )
-              if (legMatch) {
-                legCurrentPrice =
-                  leg.direction === 'CE'
-                    ? legMatch.call_options.market_data.ltp
-                    : legMatch.put_options.market_data.ltp
-              }
+              legCurrentPrice =
+                optionPrices.get(leg.instrumentKey) ?? legCurrentPrice
             }
 
             const legUrPnl =
@@ -599,23 +618,25 @@ export function useTradeExecution() {
           legs: updatedLegs,
         }
 
-        const symSigData: AllSignalData = {
-          v3: symMarket?.v3 ?? primaryMarket.v3,
-          indicators: symbolIndicators[sym] ?? indicators,
-          vrd: symbolVrds[sym] ?? primaryVrdData ?? null,
-          globalIndices:
-            symMarket?.globalIndices ?? primaryMarket.globalIndices,
-        }
-        const { exit: signalExit, reason: signalReason } = shouldExit(
-          pos,
-          symSigData,
-          currentPrice,
-          config,
-        )
-        const exit =
-          signalExit ||
+        const forcedExit =
           afterCutoff ||
           (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
+        const exitIndicators = symbolIndicators[sym] ?? indicators
+        let signalExit = false
+        let signalReason = ''
+        if (!forcedExit && exitIndicators) {
+          const symSigData: AllSignalData = {
+            v3: symMarket?.v3 ?? primaryMarket.v3,
+            indicators: exitIndicators,
+            vrd: symbolVrds[sym] ?? primaryVrdData ?? null,
+            globalIndices:
+              symMarket?.globalIndices ?? primaryMarket.globalIndices,
+          }
+          const decision = shouldExit(pos, symSigData, currentPrice, config)
+          signalExit = decision.exit
+          signalReason = decision.reason
+        }
+        const exit = signalExit || forcedExit
         const reason = afterCutoff
           ? `EOD forced exit`
           : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
@@ -632,6 +653,7 @@ export function useTradeExecution() {
                     direction: pos.direction,
                     entryPrice: pos.entryPrice,
                     quantity: pos.quantity,
+                    lotSize: pos.lotSize,
                     tradeType:
                       pos.tradeType === 'selling'
                         ? ('selling' as const)
@@ -645,6 +667,10 @@ export function useTradeExecution() {
           let allLegsCleared = true
 
           for (const leg of allLegs) {
+            if (abortSignal?.aborted) {
+              allLegsCleared = false
+              break
+            }
             if (leg.status === 'CLOSED') {
               continue
             }
@@ -666,13 +692,9 @@ export function useTradeExecution() {
                   exitPrice: leg.currentPrice ?? currentPrice,
                   metadata: { reason },
                 }),
-                signal: abortSignal,
               })
               if (paperExitErr) {
-                const isTerminalClosed =
-                  paperExitErr.includes('TRADE_ALREADY_CLOSED') ||
-                  paperExitErr.includes('TRADE_NOT_FOUND') ||
-                  /^HTTP (400|404)\b/i.test(paperExitErr)
+                const isTerminalClosed = isTerminalPaperExitError(paperExitErr)
                 if (isTerminalClosed) {
                   addLog(
                     mkLog(
@@ -712,7 +734,6 @@ export function useTradeExecution() {
                   transactionType: exitTxType,
                   quantity: leg.quantity,
                 }),
-                signal: abortSignal,
               })
               if (sellErr) {
                 addLog(
@@ -734,7 +755,7 @@ export function useTradeExecution() {
             addLog(mkLog('info', 'bot', `[${sym}] position exited: ${reason}`))
           } else {
             curPositions[sym] = {
-              ...pos,
+              ...curPositions[sym],
               legs: allLegs,
             }
           }

@@ -8,6 +8,7 @@ import type {
   NewsAlert,
   NiftySentiment,
   UnderlyingSymbol,
+  OptionContract,
 } from '@/lib/types'
 import { UNDERLYING_INSTRUMENT_KEYS } from '@/lib/types'
 import {
@@ -55,6 +56,16 @@ export interface GlobalIndexItem {
   change_per: number
   net_change?: number
   [key: string]: unknown
+}
+
+export function resolveContractLotSize(
+  contracts: OptionContract[],
+  expiry: string | null,
+): number | null {
+  const contract =
+    contracts.find((item) => item.expiry === expiry) ?? contracts[0]
+  const lotSize = Number(contract?.lot_size ?? contract?.minimum_lot)
+  return Number.isInteger(lotSize) && lotSize > 0 ? lotSize : null
 }
 
 export function mkLog(
@@ -640,6 +651,8 @@ export async function fetchMarket(
   underlyingSymbol: UnderlyingSymbol
   candles: Candle[]
   optionChain: OptionData[]
+  lotSize: number | null
+  expiry: string | null
   v3: V3OrderType
   breadth: {
     advances: number
@@ -693,6 +706,7 @@ export async function fetchMarket(
         signal: abortSignal,
       }),
       safeFetch<{
+        data?: OptionContract[]
         expiries?: string[]
       }>(API_MARKET_OPTION_CONTRACTS, {
         method: 'POST',
@@ -774,8 +788,10 @@ export async function fetchMarket(
   const contractsErr =
     contractsRes.status === 'fulfilled' ? contractsRes.value[1] : 'fetch failed'
   const expiryCandidates = (contractsData?.expiries ?? []).slice(0, 5)
+  const contracts = contractsData?.data ?? []
 
   let optionChain: OptionData[] = []
+  let selectedExpiry: string | null = null
   let optionChainError =
     contractsErr ??
     `No live expiry returned for ${underlyingSymbol} from Upstox option contracts`
@@ -817,6 +833,7 @@ export async function fetchMarket(
       continue
     }
     optionChain = chain
+    selectedExpiry = candidate
     addLog(
       mkLog(
         'info',
@@ -912,6 +929,8 @@ export async function fetchMarket(
     underlyingSymbol,
     candles,
     optionChain,
+    lotSize: resolveContractLotSize(contracts, selectedExpiry),
+    expiry: selectedExpiry,
     v3,
     breadth,
     globalIndices,

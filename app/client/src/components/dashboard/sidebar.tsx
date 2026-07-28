@@ -145,10 +145,8 @@ function useActiveTradesCount() {
             body: JSON.stringify({ token }),
           })
           if (!res.ok) return
-          const payload = await res.json()
-          const rows = Array.isArray(payload)
-            ? (payload as LocalLiveOrder[])
-            : ((payload as OrderListResponse).data ?? [])
+          const payload: LocalLiveOrder[] | OrderListResponse = await res.json()
+          const rows = Array.isArray(payload) ? payload : (payload.data ?? [])
           const todayOrders = rows.filter((o) =>
             isToday(o.exchange_timestamp ?? o.order_timestamp),
           )

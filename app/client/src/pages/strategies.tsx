@@ -1,7 +1,6 @@
 import type { StrategyConfig } from '@/lib/types'
 import { useEffect, useState } from 'react'
-import { getAccounts } from '@/lib/accounts'
-import { useStrategyBot } from '@/hooks/useStrategyBot'
+import type { StrategyBotController } from '@/hooks/useStrategyBot'
 import { getStrategyConfig, saveStrategyConfig } from '@/lib/strategyConfig'
 import { fetchPaperAccount } from '@/lib/paperTrading'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -24,13 +23,15 @@ import { NewsAlertsPanel } from '@/components/dashboard/strategy/news-alerts-pan
 import { ThresholdOptimizer } from '@/components/dashboard/strategy/threshold-optimizer'
 import { DailyBacktestReport } from '@/components/dashboard/strategy/daily-backtest-report'
 
-export function StrategiesPage() {
-  const token = getAccounts().find((a) => a.accessToken)?.accessToken ?? null
+interface StrategiesPageProps {
+  bot: StrategyBotController
+  token: string | null
+}
+
+export function StrategiesPage({ bot, token }: StrategiesPageProps) {
   const [config, setConfig] = useState<StrategyConfig>(getStrategyConfig)
   const [paperBalance, setPaperBalance] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<string>('operations')
-
-  const bot = useStrategyBot(token)
 
   useEffect(() => {
     if (config.executionMode !== 'paper') return

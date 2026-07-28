@@ -23,26 +23,26 @@ describe('Multi-Index Options Trading Support', () => {
   })
 
   describe('Lot Size Calculations', () => {
-    it('returns lot size 25 for NIFTY 50', () => {
-      expect(getLotSizeForSymbol('NIFTY 50')).toBe(25)
-      expect(getLotSizeForSymbol('NSE_INDEX|Nifty 50')).toBe(25)
-      expect(getLotSizeForSymbol('NSE_FO|NIFTY26JUL24500CE')).toBe(25)
+    it('returns current fallback lot size 65 for NIFTY 50', () => {
+      expect(getLotSizeForSymbol('NIFTY 50')).toBe(65)
+      expect(getLotSizeForSymbol('NSE_INDEX|Nifty 50')).toBe(65)
+      expect(getLotSizeForSymbol('NSE_FO|NIFTY26JUL24500CE')).toBe(65)
     })
 
-    it('returns lot size 15 for BANKNIFTY', () => {
-      expect(getLotSizeForSymbol('BANKNIFTY')).toBe(15)
-      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Bank')).toBe(15)
-      expect(getLotSizeForSymbol('NSE_FO|BANKNIFTY26JUL52000PE')).toBe(15)
+    it('returns current fallback lot size 30 for BANKNIFTY', () => {
+      expect(getLotSizeForSymbol('BANKNIFTY')).toBe(30)
+      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Bank')).toBe(30)
+      expect(getLotSizeForSymbol('NSE_FO|BANKNIFTY26JUL52000PE')).toBe(30)
     })
 
-    it('returns lot size 40 for FINNIFTY', () => {
-      expect(getLotSizeForSymbol('FINNIFTY')).toBe(40)
-      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Fin Service')).toBe(40)
+    it('returns current fallback lot size 60 for FINNIFTY', () => {
+      expect(getLotSizeForSymbol('FINNIFTY')).toBe(60)
+      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Fin Service')).toBe(60)
     })
 
-    it('returns lot size 50 for MIDCPNIFTY', () => {
-      expect(getLotSizeForSymbol('MIDCPNIFTY')).toBe(50)
-      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Mid Select')).toBe(50)
+    it('returns current fallback lot size 120 for MIDCPNIFTY', () => {
+      expect(getLotSizeForSymbol('MIDCPNIFTY')).toBe(120)
+      expect(getLotSizeForSymbol('NSE_INDEX|Nifty Mid Select')).toBe(120)
     })
 
     it('returns lot size 10 for SENSEX', () => {
@@ -146,6 +146,14 @@ describe('Multi-Index Options Trading Support', () => {
             ok: true,
             json: () =>
               Promise.resolve({
+                data: [
+                  {
+                    instrument_key: 'NSE_FO|12345',
+                    trading_symbol: 'NIFTY26JUL24500CE',
+                    expiry: '2026-07-24',
+                    lot_size: 65,
+                  },
+                ],
                 expiries: ['2026-07-24'],
               }),
           })
@@ -202,6 +210,7 @@ describe('Multi-Index Options Trading Support', () => {
       expect(marketMap['NIFTY 50'].underlyingSymbol).toBe('NIFTY 50')
       expect(marketMap.BANKNIFTY.underlyingSymbol).toBe('BANKNIFTY')
       expect(marketMap.FINNIFTY.underlyingSymbol).toBe('FINNIFTY')
+      expect(marketMap['NIFTY 50'].lotSize).toBe(65)
 
       vi.unstubAllGlobals()
     })

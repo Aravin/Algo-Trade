@@ -9,7 +9,7 @@
 
 - **Frontend Runtime**: Browser ESNext environment built with Vite 8 + React 19.
 - **Backend Edge Runtime**: Cloudflare Workers with `nodejs_compat` compatibility flag enabled.
-- **Database Engine**: Cloudflare D1 SQLite database (`algo-trade-paper`, ID: `dc8d72f3-11ee-4ff9-8f24-3c9b5f3b5c33`).
+- **Database Engine**: Cloudflare D1 SQLite database (`algo-trade-paper`, ID: `5ab4a20e-8317-4c4e-958f-b0a824e9207c`).
 - **Package Manager**: Yarn v1 (`yarn@1.22.22`).
 
 ---
@@ -45,7 +45,7 @@ export interface StrategyConfig {
 
 ### 2.2 Client State DB Schema (`client_state` table in D1)
 
-Defined in `migrations/0002_client_state.sql` and `worker/clientState.ts`:
+Defined in `migrations/0001_initial.sql` and `worker/clientState.ts`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS client_state (
@@ -59,29 +59,31 @@ CREATE TABLE IF NOT EXISTS client_state (
 
 Common `state_key` values:
 
-- `strategy_config` — Saved user strategy parameters.
-- `broker_accounts` — Saved broker OAuth session metadata.
-- `active_strategy_ids` — List of currently running strategy IDs.
+- `strategyConfig` — Saved user strategy parameters.
+- `brokerAccounts` — Saved broker OAuth session metadata.
 
 ### 2.3 Paper Trade Record Schema (`paper_trades` table in D1)
 
-Defined in `migrations/0001_paper_trading.sql` and `worker/paperTrading.ts`:
+Defined in `migrations/0001_initial.sql` and `worker/paperTrading.ts`.
+Monetary columns are stored as integer paise:
 
 ```sql
 CREATE TABLE IF NOT EXISTS paper_trades (
   id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  symbol TEXT NOT NULL,
-  instrument_token TEXT NOT NULL,
-  side TEXT NOT NULL,          -- 'BUY' or 'SELL'
+  account_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  instrument_key TEXT NOT NULL,
+  direction TEXT NOT NULL,      -- 'CE' or 'PE'
   quantity INTEGER NOT NULL,
-  entry_price REAL NOT NULL,
-  exit_price REAL,
-  status TEXT NOT NULL,         -- 'OPEN', 'CLOSED', 'CANCELLED'
-  pnl REAL,
-  entry_time TEXT NOT NULL,
-  exit_time TEXT,
-  exit_reason TEXT              -- 'TARGET', 'STOP_LOSS', 'TRAILING_SL', 'HARD_STOP', 'MANUAL'
+  entry_price INTEGER NOT NULL,
+  entry_value INTEGER NOT NULL,
+  exit_price INTEGER,
+  exit_value INTEGER,
+  realized_pnl INTEGER,
+  opened_at TEXT NOT NULL,
+  closed_at TEXT,
+  metadata_json TEXT,
+  FOREIGN KEY (account_id) REFERENCES paper_accounts(id)
 );
 ```
 
@@ -108,27 +110,30 @@ The V5 Strategy (`src/lib/strategyEngine.ts`) evaluates a composite score from *
 ## 4. Bot Execution State Machine
 
 ```
-               ┌──────────┐
-               │   IDLE   │
-               └────┬─────┘
-                    │ User clicks "Start Bot"
-                    ▼
-               ┌──────────┐
-               │ RUNNING  │◄───────┐
-               └────┬─────┘        │ User clicks "Resume"
-                    │              │
-      User clicks   ├──────────────┼──────────────┐
-       "Pause"      │              │              │ Daily loss >= maxLossPerDay
-                    ▼              │              ▼
-               ┌──────────┐        │        ┌──────────┐
-               │  PAUSED  ├────────┘        │ HARD_STOP│
-               └──────────┘                 └──────────┘
+IDLE --Start--> RUNNING --entry--> ORDERED
+  ^                |                  |
+  |                +------Stop--------+
+  +----------------------- STOPPED <--+
 ```
 
 1. **IDLE**: Strategy bot is inactive. No market polling or trade evaluation occurs.
 2. **RUNNING**: Bot actively polls quotes/intraday candles, computes indicator scores, checks entry/exit criteria, and manages trailing stop losses.
-3. **PAUSED**: Bot halts order placement but maintains position tracking.
-4. **HARD_STOP**: Bot triggers daily max loss or hard stop condition. Orders are cancelled, open positions liquidated, and execution locked.
+3. **ORDERED**: The loop remains active while one or more positions are open.
+4. **STOPPED**: Polling is disabled. Open positions remain represented in state and must not be treated as closed. EOD and hard-stop evaluation are paused, so the persistent strategy header warns the user until supervision is resumed.
+
+The bot hook is mounted in `AppContent`, not in the Strategies page. Live Start
+requires an explicit session confirmation. On reload, live mode may resume
+supervision of existing positions without enabling new entries. A candle outage
+blocks entry evaluation but still permits degraded EOD, hard-stop, and cached
+signal exit handling.
+
+Execution lot size and expiry come from the selected Upstox option contract.
+Calculated expiry dates and static lot maps are fallbacks only.
+
+Worker request throttling is enforced through the generated
+`REQUEST_RATE_LIMITER` Cloudflare binding. It replaces isolate-local counters
+and applies a 200-request, 60-second limit per stable actor key and Cloudflare
+location.
 
 ---
 
@@ -140,6 +145,9 @@ The V5 Strategy (`src/lib/strategyEngine.ts`) evaluates a composite score from *
 - **`POST /api/market/option-chain`**: Body `{ instrumentKey: string, expiryDate: string }`. Fetches option chain.
 - **`POST /api/paper/trades/enter`**: Executes paper trade entry and records open trade into `paper_trades` table.
 - **`POST /api/paper/trades/exit`**: Closes open trade, computes realized PnL, updates `paper_accounts` balance.
+
+Protected routes require Auth0. Missing `AUTH0_DOMAIN` or `AUTH0_AUDIENCE`
+bindings fail closed with `401`; local development must configure them too.
 
 ---
 

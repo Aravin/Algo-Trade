@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { calculateOptionCharges } from '../../../worker/paperTrading'
+import {
+  calculateOptionCharges,
+  handlePaperTradeEnter,
+} from '../../../worker/paperTrading'
+import type { Env } from '../../../worker/types'
 
 describe('paperTrading calculateOptionCharges', () => {
   describe('Selling Options STT & Fee Structure', () => {
@@ -36,7 +40,7 @@ describe('paperTrading calculateOptionCharges', () => {
     })
 
     it('handles small lot trade value correctly without negative or rounding errors', () => {
-      const tradeValuePaise = 250000 // 1 lot of NIFTY at ₹100 premium in paise
+      const tradeValuePaise = 650000 // 1 fallback lot of NIFTY at ₹100 premium
       const chargesSell = calculateOptionCharges(tradeValuePaise, true)
       const chargesBuy = calculateOptionCharges(tradeValuePaise, false)
 
@@ -51,8 +55,8 @@ describe('paperTrading calculateOptionCharges', () => {
     it('simulates paper BUY trade entry and rollback yielding net 0 balance change', () => {
       const initialBalancePaise = 1500000 // ₹15000 in paise
       const entryPricePaise = 10000 // ₹100 in paise
-      const quantity = 50 // 2 lots NIFTY
-      const entryValuePaise = entryPricePaise * quantity // 500000 paise = ₹5000
+      const quantity = 130 // 2 fallback lots NIFTY
+      const entryValuePaise = entryPricePaise * quantity
 
       const entryCharges = calculateOptionCharges(entryValuePaise, false) // BUY mode
       // On BUY entry: balance reduced by entryValue + totalCharges (all in paise)
@@ -69,12 +73,12 @@ describe('paperTrading calculateOptionCharges', () => {
     it('simulates paper SELL trade entry and rollback yielding net 0 balance change', () => {
       const initialBalancePaise = 1500000 // ₹15000 in paise
       const entryPricePaise = 10000 // ₹100 in paise
-      const quantity = 50 // 2 lots NIFTY
-      const entryValuePaise = entryPricePaise * quantity // 500000 paise = ₹5000
+      const quantity = 130 // 2 fallback lots NIFTY
+      const entryValuePaise = entryPricePaise * quantity
 
       const entryCharges = calculateOptionCharges(entryValuePaise, true) // SELL mode
       // On SELL entry: balance increased by entryValue - totalCharges (all in paise)
-      const marginBlockedPaise = (quantity / 25) * 400000 // 2 lots * ₹4000 margin
+      const marginBlockedPaise = (quantity / 65) * 400000 // 2 lots * ₹4000 margin
       const netChangePaise =
         entryValuePaise - entryCharges.totalCharges - marginBlockedPaise
       const balanceAfterEntryPaise = initialBalancePaise + netChangePaise
@@ -83,6 +87,28 @@ describe('paperTrading calculateOptionCharges', () => {
       const balanceAfterRollbackPaise = balanceAfterEntryPaise - netChangePaise
 
       expect(balanceAfterRollbackPaise).toBe(initialBalancePaise)
+    })
+  })
+})
+
+describe('paper trade lot metadata', () => {
+  it('rejects invalid exchange lot metadata before touching D1', async () => {
+    const request = new Request('https://example.test/api/paper/trades/enter', {
+      method: 'POST',
+      body: JSON.stringify({
+        instrumentKey: 'NSE_FO|NIFTY',
+        direction: 'CE',
+        quantity: 65,
+        entryPrice: 100,
+        lotSize: 0,
+      }),
+    })
+
+    const response = await handlePaperTradeEnter(request, {} as Env, 'user-1')
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'lotSize must be a positive integer when provided',
     })
   })
 })

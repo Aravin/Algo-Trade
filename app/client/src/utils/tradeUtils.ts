@@ -8,23 +8,23 @@ export function getLotSizeForSymbol(
   const upper = symbol.toUpperCase()
 
   // 1. Index Options & Futures (ordered specific -> general to prevent substring collision)
-  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 15
+  if (upper.includes('BANKNIFTY') || upper.includes('NIFTY BANK')) return 30
   if (
     upper.includes('FINNIFTY') ||
     upper.includes('NIFTY FIN SERVICE') ||
     upper.includes('FIN SERVICE')
   )
-    return 40
+    return 60
   if (
     upper.includes('MIDCPNIFTY') ||
     upper.includes('NIFTY MID SELECT') ||
     upper.includes('MIDCAP')
   )
-    return 50
+    return 120
   if (upper.includes('NIFTYNXT50') || upper.includes('NEXT50')) return 10
   if (upper.includes('SENSEX') || upper.includes('BSX')) return 10
   if (upper.includes('BANKEX')) return 15
-  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 25
+  if (upper.includes('NIFTY 50') || upper.includes('NIFTY')) return 65
 
   // 2. High-volume NSE Stock F&O Symbols
   if (upper.includes('RELIANCE')) return 250

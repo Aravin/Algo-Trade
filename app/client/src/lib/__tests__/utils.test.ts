@@ -142,29 +142,33 @@ describe('getUpcomingIndexExpiry', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('defaults to Thursday for NIFTY 50', () => {
+  it('uses Tuesday weekly expiry for NIFTY 50', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('NIFTY 50')
-    expect(r.dayOfWeek).toBe('Thursday')
+    expect(r.dayOfWeek).toBe('Tuesday')
+    expect(r.expiryDateStr).toBe('2026-07-28')
   })
 
-  it('returns Tuesday for FINNIFTY', () => {
+  it('uses the last Tuesday of the month for FINNIFTY', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('FINNIFTY')
     expect(r.dayOfWeek).toBe('Tuesday')
+    expect(r.expiryDateStr).toBe('2026-07-28')
   })
 
-  it('returns Wednesday for BANKNIFTY', () => {
+  it('uses the last Tuesday of the month for BANKNIFTY', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('BANKNIFTY')
-    expect(r.dayOfWeek).toBe('Wednesday')
-    expect(r.relativeText).toBe('Today (Expiry Day)')
+    expect(r.dayOfWeek).toBe('Tuesday')
+    expect(r.expiryDateStr).toBe('2026-07-28')
+    expect(r.relativeText).toBe('in 6 days')
   })
 
-  it('returns Monday for MIDCAP NIFTY', () => {
+  it('uses the last Tuesday of the month for MIDCAP NIFTY', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('MIDCAP NIFTY')
-    expect(r.dayOfWeek).toBe('Monday')
+    expect(r.dayOfWeek).toBe('Tuesday')
+    expect(r.expiryDateStr).toBe('2026-07-28')
   })
 
   it('returns Friday for SENSEX', () => {
@@ -181,27 +185,33 @@ describe('getUpcomingIndexExpiry', () => {
   })
 
   it('rolls over to next week after 15:30 on expiry day', () => {
-    vi.setSystemTime(new Date('2026-07-23T16:00:00+05:30'))
+    vi.setSystemTime(new Date('2026-07-28T16:00:00+05:30'))
     const r = getUpcomingIndexExpiry('NIFTY 50')
-    expect(r.dayOfWeek).toBe('Thursday')
+    expect(r.dayOfWeek).toBe('Tuesday')
     expect(r.relativeText).toBe('in 7 days')
   })
 
   it('returns Today on expiry day before 15:30', () => {
-    vi.setSystemTime(new Date('2026-07-23T12:00:00+05:30'))
+    vi.setSystemTime(new Date('2026-07-28T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('NIFTY 50')
     expect(r.relativeText).toBe('Today (Expiry Day)')
   })
 
   it('returns Tomorrow when expiry is next day', () => {
-    vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30')) // Wed
-    const r = getUpcomingIndexExpiry('NIFTY 50') // Thu
+    vi.setSystemTime(new Date('2026-07-27T12:00:00+05:30')) // Mon
+    const r = getUpcomingIndexExpiry('NIFTY 50') // Tue
     expect(r.relativeText).toBe('Tomorrow')
+  })
+
+  it('rolls monthly contracts into the next month after expiry close', () => {
+    vi.setSystemTime(new Date('2026-07-28T16:00:00+05:30'))
+    const r = getUpcomingIndexExpiry('BANKNIFTY')
+    expect(r.expiryDateStr).toBe('2026-08-25')
   })
 
   it('includes fullLabel in the result', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('NIFTY 50')
-    expect(r.fullLabel).toMatch(/^\d{1,2} \w{3} \d{4} \(Thursday\)$/)
+    expect(r.fullLabel).toMatch(/^\d{1,2} \w{3} \d{4} \(Tuesday\)$/)
   })
 })

@@ -6,7 +6,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "algo-trade",
   "main": "worker/index.ts",
-  "compatibility_date": "2026-06-09",
+  "compatibility_date": "2026-07-28",
   "assets": {
     "not_found_handling": "single-page-application",
   },
@@ -34,12 +34,29 @@
     },
   ],
   /**
+   * Native per-location request limiter. The namespace ID is a stable,
+   * project-specific positive integer and must remain unique in this account.
+   */
+  "ratelimits": [
+    {
+      "name": "REQUEST_RATE_LIMITER",
+      "namespace_id": "1521787406",
+      "simple": {
+        "limit": 200,
+        "period": 60,
+      },
+    },
+  ],
+  /**
    * Environment Variables
    * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
    * Note: Use secrets to store sensitive data.
    * https://developers.cloudflare.com/workers/configuration/secrets/
    */
-  // "vars": { "AUTH0_DOMAIN": "your-tenant.us.auth0.com", "AUTH0_AUDIENCE": "https://api.algo-trade.com" }
+  "vars": {
+    "AUTH0_DOMAIN": "algo-trade.us.auth0.com",
+    "AUTH0_AUDIENCE": "https://algo-trade.us.auth0.com/api/v2/",
+  },
   /**
    * Service Bindings (communicate between multiple Workers)
    * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

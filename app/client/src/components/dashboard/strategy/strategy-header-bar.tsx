@@ -2,6 +2,7 @@ import type { ExecutionMode, ActivePosition } from '@/lib/types'
 import type { BotState } from '@/hooks/useStrategyBot'
 import { useEffect, useState } from 'react'
 import {
+  AlertTriangle,
   Play,
   Square,
   Clock,
@@ -198,7 +199,10 @@ export function StrategyHeaderBar({
             <span className="text-muted-foreground font-mono">
               {(() => {
                 const symbol = position.legs?.[0]?.instrumentKey ?? 'NIFTY'
-                const lotSize = getLotSizeForSymbol(symbol)
+                const lotSize =
+                  position.lotSize ??
+                  position.legs?.[0]?.lotSize ??
+                  getLotSizeForSymbol(symbol)
                 const lots =
                   lotSize > 1 ? Math.round(position.quantity / lotSize) : null
                 return `${position.quantity} qty${lots !== null ? ` (${lots} ${lots > 1 ? 'lots' : 'lot'})` : ''}`
@@ -226,7 +230,8 @@ export function StrategyHeaderBar({
               className="bg-success text-success-foreground hover:bg-success/90 font-medium h-9 px-4"
               onClick={start}
             >
-              <Play size={14} className="mr-1.5 fill-current" /> Start Bot
+              <Play size={14} className="mr-1.5 fill-current" />
+              {state === 'STOPPED' && position ? 'Resume Bot' : 'Start Bot'}
             </Button>
           ) : (
             <Button
@@ -276,6 +281,18 @@ export function StrategyHeaderBar({
         <div className="mt-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2.5 py-1">
           ⚠️ No active broker token — add Upstox account first to execute
           trades.
+        </div>
+      )}
+      {state === 'STOPPED' && position && (
+        <div
+          role="alert"
+          className="mt-2 flex items-start gap-2 rounded border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-xs text-destructive"
+        >
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span>
+            Position supervision is paused. EOD and hard-stop exits will not run
+            until the bot is resumed.
+          </span>
         </div>
       )}
     </div>

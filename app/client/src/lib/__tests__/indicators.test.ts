@@ -175,13 +175,13 @@ describe('indicators', () => {
   })
 
   describe('getUpcomingIndexExpiry', () => {
-    it('calculates correct weekly expiry day of week for Indian indices', () => {
+    it('uses current fallback expiry weekdays for Indian indices', () => {
       const nifty = getUpcomingIndexExpiry('NIFTY 50')
-      expect(nifty.dayOfWeek).toBe('Thursday')
+      expect(nifty.dayOfWeek).toBe('Tuesday')
       expect(nifty.expiryDateStr).toMatch(/^\d{4}-\d{2}-\d{2}$/)
 
       const bank = getUpcomingIndexExpiry('BANKNIFTY')
-      expect(bank.dayOfWeek).toBe('Wednesday')
+      expect(bank.dayOfWeek).toBe('Tuesday')
 
       const fin = getUpcomingIndexExpiry('FINNIFTY')
       expect(fin.dayOfWeek).toBe('Tuesday')

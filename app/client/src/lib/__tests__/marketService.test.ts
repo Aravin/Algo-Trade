@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkLog, safeFetch } from '../marketService'
+import { mkLog, resolveContractLotSize, safeFetch } from '../marketService'
 
 describe('mkLog', () => {
   it('creates a BotLog with correct level, source, and msg', () => {
@@ -155,5 +155,32 @@ describe('safeFetch', () => {
         headers: expect.objectContaining({ 'X-Custom': 'val' }),
       }),
     )
+  })
+})
+
+describe('resolveContractLotSize', () => {
+  const contracts = [
+    {
+      instrument_key: 'NSE_FO|A',
+      trading_symbol: 'NIFTY26JUL24500CE',
+      expiry: '2026-07-28',
+      lot_size: 65,
+    },
+    {
+      instrument_key: 'NSE_FO|B',
+      trading_symbol: 'NIFTY26AUG24500CE',
+      expiry: '2026-08-25',
+      lot_size: 70,
+    },
+  ]
+
+  it('uses the exchange lot size for the selected expiry', () => {
+    expect(resolveContractLotSize(contracts, '2026-08-25')).toBe(70)
+  })
+
+  it('rejects invalid contract lot metadata', () => {
+    expect(
+      resolveContractLotSize([{ ...contracts[0], lot_size: 0 }], '2026-07-28'),
+    ).toBeNull()
   })
 })

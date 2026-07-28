@@ -107,7 +107,8 @@ export function BotControls({
         <div className="flex gap-2">
           {state === 'IDLE' || state === 'STOPPED' ? (
             <Button size="sm" className="flex-1" onClick={start}>
-              <Play size={13} className="mr-1.5" /> Start Bot
+              <Play size={13} className="mr-1.5" />
+              {state === 'STOPPED' && position ? 'Resume Bot' : 'Start Bot'}
             </Button>
           ) : (
             <Button
@@ -177,7 +178,10 @@ export function BotControls({
               )}
               {(() => {
                 const symbol = position.legs?.[0]?.instrumentKey ?? 'NIFTY'
-                const lotSize = getLotSizeForSymbol(symbol)
+                const lotSize =
+                  position.lotSize ??
+                  position.legs?.[0]?.lotSize ??
+                  getLotSizeForSymbol(symbol)
                 const lots =
                   lotSize > 1 ? Math.round(position.quantity / lotSize) : null
                 return (

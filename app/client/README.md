@@ -18,6 +18,7 @@ If you need the hosted D1 database updated too, run `yarn wrangler d1 migrations
 - `yarn dev` starts the Vite client locally
 - `yarn build` runs TypeScript build and Vite production build
 - `yarn deploy` builds and deploys the Worker
+- `yarn cf-typegen` regenerates Worker binding/runtime types after `wrangler.jsonc` changes
 - `yarn validate` runs typecheck, eslint, and prettier checks
 
 ## Persistence
@@ -53,7 +54,31 @@ Deploy the Worker after schema and code changes:
 yarn deploy
 ```
 
-The persistence change for broker accounts and strategy config depends on `migrations/0002_client_state.sql` being applied.
+The consolidated schema, including broker-account and strategy client state,
+is in `migrations/0001_initial.sql`.
+
+## Trading And Authentication Safety
+
+- The strategy bot is mounted at the app root, so changing dashboard pages does
+  not stop open-position supervision.
+- Stop aborts the active polling tick and disables new entries, but deliberately
+  retains open positions in local state. A manually stopped bot does not run EOD
+  or hard-stop exits; the strategy header shows a persistent warning until
+  supervision is resumed.
+- Worker request throttling uses Cloudflare's native rate-limit binding rather
+  than isolate-local mutable counters.
+- Live trading must be armed with an explicit confirmation each time Start is
+  pressed. A persisted live session may resume supervision of an existing
+  position, but it cannot place a new entry until re-armed.
+- Missing candle data disables entries but still runs degraded open-position
+  exit checks using available option quotes and persisted risk state.
+- The selected Upstox option contract supplies the execution lot size and
+  expiry. Static index lot sizes and calculated expiry dates are fallback
+  display/safety values only.
+- Authenticated Worker routes fail closed if `AUTH0_DOMAIN` or
+  `AUTH0_AUDIENCE` is missing. These public identifiers are configured in
+  `wrangler.jsonc`; Upstox credentials remain secrets in `.dev.vars` locally
+  and Cloudflare secrets in production.
 
 ## Relevant Files
 
@@ -62,9 +87,9 @@ The persistence change for broker accounts and strategy config depends on `migra
 - `src/lib/clientState.ts`
 - `src/App.tsx`
 - `worker/index.ts`
-- `migrations/0002_client_state.sql`
+- `migrations/0001_initial.sql`
 
 ## Notes
 
 - The client uses Yarn v1 in this folder.
-- Full repo typecheck is currently blocked by unrelated pre-existing errors in other client files.
+- Run `yarn cf-typegen` whenever Worker bindings or the compatibility date change.
