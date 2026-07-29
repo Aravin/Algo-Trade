@@ -141,6 +141,7 @@ export async function resetPaperAccount(): Promise<PaperAccountSummary> {
   const res = await fetch(API_PAPER_RESET, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
   })
   return parseJson<PaperAccountSummary>(res)
 }
