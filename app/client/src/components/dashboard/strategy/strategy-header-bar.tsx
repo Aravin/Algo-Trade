@@ -10,11 +10,12 @@ import {
   TrendingDown,
   Terminal,
   Settings,
+  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { InfoTooltip } from '@/components/ui/tooltip'
-import { getUpcomingIndexExpiry } from '@/lib/utils'
+import { getUpcomingIndexExpiry, getSensibullOptionChainUrl } from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 const STATE_DOT: Record<BotState, string> = {
@@ -223,6 +224,16 @@ export function StrategyHeaderBar({
 
         {/* Right: Primary Controls & Action Shortcuts */}
         <div className="flex items-center gap-2 ml-auto">
+          <a
+            href={getSensibullOptionChainUrl('NIFTY')}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors h-9"
+            title="Open NIFTY Option Chain in Sensibull"
+          >
+            <ExternalLink size={13} />
+            Option Chain
+          </a>
           {/* Start/Stop Button */}
           {state === 'IDLE' || state === 'STOPPED' ? (
             <Button

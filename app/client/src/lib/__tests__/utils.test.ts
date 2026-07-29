@@ -6,6 +6,8 @@ import {
   normalizeLiveStatus,
   getUpcomingIndexExpiry,
   getSensibullUrl,
+  getSensibullOptionChainUrl,
+  extractCleanTradingSymbol,
 } from '../utils'
 
 describe('cn', () => {
@@ -217,20 +219,72 @@ describe('getUpcomingIndexExpiry', () => {
   })
 })
 
-describe('getSensibullUrl', () => {
-  it('returns undefined if tradingSymbol is not provided', () => {
-    expect(getSensibullUrl(undefined)).toBeUndefined()
+describe('extractCleanTradingSymbol', () => {
+  it('strips broker prefixes like NSE_FO:', () => {
+    expect(extractCleanTradingSymbol('NSE_FO:NIFTY26AUG24400CE')).toBe(
+      'NIFTY26AUG24400CE',
+    )
+    expect(extractCleanTradingSymbol('NSE_FO|NIFTY26AUG24400CE')).toBe(
+      'NIFTY26AUG24400CE',
+    )
   })
 
-  it('returns correct URL based on tradingSymbol', () => {
+  it('returns undefined for numeric Upstox tokens', () => {
+    expect(extractCleanTradingSymbol('NSE_FO|65854')).toBeUndefined()
+    expect(extractCleanTradingSymbol('65854')).toBeUndefined()
+  })
+
+  it('returns clean symbol for index or equity', () => {
+    expect(extractCleanTradingSymbol('NIFTY')).toBe('NIFTY')
+  })
+})
+
+describe('getSensibullUrl', () => {
+  it('returns undefined if no valid symbol or fallback is provided', () => {
+    expect(getSensibullUrl(undefined, undefined)).toBeUndefined()
+  })
+
+  it('returns correct chart URL for option contract symbol', () => {
     expect(getSensibullUrl('NIFTY26AUG24400CE')).toBe(
       'https://web.sensibull.com/chart?tradingSymbol=NIFTY26AUG24400CE',
+    )
+  })
+
+  it('strips NSE_FO: prefix and returns clean chart URL', () => {
+    expect(getSensibullUrl('NSE_FO:NIFTY26AUG24400CE')).toBe(
+      'https://web.sensibull.com/chart?tradingSymbol=NIFTY26AUG24400CE',
+    )
+  })
+
+  it('falls back to option-chain for index underlying symbol', () => {
+    expect(getSensibullUrl('NIFTY')).toBe(
+      'https://web.sensibull.com/option-chain?tradingsymbol=NIFTY',
+    )
+    expect(getSensibullUrl('NSE_FO|65854', 'NIFTY')).toBe(
+      'https://web.sensibull.com/option-chain?tradingsymbol=NIFTY',
     )
   })
 
   it('encodes symbols before adding them to the query string', () => {
     expect(getSensibullUrl('NIFTY 50&AUG=CE')).toBe(
       'https://web.sensibull.com/chart?tradingSymbol=NIFTY%2050%26AUG%3DCE',
+    )
+  })
+})
+
+describe('getSensibullOptionChainUrl', () => {
+  it('returns Sensibull option chain URL for index underlying', () => {
+    expect(getSensibullOptionChainUrl('NIFTY')).toBe(
+      'https://web.sensibull.com/option-chain?tradingsymbol=NIFTY',
+    )
+    expect(getSensibullOptionChainUrl('BANKNIFTY')).toBe(
+      'https://web.sensibull.com/option-chain?tradingsymbol=BANKNIFTY',
+    )
+  })
+
+  it('defaults to NIFTY option chain if empty', () => {
+    expect(getSensibullOptionChainUrl(undefined)).toBe(
+      'https://web.sensibull.com/option-chain?tradingsymbol=NIFTY',
     )
   })
 })

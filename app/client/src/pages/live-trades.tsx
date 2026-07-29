@@ -15,6 +15,7 @@ import {
   Zap,
   Info,
   Power,
+  ExternalLink,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
-import { cn, isToday, normalizeLiveStatus, getSensibullUrl } from '@/lib/utils'
+import {
+  cn,
+  isToday,
+  normalizeLiveStatus,
+  getSensibullUrl,
+  getSensibullOptionChainUrl,
+  extractCleanTradingSymbol,
+} from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 import {
   STORAGE_KEY_LIVE_TRADES_PAGE_MODE,
@@ -445,7 +453,10 @@ function buildPaperDataset(
       pnlPct,
       status: 'ACTIVE',
       entryTime: timeLabel(t.opened_at),
-      tradingSymbol: tradingSymbol,
+      tradingSymbol:
+        tradingSymbol ??
+        extractCleanTradingSymbol(t.instrument_key) ??
+        underlying,
       underlyingSymbol: underlying,
       isPaper: true,
     }
@@ -537,7 +548,10 @@ function buildPaperDataset(
       pnlPct,
       status,
       entryTime: timeLabel(t.closed_at ?? t.opened_at),
-      tradingSymbol,
+      tradingSymbol:
+        tradingSymbol ??
+        extractCleanTradingSymbol(t.instrument_key) ??
+        underlying,
       underlyingSymbol: underlying,
     }
   })
@@ -849,108 +863,114 @@ function TradesTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id}>
-            <TableCell>
-              <div className="font-medium text-sm">
-                {getSensibullUrl(row.tradingSymbol) ? (
-                  <a
-                    href={getSensibullUrl(row.tradingSymbol)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
-                    title="Open in Sensibull"
-                  >
-                    {row.displaySymbol ?? row.symbol}
-                  </a>
-                ) : (
-                  <p>{row.displaySymbol ?? row.symbol}</p>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground font-mono">
-                {row.metaInfo ?? `${row.side} · ${row.entryTime}`}
-                {row.displaySymbol && row.displaySymbol !== row.symbol && (
-                  <span className="ml-1.5 opacity-70">({row.symbol})</span>
-                )}
-              </p>
-            </TableCell>
-            <TableCell>
-              <Badge variant={typeVariant[row.type]}>{row.type}</Badge>
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              <div>
-                <span>{row.qty}</span>
-                {(() => {
-                  const lotSize = getLotSizeForSymbol(row.symbol)
-                  if (lotSize > 1 && row.type !== 'EQ') {
-                    const lots = Math.round(row.qty / lotSize)
-                    return (
-                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
-                        ({lots} {lots > 1 ? 'lots' : 'lot'})
-                      </span>
-                    )
-                  }
-                  return null
-                })()}
-              </div>
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              {row.entryPrice === null ? '—' : fmtCurrency(row.entryPrice)}
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              {row.ltp === null ? '—' : fmtCurrency(row.ltp)}
-            </TableCell>
-            <TableCell className="text-right">
-              {row.pnl === null ? (
-                <span className="text-xs text-muted-foreground">
-                  {row.status === 'ACTIVE' ? 'MTM pending' : '—'}
-                </span>
-              ) : (
-                <div>
-                  <p
-                    className={cn(
-                      'font-mono text-sm font-medium',
-                      row.pnl >= 0 ? 'text-success' : 'text-destructive',
-                    )}
-                  >
-                    {fmtCurrency(row.pnl, true)}
-                  </p>
-                  {row.pnlPct !== null && (
-                    <p
-                      className={cn(
-                        'text-xs',
-                        row.pnl >= 0
-                          ? 'text-success/70'
-                          : 'text-destructive/70',
-                      )}
+        {rows.map((row) => {
+          const sensibullUrl = getSensibullUrl(
+            row.tradingSymbol,
+            row.underlyingSymbol,
+          )
+          return (
+            <TableRow key={row.id}>
+              <TableCell>
+                <div className="font-medium text-sm">
+                  {sensibullUrl ? (
+                    <a
+                      href={sensibullUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
+                      title="Open in Sensibull"
                     >
-                      {fmtPct(row.pnlPct)}
-                    </p>
+                      {row.displaySymbol ?? row.symbol}
+                    </a>
+                  ) : (
+                    <p>{row.displaySymbol ?? row.symbol}</p>
                   )}
                 </div>
-              )}
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex flex-col items-end gap-2">
-                <Badge variant={statusVariant[row.status]}>
-                  {statusLabel[row.status]}
-                </Badge>
-                {row.status === 'ACTIVE' && row.isPaper && onExit && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[10px] px-2 text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => {
-                      void onExit(row.id, row.ltp)
-                    }}
-                  >
-                    Force Exit
-                  </Button>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {row.metaInfo ?? `${row.side} · ${row.entryTime}`}
+                  {row.displaySymbol && row.displaySymbol !== row.symbol && (
+                    <span className="ml-1.5 opacity-70">({row.symbol})</span>
+                  )}
+                </p>
+              </TableCell>
+              <TableCell>
+                <Badge variant={typeVariant[row.type]}>{row.type}</Badge>
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                <div>
+                  <span>{row.qty}</span>
+                  {(() => {
+                    const lotSize = getLotSizeForSymbol(row.symbol)
+                    if (lotSize > 1 && row.type !== 'EQ') {
+                      const lots = Math.round(row.qty / lotSize)
+                      return (
+                        <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                          ({lots} {lots > 1 ? 'lots' : 'lot'})
+                        </span>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                {row.entryPrice === null ? '—' : fmtCurrency(row.entryPrice)}
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                {row.ltp === null ? '—' : fmtCurrency(row.ltp)}
+              </TableCell>
+              <TableCell className="text-right">
+                {row.pnl === null ? (
+                  <span className="text-xs text-muted-foreground">
+                    {row.status === 'ACTIVE' ? 'MTM pending' : '—'}
+                  </span>
+                ) : (
+                  <div>
+                    <p
+                      className={cn(
+                        'font-mono text-sm font-medium',
+                        row.pnl >= 0 ? 'text-success' : 'text-destructive',
+                      )}
+                    >
+                      {fmtCurrency(row.pnl, true)}
+                    </p>
+                    {row.pnlPct !== null && (
+                      <p
+                        className={cn(
+                          'text-xs',
+                          row.pnl >= 0
+                            ? 'text-success/70'
+                            : 'text-destructive/70',
+                        )}
+                      >
+                        {fmtPct(row.pnlPct)}
+                      </p>
+                    )}
+                  </div>
                 )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex flex-col items-end gap-2">
+                  <Badge variant={statusVariant[row.status]}>
+                    {statusLabel[row.status]}
+                  </Badge>
+                  {row.status === 'ACTIVE' && row.isPaper && onExit && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] px-2 text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        void onExit(row.id, row.ltp)
+                      }}
+                    >
+                      Force Exit
+                    </Button>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )
@@ -1142,6 +1162,16 @@ export function LiveTradesPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <a
+                href={getSensibullOptionChainUrl('NIFTY')}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors"
+                title="Open NIFTY Option Chain in Sensibull"
+              >
+                <ExternalLink size={13} />
+                Option Chain
+              </a>
               {/* Mode toggle */}
               <div className="flex rounded-md border border-border overflow-hidden text-sm">
                 <button

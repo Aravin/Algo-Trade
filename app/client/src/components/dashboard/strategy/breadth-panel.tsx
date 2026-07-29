@@ -1,9 +1,10 @@
 import type { VrdData } from '@/lib/types'
-import { Activity } from 'lucide-react'
+import { Activity, ExternalLink } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { InfoTooltip } from '@/components/ui/tooltip'
 import { scoreADRatio, scoreStraddleIV } from '@/lib/vrdSignals'
+import { getSensibullOptionChainUrl } from '@/lib/utils'
 
 function PcrZoneBadge({ zone }: { zone: string | null | undefined }) {
   if (!zone) return <Badge variant="secondary">—</Badge>
@@ -61,12 +62,22 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <Activity size={14} className="text-primary" />
           Market Breadth
           <InfoTooltip content="Measures stock participation in Nifty 50 (Advances/Declines), option market sentiment (PCR), and option premium volatility (Straddle IV)." />
         </CardTitle>
+        <a
+          href={getSensibullOptionChainUrl('NIFTY')}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+          title="Open NIFTY Option Chain in Sensibull"
+        >
+          <ExternalLink size={12} />
+          Option Chain
+        </a>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
         {/* A/D Ratio */}

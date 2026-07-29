@@ -14,7 +14,7 @@ import {
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 import { STORAGE_KEY_BOT_POSITION } from '@/lib/constants'
-import { getSensibullUrl } from '@/lib/utils'
+import { getSensibullUrl, extractCleanTradingSymbol } from '@/lib/utils'
 
 function fmtCurrency(value: number, signed = false) {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
@@ -232,6 +232,7 @@ export function HistoryPage() {
                   let metaSubtext: string | null = null
                   let contractLotSize: number | null = null
                   let metaTradingSymbol: string | undefined = undefined
+                  let metaUnderlyingSymbol: string | undefined = undefined
                   try {
                     const meta = JSON.parse(trade.metadata_json ?? '{}') as {
                       tradingSymbol?: string
@@ -246,9 +247,13 @@ export function HistoryPage() {
                     ) {
                       contractLotSize = Number(meta?.lotSize)
                     }
-                    if (meta?.tradingSymbol) {
-                      metaTradingSymbol = meta.tradingSymbol
+                    if (meta?.underlyingSymbol) {
+                      metaUnderlyingSymbol = meta.underlyingSymbol
                     }
+                    metaTradingSymbol =
+                      meta?.tradingSymbol ??
+                      extractCleanTradingSymbol(trade.instrument_key) ??
+                      metaUnderlyingSymbol
                     if (meta?.tradingSymbol || meta?.strikePrice) {
                       const underlying = meta.underlyingSymbol ?? 'NIFTY'
                       const strikeStr = meta.strikePrice
@@ -263,13 +268,18 @@ export function HistoryPage() {
                     // ignore
                   }
 
+                  const sensibullUrl = getSensibullUrl(
+                    metaTradingSymbol,
+                    metaUnderlyingSymbol,
+                  )
+
                   return (
                     <TableRow key={trade.id}>
                       <TableCell>
                         <div className="font-medium text-sm">
-                          {getSensibullUrl(metaTradingSymbol) ? (
+                          {sensibullUrl ? (
                             <a
-                              href={getSensibullUrl(metaTradingSymbol)}
+                              href={sensibullUrl}
                               target="_blank"
                               rel="noreferrer"
                               className="hover:underline text-primary cursor-pointer text-left focus:outline-none"

@@ -58,9 +58,50 @@ export interface IndexExpiryInfo {
   relativeText: string // "Today (Expiry Day)", "Tomorrow", "in 2 days"
 }
 
-export function getSensibullUrl(tradingSymbol?: string): string | undefined {
-  if (!tradingSymbol) return undefined
-  return `https://web.sensibull.com/chart?tradingSymbol=${encodeURIComponent(tradingSymbol)}`
+export function extractCleanTradingSymbol(
+  symbolOrKey?: string,
+): string | undefined {
+  if (!symbolOrKey) return undefined
+  const cleaned = symbolOrKey
+    .replace(/^(NSE_FO|NSE_INDEX|BSE_FO|BSE_INDEX|MCX_FO)[:|]/i, '')
+    .trim()
+  if (!cleaned) return undefined
+  if (/^\d+$/.test(cleaned)) return undefined
+  return cleaned
+}
+
+export function getSensibullUrl(
+  tradingSymbol?: string,
+  underlyingSymbol?: string,
+): string | undefined {
+  const cleanSym =
+    extractCleanTradingSymbol(tradingSymbol) ??
+    extractCleanTradingSymbol(underlyingSymbol)
+  if (!cleanSym) return undefined
+
+  const upper = cleanSym.toUpperCase()
+  const isIndex = [
+    'NIFTY',
+    'NIFTY 50',
+    'BANKNIFTY',
+    'FINNIFTY',
+    'MIDCPNIFTY',
+    'SENSEX',
+  ].includes(upper)
+
+  if (isIndex) {
+    const sym = upper === 'NIFTY 50' ? 'NIFTY' : upper
+    return `https://web.sensibull.com/option-chain?tradingsymbol=${encodeURIComponent(sym)}`
+  }
+
+  return `https://web.sensibull.com/chart?tradingSymbol=${encodeURIComponent(cleanSym)}`
+}
+
+export function getSensibullOptionChainUrl(underlyingSymbol?: string): string {
+  const cleanSym = extractCleanTradingSymbol(underlyingSymbol) ?? 'NIFTY'
+  const upper = cleanSym.toUpperCase()
+  const sym = upper === 'NIFTY 50' ? 'NIFTY' : upper
+  return `https://web.sensibull.com/option-chain?tradingsymbol=${encodeURIComponent(sym)}`
 }
 
 /**

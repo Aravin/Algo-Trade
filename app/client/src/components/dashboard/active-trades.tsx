@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
+import { cn, getSensibullUrl } from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 
 interface Trade {
@@ -179,76 +179,98 @@ function TradesTable({ trades }: { trades: Trade[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {trades.map((trade) => (
-          <TableRow key={trade.id}>
-            <TableCell>
-              <div>
-                <p className="font-medium text-sm">{trade.symbol}</p>
-                <p className="text-xs text-muted-foreground">
-                  {trade.side} · {trade.entryTime}
-                </p>
-              </div>
-            </TableCell>
-            <TableCell>
-              <Badge variant={typeVariant[trade.type]}>{trade.type}</Badge>
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              <div>
-                <span>{trade.qty}</span>
-                {(() => {
-                  const lotSize = getLotSizeForSymbol(
-                    trade.displaySymbol ?? trade.symbol,
-                  )
-                  if (lotSize > 1 && trade.type !== 'EQ') {
-                    const lots = Math.round(trade.qty / lotSize)
-                    return (
-                      <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
-                        ({lots} {lots > 1 ? 'lots' : 'lot'})
-                      </span>
+        {trades.map((trade) => {
+          const sensibullUrl = getSensibullUrl(
+            trade.displaySymbol ?? trade.symbol,
+          )
+          return (
+            <TableRow key={trade.id}>
+              <TableCell>
+                <div>
+                  {sensibullUrl ? (
+                    <a
+                      href={sensibullUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-sm text-primary hover:underline cursor-pointer focus:outline-none"
+                      title="Open in Sensibull"
+                    >
+                      {trade.symbol}
+                    </a>
+                  ) : (
+                    <p className="font-medium text-sm">{trade.symbol}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {trade.side} · {trade.entryTime}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant={typeVariant[trade.type]}>{trade.type}</Badge>
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                <div>
+                  <span>{trade.qty}</span>
+                  {(() => {
+                    const lotSize = getLotSizeForSymbol(
+                      trade.displaySymbol ?? trade.symbol,
                     )
-                  }
-                  return null
-                })()}
-              </div>
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              ₹
-              {trade.entryPrice.toLocaleString('en-IN', {
-                minimumFractionDigits: 2,
-              })}
-            </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              ₹{trade.ltp.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </TableCell>
-            <TableCell className="text-right">
-              <div>
-                <p
-                  className={cn(
-                    'font-mono text-sm font-medium',
-                    trade.pnl >= 0 ? 'text-success' : 'text-destructive',
-                  )}
-                >
-                  {trade.pnl >= 0 ? '+' : ''}₹
-                  {Math.abs(trade.pnl).toLocaleString('en-IN')}
-                </p>
-                <p
-                  className={cn(
-                    'text-xs',
-                    trade.pnl >= 0 ? 'text-success/70' : 'text-destructive/70',
-                  )}
-                >
-                  {trade.pnlPct >= 0 ? '+' : ''}
-                  {trade.pnlPct.toFixed(2)}%
-                </p>
-              </div>
-            </TableCell>
-            <TableCell className="text-right">
-              <Badge variant={statusVariant[trade.status]}>
-                {statusLabel[trade.status]}
-              </Badge>
-            </TableCell>
-          </TableRow>
-        ))}
+                    if (lotSize > 1 && trade.type !== 'EQ') {
+                      const lots = Math.round(trade.qty / lotSize)
+                      return (
+                        <span className="text-[10px] text-muted-foreground ml-1.5 font-normal">
+                          ({lots} {lots > 1 ? 'lots' : 'lot'})
+                        </span>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                ₹
+                {trade.entryPrice.toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                })}
+              </TableCell>
+              <TableCell className="text-right font-mono text-sm">
+                ₹
+                {trade.ltp.toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                })}
+              </TableCell>
+              <TableCell className="text-right">
+                <div>
+                  <p
+                    className={cn(
+                      'font-mono text-sm font-medium',
+                      trade.pnl >= 0 ? 'text-success' : 'text-destructive',
+                    )}
+                  >
+                    {trade.pnl >= 0 ? '+' : ''}₹
+                    {Math.abs(trade.pnl).toLocaleString('en-IN')}
+                  </p>
+                  <p
+                    className={cn(
+                      'text-xs',
+                      trade.pnl >= 0
+                        ? 'text-success/70'
+                        : 'text-destructive/70',
+                    )}
+                  >
+                    {trade.pnlPct >= 0 ? '+' : ''}
+                    {trade.pnlPct.toFixed(2)}%
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <Badge variant={statusVariant[trade.status]}>
+                  {statusLabel[trade.status]}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )
