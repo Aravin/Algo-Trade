@@ -5,6 +5,7 @@ import {
   isToday,
   normalizeLiveStatus,
   getUpcomingIndexExpiry,
+  getSensibullUrl,
 } from '../utils'
 
 describe('cn', () => {
@@ -213,5 +214,23 @@ describe('getUpcomingIndexExpiry', () => {
     vi.setSystemTime(new Date('2026-07-22T12:00:00+05:30'))
     const r = getUpcomingIndexExpiry('NIFTY 50')
     expect(r.fullLabel).toMatch(/^\d{1,2} \w{3} \d{4} \(Tuesday\)$/)
+  })
+})
+
+describe('getSensibullUrl', () => {
+  it('returns undefined if tradingSymbol is not provided', () => {
+    expect(getSensibullUrl(undefined)).toBeUndefined()
+  })
+
+  it('returns correct URL based on tradingSymbol', () => {
+    expect(getSensibullUrl('NIFTY26AUG24400CE')).toBe(
+      'https://web.sensibull.com/chart?tradingSymbol=NIFTY26AUG24400CE',
+    )
+  })
+
+  it('encodes symbols before adding them to the query string', () => {
+    expect(getSensibullUrl('NIFTY 50&AUG=CE')).toBe(
+      'https://web.sensibull.com/chart?tradingSymbol=NIFTY%2050%26AUG%3DCE',
+    )
   })
 })

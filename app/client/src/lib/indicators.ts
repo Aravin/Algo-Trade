@@ -261,14 +261,16 @@ export function getOtmStrike(
   if (!optionChain.length) return null
   const spot = optionChain[0].underlying_spot_price
   if (direction === 'CE') {
-    const otm = optionChain.filter(
-      (o) => o.strike_price > spot && o.call_options.market_data.ltp > 0,
-    )
+    const otm = optionChain
+      .filter(
+        (o) => o.strike_price > spot && o.call_options.market_data.ltp > 0,
+      )
+      .sort((a, b) => a.strike_price - b.strike_price)
     return otm[skip] ?? otm[otm.length - 1] ?? null
   }
   const otm = optionChain
     .filter((o) => o.strike_price < spot && o.put_options.market_data.ltp > 0)
-    .reverse()
+    .sort((a, b) => b.strike_price - a.strike_price)
   return otm[skip] ?? otm[otm.length - 1] ?? null
 }
 

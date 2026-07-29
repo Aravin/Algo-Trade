@@ -28,6 +28,11 @@ import {
   loadExitTimes,
 } from './useBotState'
 import { useTradeExecution, type ExecutionContext } from './useTradeExecution'
+import {
+  fetchPaperHistory,
+  getIndiaDateString,
+  paperTradeToActivePosition,
+} from '@/lib/paperTrading'
 
 export type { SourceStatus, BotLog, GlobalIndexItem } from '@/lib/marketService'
 export type { BotState, BotStatus } from './useBotState'
@@ -94,13 +99,6 @@ export function useStrategyBot(token: string | null) {
           ? ['NIFTY 50', 'BANKNIFTY', 'FINNIFTY']
           : [config.underlyingMode as UnderlyingSymbol]
 
-      const targetSymbolsSet = new Set<UnderlyingSymbol>(allowedSymbols)
-      Object.entries(cur.positions ?? {}).forEach(([sym, pos]) => {
-        if (pos !== null) {
-          targetSymbolsSet.add(sym as UnderlyingSymbol)
-        }
-      })
-      const targetSymbols = Array.from(targetSymbolsSet)
       const curPositions: Record<UnderlyingSymbol, ActivePosition | null> = {
         ...DEFAULT_POSITIONS,
         ...(cur.positions ?? {}),
@@ -114,6 +112,74 @@ export function useStrategyBot(token: string | null) {
       const curTradesPerSym: Partial<Record<UnderlyingSymbol, number>> = {
         ...(cur.tradesCountPerSymbol ?? {}),
       }
+
+      try {
+        const history = await fetchPaperHistory()
+        const hasAuthoritativeOpenTrades = history.openTrades !== undefined
+        const openTrades =
+          history.openTrades ??
+          (history.trades ?? []).filter((trade) => trade.status === 'OPEN')
+        const persistedPositions = openTrades
+          .map((trade) =>
+            paperTradeToActivePosition(trade, getIndiaDateString()),
+          )
+          .filter(
+            (
+              value,
+            ): value is {
+              symbol: UnderlyingSymbol
+              position: ActivePosition
+            } => value !== null,
+          )
+        const persistedTradeIds = new Set(
+          persistedPositions.map(({ position }) => position.paperTradeId),
+        )
+
+        if (hasAuthoritativeOpenTrades) {
+          for (const symbol of Object.keys(
+            curPositions,
+          ) as UnderlyingSymbol[]) {
+            const localPosition = curPositions[symbol]
+            if (
+              localPosition?.executionMode === 'paper' &&
+              localPosition.paperTradeId &&
+              !persistedTradeIds.has(localPosition.paperTradeId)
+            ) {
+              curPositions[symbol] = null
+              log(
+                'warn',
+                'paper',
+                `[${symbol}] removed stale local paper position; D1 is authoritative`,
+              )
+            }
+          }
+        }
+
+        for (const { symbol, position } of persistedPositions) {
+          if (!curPositions[symbol]) {
+            curPositions[symbol] = position
+            log(
+              'warn',
+              'paper',
+              `[${symbol}] restored open paper position from D1`,
+            )
+          }
+        }
+      } catch (error) {
+        log(
+          'warn',
+          'paper',
+          `Unable to reconcile open paper positions: ${(error as Error).message}`,
+        )
+      }
+
+      const targetSymbolsSet = new Set<UnderlyingSymbol>(allowedSymbols)
+      Object.entries(curPositions).forEach(([sym, pos]) => {
+        if (pos !== null) {
+          targetSymbolsSet.add(sym as UnderlyingSymbol)
+        }
+      })
+      const targetSymbols = Array.from(targetSymbolsSet)
       const now = new Date()
       const currentHour = now.getHours()
       const currentMinute = now.getMinutes()

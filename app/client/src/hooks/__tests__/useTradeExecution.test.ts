@@ -103,7 +103,7 @@ describe('useTradeExecution', () => {
     expect(newlyEntered.size).toBe(0)
   })
 
-  it('uses selected contract lot metadata for paper quantity and validation', async () => {
+  it('uses persisted paper metadata when reattaching an existing trade', async () => {
     const { result } = renderHook(() => useTradeExecution())
     const option = {
       expiry: '2026-07-28',
@@ -181,7 +181,23 @@ describe('useTradeExecution', () => {
       account: { balance: 1_000_000 },
     } as Awaited<ReturnType<typeof fetchPaperAccount>>)
     vi.mocked(safeFetch).mockResolvedValueOnce([
-      { trade: { id: 'paper-1' } },
+      {
+        trade: {
+          id: 'paper-1',
+          status: 'OPEN',
+          instrument_key: 'NSE_FO|CE',
+          direction: 'CE',
+          quantity: 65,
+          entry_price: 100,
+          opened_at: '2026-07-28T04:30:00.000Z',
+          metadata_json: JSON.stringify({
+            lotSize: 65,
+            tradeType: 'selling',
+          }),
+        },
+        reconciled: true,
+        reconciliationReason: 'OPEN_POSITION_EXISTS',
+      },
       null,
     ])
 
@@ -195,9 +211,20 @@ describe('useTradeExecution', () => {
     const requestBody = JSON.parse(rawRequestBody) as {
       lotSize: number
       quantity: number
+      clientOrderId: string
+      maxTradesPerDay: number
     }
-    expect(requestBody).toMatchObject({ lotSize: 65, quantity: 65 })
+    expect(requestBody).toMatchObject({
+      lotSize: 65,
+      quantity: 65,
+      maxTradesPerDay: 5,
+    })
+    expect(requestBody.clientOrderId.length).toBeGreaterThan(0)
     expect(mockCtx.curPositions['NIFTY 50']?.lotSize).toBe(65)
+    expect(mockCtx.curPositions['NIFTY 50']?.tradeType).toBe('selling')
+    expect(mockCtx.curPositions['NIFTY 50']?.legs?.[0]?.tradeType).toBe(
+      'selling',
+    )
   })
 
   it('should exit positions when afterCutoff is true', async () => {

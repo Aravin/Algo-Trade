@@ -8,6 +8,7 @@ import { nowIso, makeId, getLotSizeForSymbol } from './utils'
 
 const PAPER_STARTING_CREDIT = 15000_00
 const PAPER_BROKERAGE_PAISE = 20_00
+export const MAX_PAPER_ENTRY_FEE_RATIO = 0.05
 
 function toPaise(value: number): number {
   return Math.round(value * 100)
@@ -29,6 +30,81 @@ export function calculateOptionCharges(
   const statutoryTaxes = stt + stampDuty + exchangeFee + gst
   const totalCharges = brokerage + statutoryTaxes
   return { totalCharges, brokerage, statutoryTaxes }
+}
+
+export function calculatePaperExitSettlement(input: {
+  entryValuePaise: number
+  exitPricePaise: number
+  quantity: number
+  isSelling: boolean
+  entryChargesPaise: number
+  marginBlockedPaise: number
+  isRollback: boolean
+}): {
+  exitValuePaise: number
+  exitCharges: {
+    totalCharges: number
+    brokerage: number
+    statutoryTaxes: number
+  }
+  totalTradeFeesPaise: number
+  grossPnlPaise: number
+  realizedPnlPaise: number
+  netChangePaise: number
+} {
+  const exitValuePaise = Math.round(input.exitPricePaise * input.quantity)
+  if (input.isRollback) {
+    return {
+      exitValuePaise,
+      exitCharges: { totalCharges: 0, brokerage: 0, statutoryTaxes: 0 },
+      totalTradeFeesPaise: 0,
+      grossPnlPaise: 0,
+      realizedPnlPaise: 0,
+      netChangePaise: input.isSelling
+        ? -input.entryValuePaise +
+          input.entryChargesPaise +
+          input.marginBlockedPaise
+        : input.entryValuePaise + input.entryChargesPaise,
+    }
+  }
+
+  const exitCharges = calculateOptionCharges(exitValuePaise, !input.isSelling)
+  const totalTradeFeesPaise = input.entryChargesPaise + exitCharges.totalCharges
+  const grossPnlPaise = input.isSelling
+    ? input.entryValuePaise - exitValuePaise
+    : exitValuePaise - input.entryValuePaise
+
+  return {
+    exitValuePaise,
+    exitCharges,
+    totalTradeFeesPaise,
+    grossPnlPaise,
+    realizedPnlPaise: grossPnlPaise - totalTradeFeesPaise,
+    netChangePaise: input.isSelling
+      ? -exitValuePaise - exitCharges.totalCharges + input.marginBlockedPaise
+      : exitValuePaise - exitCharges.totalCharges,
+  }
+}
+
+function indiaDate(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const value = (type: 'year' | 'month' | 'day') =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  return `${value('year')}-${value('month')}-${value('day')}`
+}
+
+function paperTradeMetadata(row: PaperTradeRow): Record<string, unknown> {
+  if (!row.metadata_json) return {}
+  try {
+    return JSON.parse(row.metadata_json) as Record<string, unknown>
+  } catch {
+    return {}
+  }
 }
 
 function toResponseAccount(row: PaperAccountRow): PaperAccountRow {
@@ -146,6 +222,78 @@ export async function listPaperTrades(
   return trades.results ?? []
 }
 
+const PAPER_TRADE_SELECT =
+  'SELECT id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, exit_price, exit_value, realized_pnl, opened_at, closed_at, metadata_json FROM paper_trades'
+
+export async function listOpenPaperTrades(
+  env: Env,
+  userId: string,
+): Promise<PaperTradeRow[]> {
+  const trades = await env.PAPER_TRADING_DB.prepare(
+    `${PAPER_TRADE_SELECT}
+     WHERE account_id = ? AND status = 'OPEN'
+     ORDER BY opened_at DESC`,
+  )
+    .bind(userId)
+    .all<PaperTradeRow>()
+  return trades.results ?? []
+}
+
+async function findPaperTradeByClientOrderId(
+  env: Env,
+  accountId: string,
+  clientOrderId: string,
+): Promise<PaperTradeRow | null> {
+  return env.PAPER_TRADING_DB.prepare(
+    `${PAPER_TRADE_SELECT}
+     WHERE account_id = ? AND json_extract(metadata_json, '$.clientOrderId') = ?
+     ORDER BY opened_at DESC LIMIT 1`,
+  )
+    .bind(accountId, clientOrderId)
+    .first<PaperTradeRow>()
+}
+
+async function findOpenPaperTradeForUnderlying(
+  env: Env,
+  accountId: string,
+  underlyingSymbol: string,
+  currentIndiaDate: string,
+): Promise<PaperTradeRow | null> {
+  return env.PAPER_TRADING_DB.prepare(
+    `${PAPER_TRADE_SELECT}
+     WHERE account_id = ? AND status = 'OPEN'
+       AND json_extract(metadata_json, '$.underlyingSymbol') = ?
+       AND COALESCE(json_extract(metadata_json, '$.expiry'), ?) >= ?
+     ORDER BY opened_at DESC LIMIT 1`,
+  )
+    .bind(accountId, underlyingSymbol, currentIndiaDate, currentIndiaDate)
+    .first<PaperTradeRow>()
+}
+
+async function paperTradeResponse(
+  env: Env,
+  account: PaperAccountRow,
+  trade: PaperTradeRow,
+  reconciliationReason?: 'CLIENT_ORDER_REPLAY' | 'OPEN_POSITION_EXISTS',
+): Promise<Response> {
+  const freshAccount = await env.PAPER_TRADING_DB.prepare(
+    'SELECT id, mode, balance, currency, updated_at FROM paper_accounts WHERE id = ?',
+  )
+    .bind(account.id)
+    .first<PaperAccountRow>()
+  if (!freshAccount) throw new Error('Account vanished')
+
+  const summary = await fetchAccountSummary(env, freshAccount)
+  return Response.json({
+    trade: toResponseTrade(trade),
+    reconciled: reconciliationReason !== undefined,
+    reconciliationReason,
+    ...summary,
+    account: toResponseAccount(freshAccount),
+    recentEntries: summary.recentEntries.map(toResponseStatement),
+  })
+}
+
 export async function handlePaperAccount(
   env: Env,
   userId: string,
@@ -171,15 +319,17 @@ export async function handlePaperHistory(
   userId: string,
 ): Promise<Response> {
   try {
-    const [summary, trades] = await Promise.all([
+    const [summary, trades, openTrades] = await Promise.all([
       getPaperAccountSummary(env, userId),
       listPaperTrades(env, userId),
+      listOpenPaperTrades(env, userId),
     ])
     return Response.json({
       ...summary,
       account: toResponseAccount(summary.account),
       recentEntries: summary.recentEntries.map(toResponseStatement),
       trades: trades.map(toResponseTrade),
+      openTrades: openTrades.map(toResponseTrade),
     })
   } catch (error) {
     console.error('Failed to load paper history:', error)
@@ -406,6 +556,8 @@ export async function handlePaperTradeEnter(
     entryPrice?: number
     lotSize?: number
     marginPerLot?: number
+    clientOrderId?: string
+    maxTradesPerDay?: number
     metadata?: unknown
   }
   try {
@@ -432,11 +584,37 @@ export async function handlePaperTradeEnter(
     )
   }
 
-  const metadataObj = body.metadata as {
-    tradingSymbol?: string
-    underlyingSymbol?: string
-    tradeType?: 'buying' | 'selling'
-  } | null
+  const metadataObj =
+    typeof body.metadata === 'object' && body.metadata !== null
+      ? (body.metadata as {
+          tradingSymbol?: string
+          underlyingSymbol?: string
+          tradeType?: 'buying' | 'selling'
+          expiry?: string
+        })
+      : null
+  const requestedClientOrderId = body.clientOrderId?.trim()
+  if (
+    body.clientOrderId !== undefined &&
+    (!requestedClientOrderId || requestedClientOrderId.length > 128)
+  ) {
+    return Response.json(
+      { error: 'clientOrderId must be between 1 and 128 characters' },
+      { status: 400 },
+    )
+  }
+  const requestedMaxTradesPerDay =
+    body.maxTradesPerDay === undefined ? 3 : Number(body.maxTradesPerDay)
+  if (
+    !Number.isInteger(requestedMaxTradesPerDay) ||
+    requestedMaxTradesPerDay <= 0 ||
+    requestedMaxTradesPerDay > 100
+  ) {
+    return Response.json(
+      { error: 'maxTradesPerDay must be an integer between 1 and 100' },
+      { status: 400 },
+    )
+  }
   const lotSymbol =
     metadataObj?.tradingSymbol ??
     metadataObj?.underlyingSymbol ??
@@ -462,24 +640,100 @@ export async function handlePaperTradeEnter(
     )
   }
 
+  const entryPricePaise = toPaise(entryPrice)
+  const entryValuePaise = Math.round(entryPricePaise * quantity)
+  const tradeType = metadataObj?.tradeType ?? 'buying'
+  const isSelling = tradeType === 'selling'
+  const charges = calculateOptionCharges(entryValuePaise, isSelling)
+  const entryFeeRatio = charges.totalCharges / entryValuePaise
+  if (entryFeeRatio > MAX_PAPER_ENTRY_FEE_RATIO) {
+    return Response.json(
+      {
+        error: `Paper entry rejected: estimated fees are ${(entryFeeRatio * 100).toFixed(2)}% of the trade value`,
+        code: 'ENTRY_FEES_TOO_HIGH',
+        feeRatio: entryFeeRatio,
+        maxFeeRatio: MAX_PAPER_ENTRY_FEE_RATIO,
+      },
+      { status: 422 },
+    )
+  }
+
+  const marginPerLot = body.marginPerLot ?? 100000
+  if (!Number.isFinite(marginPerLot) || marginPerLot <= 0) {
+    return Response.json(
+      { error: 'marginPerLot must be a positive number when provided' },
+      { status: 400 },
+    )
+  }
+  const marginPerLotPaise = toPaise(marginPerLot)
+  const marginBlockedPaise = isSelling
+    ? (quantity / lotSize) * marginPerLotPaise
+    : 0
+  const netChangePaise = isSelling
+    ? entryValuePaise - charges.totalCharges - marginBlockedPaise
+    : -(entryValuePaise + charges.totalCharges)
+
   try {
     const account = await ensurePaperAccount(env, userId)
-    const entryPricePaise = toPaise(entryPrice)
-    const entryValuePaise = Math.round(entryPricePaise * quantity)
-    const tradeType = metadataObj?.tradeType ?? 'buying'
-    const isSelling = tradeType === 'selling'
-    const charges = calculateOptionCharges(entryValuePaise, isSelling)
+    const currentIndiaDate = indiaDate()
+    const metadataUnderlyingSymbol = metadataObj?.underlyingSymbol?.trim()
+    const underlyingSymbol =
+      metadataUnderlyingSymbol && metadataUnderlyingSymbol.length > 0
+        ? metadataUnderlyingSymbol
+        : body.instrumentKey
 
-    const marginPerLotPaise = toPaise(body.marginPerLot ?? 100000)
-    const marginBlockedPaise = isSelling
-      ? (quantity / lotSize) * marginPerLotPaise
-      : 0
+    if (requestedClientOrderId) {
+      const replayedTrade = await findPaperTradeByClientOrderId(
+        env,
+        account.id,
+        requestedClientOrderId,
+      )
+      if (replayedTrade) {
+        return paperTradeResponse(
+          env,
+          account,
+          replayedTrade,
+          'CLIENT_ORDER_REPLAY',
+        )
+      }
+    }
 
-    const netChangePaise = isSelling
-      ? entryValuePaise - charges.totalCharges - marginBlockedPaise
-      : -(entryValuePaise + charges.totalCharges)
+    const existingOpenTrade = await findOpenPaperTradeForUnderlying(
+      env,
+      account.id,
+      underlyingSymbol,
+      currentIndiaDate,
+    )
+    if (existingOpenTrade) {
+      return paperTradeResponse(
+        env,
+        account,
+        existingOpenTrade,
+        'OPEN_POSITION_EXISTS',
+      )
+    }
+
+    const dailyTradeCountRow = await env.PAPER_TRADING_DB.prepare(
+      `SELECT COUNT(*) AS count FROM paper_trades
+       WHERE account_id = ?
+         AND json_extract(metadata_json, '$.underlyingSymbol') = ?
+         AND status != 'CANCELLED'
+         AND date(opened_at, '+330 minutes') = ?`,
+    )
+      .bind(account.id, underlyingSymbol, currentIndiaDate)
+      .first<{ count: number }>()
+    if (Number(dailyTradeCountRow?.count ?? 0) >= requestedMaxTradesPerDay) {
+      return Response.json(
+        {
+          error: `Maximum paper trades per day (${requestedMaxTradesPerDay}) reached for ${underlyingSymbol}`,
+          code: 'MAX_TRADES_PER_DAY',
+        },
+        { status: 409 },
+      )
+    }
 
     const tradeId = makeId('paper_trade')
+    const clientOrderId = requestedClientOrderId ?? tradeId
     const createdAt = nowIso()
 
     const tradeMetadata = {
@@ -489,13 +743,34 @@ export async function handlePaperTradeEnter(
       entryCharges: charges,
       marginBlocked: toRupees(marginBlockedPaise),
       lotSize,
+      clientOrderId,
     }
 
     const results = await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
         `INSERT INTO paper_trades (id, account_id, status, instrument_key, direction, quantity, entry_price, entry_value, opened_at, metadata_json)
          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-         WHERE ? >= 0 OR (SELECT balance FROM paper_accounts WHERE id = ?) >= ?`,
+         FROM paper_accounts
+         WHERE id = ?
+           AND (? >= 0 OR balance >= ?)
+           AND NOT EXISTS (
+             SELECT 1 FROM paper_trades
+             WHERE account_id = ?
+               AND json_extract(metadata_json, '$.clientOrderId') = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM paper_trades
+             WHERE account_id = ? AND status = 'OPEN'
+               AND json_extract(metadata_json, '$.underlyingSymbol') = ?
+               AND COALESCE(json_extract(metadata_json, '$.expiry'), ?) >= ?
+           )
+           AND (
+             SELECT COUNT(*) FROM paper_trades
+             WHERE account_id = ?
+               AND json_extract(metadata_json, '$.underlyingSymbol') = ?
+               AND status != 'CANCELLED'
+               AND date(opened_at, '+330 minutes') = ?
+           ) < ?`,
       ).bind(
         tradeId,
         account.id,
@@ -507,15 +782,26 @@ export async function handlePaperTradeEnter(
         entryValuePaise,
         createdAt,
         JSON.stringify(tradeMetadata),
-        netChangePaise,
         account.id,
+        netChangePaise,
         -netChangePaise,
+        account.id,
+        clientOrderId,
+        account.id,
+        underlyingSymbol,
+        currentIndiaDate,
+        currentIndiaDate,
+        account.id,
+        underlyingSymbol,
+        currentIndiaDate,
+        requestedMaxTradesPerDay,
       ),
       env.PAPER_TRADING_DB.prepare(
         `INSERT INTO paper_statement_entries (id, account_id, entry_type, amount, balance_before, balance_after, note, metadata_json, created_at)
          SELECT ?, ?, ?, ?, balance, balance + ?, ?, ?, ?
          FROM paper_accounts
-         WHERE id = ? AND (? >= 0 OR balance >= ?)`,
+         WHERE id = ?
+           AND EXISTS (SELECT 1 FROM paper_trades WHERE id = ?)`,
       ).bind(
         makeId('stmt'),
         account.id,
@@ -539,22 +825,63 @@ export async function handlePaperTradeEnter(
         }),
         createdAt,
         account.id,
-        netChangePaise,
-        -netChangePaise,
+        tradeId,
       ),
       env.PAPER_TRADING_DB.prepare(
         `UPDATE paper_accounts SET balance = balance + ?, updated_at = ?
-         WHERE id = ? AND (? >= 0 OR balance >= ?)`,
-      ).bind(
-        netChangePaise,
-        createdAt,
-        account.id,
-        netChangePaise,
-        -netChangePaise,
-      ),
+         WHERE id = ?
+           AND EXISTS (SELECT 1 FROM paper_trades WHERE id = ?)`,
+      ).bind(netChangePaise, createdAt, account.id, tradeId),
     ])
 
     if (results[0].meta.changes === 0) {
+      const replayedTrade = await findPaperTradeByClientOrderId(
+        env,
+        account.id,
+        clientOrderId,
+      )
+      if (replayedTrade) {
+        return paperTradeResponse(
+          env,
+          account,
+          replayedTrade,
+          'CLIENT_ORDER_REPLAY',
+        )
+      }
+      const concurrentOpenTrade = await findOpenPaperTradeForUnderlying(
+        env,
+        account.id,
+        underlyingSymbol,
+        currentIndiaDate,
+      )
+      if (concurrentOpenTrade) {
+        return paperTradeResponse(
+          env,
+          account,
+          concurrentOpenTrade,
+          'OPEN_POSITION_EXISTS',
+        )
+      }
+      const freshDailyTradeCount = await env.PAPER_TRADING_DB.prepare(
+        `SELECT COUNT(*) AS count FROM paper_trades
+         WHERE account_id = ?
+           AND json_extract(metadata_json, '$.underlyingSymbol') = ?
+           AND status != 'CANCELLED'
+           AND date(opened_at, '+330 minutes') = ?`,
+      )
+        .bind(account.id, underlyingSymbol, currentIndiaDate)
+        .first<{ count: number }>()
+      if (
+        Number(freshDailyTradeCount?.count ?? 0) >= requestedMaxTradesPerDay
+      ) {
+        return Response.json(
+          {
+            error: `Maximum paper trades per day (${requestedMaxTradesPerDay}) reached for ${underlyingSymbol}`,
+            code: 'MAX_TRADES_PER_DAY',
+          },
+          { status: 409 },
+        )
+      }
       return Response.json(
         { error: 'Insufficient paper credit' },
         { status: 400 },
@@ -575,8 +902,10 @@ export async function handlePaperTradeEnter(
       fetchAccountSummary(env, account),
     ])
     if (!freshAccount) throw new Error('Account vanished')
+    if (!trade) throw new Error('Paper trade was not persisted')
     return Response.json({
-      trade: trade ? toResponseTrade(trade) : null,
+      trade: toResponseTrade(trade),
+      reconciled: false,
       ...summary,
       account: toResponseAccount(freshAccount),
       recentEntries: summary.recentEntries.map(toResponseStatement),
@@ -598,6 +927,7 @@ export async function handlePaperTradeExit(
   let body: {
     tradeId?: string
     exitPrice?: number
+    isRollback?: boolean
     metadata?: unknown
   }
   try {
@@ -636,56 +966,50 @@ export async function handlePaperTradeExit(
         { status: 400 },
       )
 
+    const existingMetadata = paperTradeMetadata(trade)
+    const requestMetadata =
+      typeof body.metadata === 'object' && body.metadata !== null
+        ? (body.metadata as Record<string, unknown>)
+        : {}
+    const isRollback =
+      body.isRollback === true || requestMetadata.isRollback === true
     let tradeType = 'buying'
     let entryCharges = { totalCharges: 0, brokerage: 0, statutoryTaxes: 0 }
     let marginBlockedPaise = 0
-    if (trade.metadata_json) {
-      try {
-        const meta = JSON.parse(trade.metadata_json) as {
-          tradeType?: string
-          entryCharges?: {
-            totalCharges: number
-            brokerage?: number
-            statutoryTaxes?: number
-          }
-          marginBlocked?: number
-        }
-        if (meta?.tradeType === 'selling') tradeType = 'selling'
-        if (meta?.entryCharges)
-          entryCharges = meta.entryCharges as typeof entryCharges
-        if (typeof meta?.marginBlocked === 'number')
-          marginBlockedPaise = toPaise(meta.marginBlocked)
-      } catch {
-        /* ignore invalid metadata */
-      }
-    }
+    if (existingMetadata.tradeType === 'selling') tradeType = 'selling'
+    if (
+      typeof existingMetadata.entryCharges === 'object' &&
+      existingMetadata.entryCharges !== null
+    )
+      entryCharges = existingMetadata.entryCharges as typeof entryCharges
+    if (typeof existingMetadata.marginBlocked === 'number')
+      marginBlockedPaise = toPaise(existingMetadata.marginBlocked)
 
     const isSelling = tradeType === 'selling'
     const closedAt = nowIso()
-    const exitPricePaise = toPaise(exitPrice)
-    const exitValuePaise = Math.round(exitPricePaise * trade.quantity)
-    const exitCharges = calculateOptionCharges(exitValuePaise, !isSelling)
-
-    const totalTradeFeesPaise = Math.round(
-      entryCharges.totalCharges + exitCharges.totalCharges,
-    )
-
-    const grossPnlPaise = isSelling
-      ? trade.entry_value - exitValuePaise
-      : exitValuePaise - trade.entry_value
-    const realizedPnlPaise = grossPnlPaise - totalTradeFeesPaise
-
-    const netChangePaise = isSelling
-      ? -exitValuePaise - exitCharges.totalCharges + marginBlockedPaise
-      : exitValuePaise - exitCharges.totalCharges
+    const exitPricePaise = isRollback ? trade.entry_price : toPaise(exitPrice)
+    const settlement = calculatePaperExitSettlement({
+      entryValuePaise: trade.entry_value,
+      exitPricePaise,
+      quantity: trade.quantity,
+      isSelling,
+      entryChargesPaise: Math.round(entryCharges.totalCharges),
+      marginBlockedPaise,
+      isRollback,
+    })
+    const {
+      exitValuePaise,
+      exitCharges,
+      totalTradeFeesPaise,
+      grossPnlPaise,
+      realizedPnlPaise,
+      netChangePaise,
+    } = settlement
 
     const mergedMetadata = {
-      ...(trade.metadata_json
-        ? (JSON.parse(trade.metadata_json) as Record<string, unknown>)
-        : {}),
-      ...(typeof body.metadata === 'object' && body.metadata !== null
-        ? body.metadata
-        : {}),
+      ...existingMetadata,
+      ...requestMetadata,
+      isRollback,
       exitCharges: {
         totalCharges: toRupees(exitCharges.totalCharges),
         brokerage: toRupees(exitCharges.brokerage),
@@ -707,7 +1031,9 @@ export async function handlePaperTradeExit(
         'paper_exit',
         netChangePaise,
         netChangePaise,
-        `Paper EXIT ${trade.direction} (Fee: ₹${toRupees(exitCharges.totalCharges)})`,
+        isRollback
+          ? `Paper ROLLBACK ${trade.direction} (Fee: ₹0)`
+          : `Paper EXIT ${trade.direction} (Fee: ₹${toRupees(exitCharges.totalCharges)})`,
         JSON.stringify({
           tradeId: trade.id,
           instrumentKey: trade.instrument_key,
@@ -717,6 +1043,7 @@ export async function handlePaperTradeExit(
           grossPnl: toRupees(grossPnlPaise),
           totalTradeFees: toRupees(totalTradeFeesPaise),
           realizedPnl: toRupees(realizedPnlPaise),
+          isRollback,
           exitCharges: {
             totalCharges: toRupees(exitCharges.totalCharges),
             brokerage: toRupees(exitCharges.brokerage),
@@ -735,7 +1062,7 @@ export async function handlePaperTradeExit(
         `UPDATE paper_trades SET status = ?, exit_price = ?, exit_value = ?, realized_pnl = ?, closed_at = ?, metadata_json = ?
          WHERE id = ? AND status = ?`,
       ).bind(
-        'CLOSED',
+        isRollback ? 'CANCELLED' : 'CLOSED',
         exitPricePaise,
         exitValuePaise,
         realizedPnlPaise,

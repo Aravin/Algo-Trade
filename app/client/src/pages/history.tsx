@@ -14,6 +14,7 @@ import {
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 import { STORAGE_KEY_BOT_POSITION } from '@/lib/constants'
+import { getSensibullUrl } from '@/lib/utils'
 
 function fmtCurrency(value: number, signed = false) {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
@@ -48,7 +49,13 @@ export function HistoryPage() {
     }
   }, [])
 
-  const trades = data?.trades ?? []
+  const recentTrades = data?.trades ?? []
+  const openTrades = data?.openTrades ?? []
+  const openTradeIds = new Set(openTrades.map((trade) => trade.id))
+  const trades = [
+    ...openTrades,
+    ...recentTrades.filter((trade) => !openTradeIds.has(trade.id)),
+  ].sort((left, right) => right.opened_at.localeCompare(left.opened_at))
 
   return (
     <div className="flex flex-col gap-5 p-6 min-w-0">
@@ -224,6 +231,7 @@ export function HistoryPage() {
                   let displaySymbol = trade.instrument_key
                   let metaSubtext: string | null = null
                   let contractLotSize: number | null = null
+                  let metaTradingSymbol: string | undefined = undefined
                   try {
                     const meta = JSON.parse(trade.metadata_json ?? '{}') as {
                       tradingSymbol?: string
@@ -237,6 +245,9 @@ export function HistoryPage() {
                       Number(meta?.lotSize) > 0
                     ) {
                       contractLotSize = Number(meta?.lotSize)
+                    }
+                    if (meta?.tradingSymbol) {
+                      metaTradingSymbol = meta.tradingSymbol
                     }
                     if (meta?.tradingSymbol || meta?.strikePrice) {
                       const underlying = meta.underlyingSymbol ?? 'NIFTY'
@@ -255,7 +266,21 @@ export function HistoryPage() {
                   return (
                     <TableRow key={trade.id}>
                       <TableCell>
-                        <p className="font-medium text-sm">{displaySymbol}</p>
+                        <div className="font-medium text-sm">
+                          {getSensibullUrl(metaTradingSymbol) ? (
+                            <a
+                              href={getSensibullUrl(metaTradingSymbol)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
+                              title="Open in Sensibull"
+                            >
+                              {displaySymbol}
+                            </a>
+                          ) : (
+                            <p>{displaySymbol}</p>
+                          )}
+                        </div>
                         {metaSubtext && (
                           <p className="text-[11px] font-mono text-muted-foreground">
                             {metaSubtext}

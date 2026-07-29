@@ -270,6 +270,7 @@ export interface PaperAccountSummary {
   recentEntries: PaperStatementEntry[]
   openTradeCount: number
   trades?: PaperTrade[]
+  openTrades?: PaperTrade[]
 }
 
 // Broker Accounts

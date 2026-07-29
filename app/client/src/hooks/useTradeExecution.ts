@@ -311,6 +311,7 @@ export function useTradeExecution() {
         let firstInstrumentKey = ''
         let firstDirection: 'CE' | 'PE' = 'CE'
         let firstEntryPrice = 0
+        let firstEntryTime = new Date().toISOString()
 
         for (const leg of legsToPlace) {
           if (abortSignal?.aborted) {
@@ -334,6 +335,12 @@ export function useTradeExecution() {
             leg.direction === 'CE'
               ? strike.call_options.market_data.ltp
               : strike.put_options.market_data.ltp
+          let positionInstrumentKey = instrumentKey
+          let positionDirection = leg.direction
+          let positionEntryPrice = ltp
+          let positionQuantity = qty
+          let positionLotSize = lotSize
+          let positionTradeType = leg.tradeType
 
           if (!firstInstrumentKey) {
             firstInstrumentKey = instrumentKey
@@ -352,8 +359,24 @@ export function useTradeExecution() {
 
           let paperTradeId: string | undefined
           if (executionMode === 'paper') {
+            const clientOrderId =
+              globalThis.crypto?.randomUUID?.() ??
+              `${sym}-${Date.now()}-${Math.random().toString(36).slice(2)}`
             const [paperData, paperErr] = await safeFetch<{
-              trade?: { id: string }
+              trade?: {
+                id: string
+                status: string
+                instrument_key: string
+                direction: string
+                quantity: number
+                entry_price: number
+                opened_at: string
+                metadata_json: string | null
+              }
+              reconciled?: boolean
+              reconciliationReason?:
+                | 'CLIENT_ORDER_REPLAY'
+                | 'OPEN_POSITION_EXISTS'
             }>(API_PAPER_TRADES_ENTER, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -363,6 +386,8 @@ export function useTradeExecution() {
                 quantity: qty,
                 entryPrice: ltp,
                 lotSize,
+                clientOrderId,
+                maxTradesPerDay: config.maxTradesPerDay,
                 metadata: {
                   signal: symSig.signal,
                   confidence: symSig.confidence,
@@ -388,12 +413,65 @@ export function useTradeExecution() {
               success = false
               break
             }
-            paperTradeId = paperData.trade.id
-            notify(
-              `Paper Trade Executed [${sym}]`,
-              `Paper ${side} ${leg.direction} placed`,
-              'success',
-            )
+            const persistedTrade = paperData.trade
+            if (
+              persistedTrade.status !== 'OPEN' ||
+              (persistedTrade.direction !== 'CE' &&
+                persistedTrade.direction !== 'PE')
+            ) {
+              addLog(
+                mkLog(
+                  'error',
+                  'paper',
+                  `[${sym}] Paper entry returned a non-open or invalid trade`,
+                ),
+              )
+              success = false
+              break
+            }
+            paperTradeId = persistedTrade.id
+
+            if (paperData.reconciled) {
+              let persistedMetadata: {
+                lotSize?: number
+                tradeType?: 'buying' | 'selling'
+              } = {}
+              try {
+                persistedMetadata = persistedTrade.metadata_json
+                  ? (JSON.parse(
+                      persistedTrade.metadata_json,
+                    ) as typeof persistedMetadata)
+                  : {}
+              } catch {
+                // The persisted trade fields still contain enough data to supervise it.
+              }
+              positionInstrumentKey = persistedTrade.instrument_key
+              positionDirection = persistedTrade.direction
+              positionEntryPrice = persistedTrade.entry_price
+              positionQuantity = persistedTrade.quantity
+              positionLotSize =
+                persistedMetadata.lotSize ??
+                getLotSizeForSymbol(persistedTrade.instrument_key)
+              positionTradeType = persistedMetadata.tradeType ?? leg.tradeType
+              qty = positionQuantity
+              firstInstrumentKey = positionInstrumentKey
+              firstDirection = positionDirection
+              firstEntryPrice = positionEntryPrice
+              firstEntryTime = persistedTrade.opened_at
+              addLog(
+                mkLog(
+                  'warn',
+                  'paper',
+                  `[${sym}] Reattached persisted paper position (${paperData.reconciliationReason ?? 'existing trade'})`,
+                ),
+              )
+            } else {
+              notify(
+                `Paper Trade Executed [${sym}]`,
+                `Paper ${side} ${leg.direction} placed`,
+                'success',
+              )
+            }
           } else {
             const [orderData, orderErr] = await safeFetch<{
               data?: { order_id: string }
@@ -429,14 +507,14 @@ export function useTradeExecution() {
           }
 
           positionLegs.push({
-            instrumentKey,
-            direction: leg.direction,
-            entryPrice: ltp,
-            currentPrice: ltp,
+            instrumentKey: positionInstrumentKey,
+            direction: positionDirection,
+            entryPrice: positionEntryPrice,
+            currentPrice: positionEntryPrice,
             unrealizedPnl: 0,
-            quantity: qty,
-            lotSize,
-            tradeType: leg.tradeType,
+            quantity: positionQuantity,
+            lotSize: positionLotSize,
+            tradeType: positionTradeType,
             paperTradeId,
             status: 'OPEN',
           })
@@ -451,10 +529,10 @@ export function useTradeExecution() {
             unrealizedPnl: 0,
             quantity: qty,
             lotSize,
-            entryTime: new Date().toISOString(),
+            entryTime: firstEntryTime,
             tradeId: Date.now(),
             executionMode,
-            tradeType: resolvedTradeType,
+            tradeType: positionLegs[0]?.tradeType ?? resolvedTradeType,
             paperTradeId: positionLegs[0]?.paperTradeId,
             legs: positionLegs,
             underlyingSymbol: sym,
@@ -471,8 +549,10 @@ export function useTradeExecution() {
                   body: JSON.stringify({
                     tradeId: leg.paperTradeId,
                     exitPrice: leg.currentPrice ?? leg.entryPrice, // Fix: use current price
+                    isRollback: true,
                     metadata: {
                       reason: 'Rollback due to multi-leg entry failure',
+                      isRollback: true,
                     },
                   }),
                 })

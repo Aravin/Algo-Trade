@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getAccounts } from '@/lib/accounts'
 import { fetchPaperHistory } from '@/lib/paperTrading'
 import { getStrategyConfig } from '@/lib/strategyConfig'
-import { cn, isToday, normalizeLiveStatus } from '@/lib/utils'
+import { cn, isToday, normalizeLiveStatus, getSensibullUrl } from '@/lib/utils'
 import { getLotSizeForSymbol } from '@/utils/tradeUtils'
 import {
   STORAGE_KEY_LIVE_TRADES_PAGE_MODE,
@@ -91,6 +91,8 @@ interface TradeRow {
   pnlPct: number | null
   status: TradeRowStatus
   entryTime: string
+  tradingSymbol?: string
+  underlyingSymbol?: string
 }
 
 interface StatCard {
@@ -327,7 +329,8 @@ function buildPaperDataset(
   quotes?: Record<string, { last_price?: number; instrument_token?: string }>,
 ): Dataset {
   const trades = summary.trades ?? []
-  const openTrades = trades.filter((t) => t.status === 'OPEN')
+  const openTrades =
+    summary.openTrades ?? trades.filter((t) => t.status === 'OPEN')
   const closedTrades = trades.filter(
     (t) => t.status === 'CLOSED' && isToday(t.closed_at),
   )
@@ -440,6 +443,8 @@ function buildPaperDataset(
       pnlPct,
       status: 'ACTIVE',
       entryTime: timeLabel(t.opened_at),
+      tradingSymbol: tradingSymbol,
+      underlyingSymbol: underlying,
     }
   })
 
@@ -529,6 +534,8 @@ function buildPaperDataset(
       pnlPct,
       status,
       entryTime: timeLabel(t.closed_at ?? t.opened_at),
+      tradingSymbol,
+      underlyingSymbol: underlying,
     }
   })
 
@@ -643,6 +650,7 @@ function buildLiveDataset(funds: UpstoxFundsV3, orders: LiveOrder[]): Dataset {
         pnlPct: null,
         status: 'ACTIVE',
         entryTime: timeLabel(o.exchange_timestamp ?? o.order_timestamp),
+        tradingSymbol: o.trading_symbol ?? o.tradingsymbol ?? symbol,
       } satisfies TradeRow
     })
 
@@ -676,6 +684,7 @@ function buildLiveDataset(funds: UpstoxFundsV3, orders: LiveOrder[]): Dataset {
         pnlPct: null,
         status,
         entryTime: timeLabel(o.exchange_timestamp ?? o.order_timestamp),
+        tradingSymbol: o.trading_symbol ?? o.tradingsymbol,
       } satisfies TradeRow
     })
 
@@ -834,9 +843,21 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
         {rows.map((row) => (
           <TableRow key={row.id}>
             <TableCell>
-              <p className="font-medium text-sm">
-                {row.displaySymbol ?? row.symbol}
-              </p>
+              <div className="font-medium text-sm">
+                {getSensibullUrl(row.tradingSymbol) ? (
+                  <a
+                    href={getSensibullUrl(row.tradingSymbol)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
+                    title="Open in Sensibull"
+                  >
+                    {row.displaySymbol ?? row.symbol}
+                  </a>
+                ) : (
+                  <p>{row.displaySymbol ?? row.symbol}</p>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground font-mono">
                 {row.metaInfo ?? `${row.side} · ${row.entryTime}`}
                 {row.displaySymbol && row.displaySymbol !== row.symbol && (
@@ -1004,9 +1025,9 @@ export function LiveTradesPage() {
     try {
       if (m === 'paper') {
         const summary = await fetchPaperHistory()
-        const openTrades = (summary.trades ?? []).filter(
-          (t) => t.status === 'OPEN',
-        )
+        const openTrades =
+          summary.openTrades ??
+          (summary.trades ?? []).filter((t) => t.status === 'OPEN')
         let quotes: Record<string, { last_price?: number }> | undefined
         if (openTrades.length > 0 && token) {
           const keys = Array.from(

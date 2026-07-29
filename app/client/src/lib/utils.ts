@@ -58,6 +58,11 @@ export interface IndexExpiryInfo {
   relativeText: string // "Today (Expiry Day)", "Tomorrow", "in 2 days"
 }
 
+export function getSensibullUrl(tradingSymbol?: string): string | undefined {
+  if (!tradingSymbol) return undefined
+  return `https://web.sensibull.com/chart?tradingSymbol=${encodeURIComponent(tradingSymbol)}`
+}
+
 /**
  * Calculates a display-only fallback option expiry in IST.
  *

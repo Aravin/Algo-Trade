@@ -169,7 +169,7 @@ describe('indicators', () => {
           },
         },
       ]
-      const selected = getOtmStrike(optionChain, 'CE', 2)
+      const selected = getOtmStrike([...optionChain].reverse(), 'CE', 2)
       expect(selected?.strike_price).toBe(24300)
     })
   })
