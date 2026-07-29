@@ -281,8 +281,8 @@ export function HistoryPage() {
                             <a
                               href={sensibullUrl}
                               target="_blank"
-                              rel="noreferrer"
-                              className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
+                              rel="noopener noreferrer"
+                              className="hover:underline text-primary cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                               title="Open in Sensibull"
                             >
                               {displaySymbol}

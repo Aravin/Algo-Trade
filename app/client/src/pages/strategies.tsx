@@ -54,6 +54,7 @@ export function StrategiesPage({ bot, token }: StrategiesPageProps) {
     <div className="p-4 space-y-4 max-w-[1600px] mx-auto">
       {/* Sticky Execution Control Header */}
       <StrategyHeaderBar
+        underlyingMode={config.underlyingMode}
         state={bot.state}
         position={bot.position}
         tradesCount={bot.tradesCount}
@@ -170,7 +171,10 @@ export function StrategiesPage({ bot, token }: StrategiesPageProps) {
           {/* Institutional + Breadth */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InstitutionalPanel vrdData={bot.vrdData} />
-            <BreadthPanel vrdData={bot.vrdData} />
+            <BreadthPanel
+              vrdData={bot.vrdData}
+              underlyingMode={config.underlyingMode}
+            />
           </div>
 
           {/* Global Markets & News */}

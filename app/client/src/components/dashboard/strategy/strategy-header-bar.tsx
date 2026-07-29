@@ -46,6 +46,7 @@ export function StrategyHeaderBar({
   activeTab,
   onTabChange,
   logErrorCount,
+  underlyingMode = 'NIFTY',
 }: {
   state: BotState
   position: ActivePosition | null
@@ -60,6 +61,7 @@ export function StrategyHeaderBar({
   activeTab: string
   onTabChange: (tab: string) => void
   logErrorCount?: number
+  underlyingMode?: string
 }) {
   const [secsUntilTick, setSecsUntilTick] = useState(pollingIntervalSec)
 
@@ -225,11 +227,11 @@ export function StrategyHeaderBar({
         {/* Right: Primary Controls & Action Shortcuts */}
         <div className="flex items-center gap-2 ml-auto">
           <a
-            href={getSensibullOptionChainUrl('NIFTY')}
+            href={getSensibullOptionChainUrl(underlyingMode)}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors h-9"
-            title="Open NIFTY Option Chain in Sensibull"
+            title={`Open ${underlyingMode} Option Chain in Sensibull`}
           >
             <ExternalLink size={13} />
             Option Chain

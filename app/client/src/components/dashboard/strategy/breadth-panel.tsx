@@ -23,7 +23,13 @@ function PcrZoneBadge({ zone }: { zone: string | null | undefined }) {
   )
 }
 
-export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
+export function BreadthPanel({
+  vrdData,
+  underlyingMode = 'NIFTY',
+}: {
+  vrdData: VrdData | null
+  underlyingMode?: string
+}) {
   if (!vrdData) {
     return (
       <Card>
@@ -69,11 +75,11 @@ export function BreadthPanel({ vrdData }: { vrdData: VrdData | null }) {
           <InfoTooltip content="Measures stock participation in Nifty 50 (Advances/Declines), option market sentiment (PCR), and option premium volatility (Straddle IV)." />
         </CardTitle>
         <a
-          href={getSensibullOptionChainUrl('NIFTY')}
+          href={getSensibullOptionChainUrl(underlyingMode)}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-          title="Open NIFTY Option Chain in Sensibull"
+          title={`Open ${underlyingMode} Option Chain in Sensibull`}
         >
           <ExternalLink size={12} />
           Option Chain

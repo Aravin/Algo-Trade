@@ -876,8 +876,8 @@ function TradesTable({
                     <a
                       href={sensibullUrl}
                       target="_blank"
-                      rel="noreferrer"
-                      className="hover:underline text-primary cursor-pointer text-left focus:outline-none"
+                      rel="noopener noreferrer"
+                      className="hover:underline text-primary cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       title="Open in Sensibull"
                     >
                       {row.displaySymbol ?? row.symbol}
@@ -1054,11 +1054,16 @@ export function LiveTradesPage() {
   const [activeConfigMode, setActiveConfigMode] = useState<TradeMode>(
     () => getStrategyConfig().executionMode,
   )
+  const [underlying, setUnderlying] = useState<string>(
+    () => getStrategyConfig().underlyingMode,
+  )
 
   useEffect(() => {
     const handleStorage = () => {
+      const config = getStrategyConfig()
       setBotState(localStorage.getItem(STORAGE_KEY_BOT_STATE))
-      setActiveConfigMode(getStrategyConfig().executionMode)
+      setActiveConfigMode(config.executionMode)
+      setUnderlying(config.underlyingMode)
     }
     window.addEventListener('storage', handleStorage)
     const interval = setInterval(handleStorage, 2000)
@@ -1163,11 +1168,11 @@ export function LiveTradesPage() {
             </div>
             <div className="flex items-center gap-2">
               <a
-                href={getSensibullOptionChainUrl('NIFTY')}
+                href={getSensibullOptionChainUrl(underlying)}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors"
-                title="Open NIFTY Option Chain in Sensibull"
+                title={`Open ${underlying} Option Chain in Sensibull`}
               >
                 <ExternalLink size={13} />
                 Option Chain

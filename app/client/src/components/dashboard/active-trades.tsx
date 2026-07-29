@@ -191,8 +191,8 @@ function TradesTable({ trades }: { trades: Trade[] }) {
                     <a
                       href={sensibullUrl}
                       target="_blank"
-                      rel="noreferrer"
-                      className="font-medium text-sm text-primary hover:underline cursor-pointer focus:outline-none"
+                      rel="noopener noreferrer"
+                      className="font-medium text-sm text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       title="Open in Sensibull"
                     >
                       {trade.symbol}
