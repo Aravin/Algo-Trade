@@ -483,6 +483,21 @@ export async function handlePaperReset(
     const account = await ensurePaperAccount(env, userId)
     const updatedAt = nowIso()
 
+    const openTradeCountRow = await env.PAPER_TRADING_DB.prepare(
+      'SELECT COUNT(*) as count FROM paper_trades WHERE account_id = ? AND status = ?',
+    )
+      .bind(account.id, 'OPEN')
+      .first<{ count: number }>()
+    const openTradeCount = Number(openTradeCountRow?.count ?? 0)
+    if (openTradeCount > 0) {
+      return Response.json(
+        {
+          error: `Cannot reset account with ${openTradeCount} open trade(s). Close all trades first.`,
+        },
+        { status: 409 },
+      )
+    }
+
     await env.PAPER_TRADING_DB.batch([
       env.PAPER_TRADING_DB.prepare(
         'DELETE FROM paper_statement_entries WHERE account_id = ?',
