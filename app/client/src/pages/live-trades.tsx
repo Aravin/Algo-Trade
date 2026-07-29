@@ -40,6 +40,7 @@ import {
   API_UPSTOX_FUNDS,
   API_ORDER_LIST,
   API_MARKET_QUOTES,
+  API_PAPER_TRADES_EXIT,
 } from '@/lib/constants'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ interface TradeRow {
   entryTime: string
   tradingSymbol?: string
   underlyingSymbol?: string
+  isPaper?: boolean
 }
 
 interface StatCard {
@@ -445,6 +447,7 @@ function buildPaperDataset(
       entryTime: timeLabel(t.opened_at),
       tradingSymbol: tradingSymbol,
       underlyingSymbol: underlying,
+      isPaper: true,
     }
   })
 
@@ -824,7 +827,13 @@ function StatCards({ stats }: { stats: StatCard[] }) {
   )
 }
 
-function TradesTable({ rows }: { rows: TradeRow[] }) {
+function TradesTable({
+  rows,
+  onExit,
+}: {
+  rows: TradeRow[]
+  onExit?: (id: string, ltp: number | null) => void | Promise<void>
+}) {
   if (rows.length === 0) return null
   return (
     <Table>
@@ -922,9 +931,23 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
               )}
             </TableCell>
             <TableCell className="text-right">
-              <Badge variant={statusVariant[row.status]}>
-                {statusLabel[row.status]}
-              </Badge>
+              <div className="flex flex-col items-end gap-2">
+                <Badge variant={statusVariant[row.status]}>
+                  {statusLabel[row.status]}
+                </Badge>
+                {row.status === 'ACTIVE' && row.isPaper && onExit && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] px-2 text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      void onExit(row.id, row.ltp)
+                    }}
+                  >
+                    Force Exit
+                  </Button>
+                )}
+              </div>
             </TableCell>
           </TableRow>
         ))}
@@ -933,7 +956,13 @@ function TradesTable({ rows }: { rows: TradeRow[] }) {
   )
 }
 
-function TradesPanel({ dataset }: { dataset: Dataset }) {
+function TradesPanel({
+  dataset,
+  onExit,
+}: {
+  dataset: Dataset
+  onExit?: (id: string, ltp: number | null) => void | Promise<void>
+}) {
   const label = dataset.mode === 'paper' ? 'paper trades' : 'live orders'
   return (
     <Card>
@@ -967,7 +996,7 @@ function TradesPanel({ dataset }: { dataset: Dataset }) {
           </div>
           <TabsContent value="open" className="mt-0">
             {dataset.openRows.length > 0 ? (
-              <TradesTable rows={dataset.openRows} />
+              <TradesTable rows={dataset.openRows} onExit={onExit} />
             ) : (
               <p className="px-5 pb-5 text-sm text-muted-foreground">
                 No open {label} right now.
@@ -1077,169 +1106,205 @@ export function LiveTradesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
+  const handleForceExit = async (tradeId: string, ltp: number | null) => {
+    if (!confirm('Force exit this paper trade?')) return
+    try {
+      const res = await fetch(API_PAPER_TRADES_EXIT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tradeId,
+          exitPrice: ltp,
+          metadata: { reason: 'Manual Force Exit' },
+        }),
+      })
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(err.error ?? `HTTP ${res.status}`)
+      }
+      void load(mode) // Reload trades
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to exit trade')
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-5 p-6 min-w-0">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">
-            Live Trades
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Today's open positions and executed orders
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Mode toggle */}
-          <div className="flex rounded-md border border-border overflow-hidden text-sm">
-            <button
-              className={cn(
-                'px-3 py-1.5 transition-colors',
-                mode === 'paper'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50',
-              )}
-              onClick={() => switchMode('paper')}
-            >
-              Paper
-            </button>
-            <button
-              className={cn(
-                'px-3 py-1.5 transition-colors',
-                mode === 'live'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50',
-              )}
-              onClick={() => switchMode('live')}
-            >
-              Live
-            </button>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void load(mode)}
-            disabled={loading}
-          >
-            <RefreshCw size={14} className={cn(loading && 'animate-spin')} />
-            <span className="ml-1.5">Refresh</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Bot Status Banner */}
-      {botState === 'RUNNING' || botState === 'ORDERED' ? (
-        <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 flex items-center justify-between gap-3 text-sm text-foreground max-w-full">
-          <div className="flex items-center gap-2">
-            <Zap size={16} className="text-primary animate-pulse" />
-            <span>
-              Strategy engine is actively running in{' '}
-              <span className="font-semibold uppercase">
-                {activeConfigMode}
-              </span>{' '}
-              mode.
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={() => (window.location.href = '/?page=strategies')}
-          >
-            Manage Strategy
-          </Button>
-        </div>
-      ) : (
-        <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 flex items-center justify-between gap-3 text-sm text-foreground max-w-full">
-          <div className="flex items-center gap-2">
-            <Info size={16} className="text-warning" />
-            <span>
-              Automated trading is currently stopped. No live or paper trades
-              are being executed.
-            </span>
-          </div>
-          <Button
-            variant="default"
-            size="sm"
-            className="h-8 bg-warning hover:bg-warning/90 text-warning-foreground"
-            onClick={() => (window.location.href = '/?page=strategies')}
-          >
-            <Power size={14} className="mr-1.5" />
-            Start Strategies
-          </Button>
-        </div>
-      )}
-
-      {/* No token warning (live only) */}
-      {mode === 'live' && !token && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive max-w-2xl">
-          No active broker token. Connect an Upstox account from the Brokers
-          page first.
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive max-w-2xl">
-          {error}
-        </div>
-      )}
-
-      {/* Loading skeleton */}
-      {loading && !dataset && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader>
-                <div className="h-4 w-28 rounded bg-muted" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-7 w-24 rounded bg-muted mb-2" />
-                <div className="h-3 w-36 rounded bg-muted" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Data */}
-      {dataset && (
-        <>
-          <StatCards stats={dataset.stats} />
-
-          {/* Day P&L summary bar */}
-          <div
-            className={cn(
-              'rounded-md border px-4 py-3 flex items-center justify-between gap-4 text-sm',
-              dataset.pnlTotal >= 0
-                ? 'border-success/30 bg-success/5'
-                : 'border-destructive/30 bg-destructive/5',
-            )}
-          >
+    <div className="flex flex-col flex-1 h-full max-h-screen overflow-hidden bg-background">
+      <header className="flex-none border-b bg-muted/40 p-4 pb-2">
+        <div className="flex flex-col gap-4 max-w-6xl mx-auto">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                Live Trades
+              </h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Today's open positions and executed orders
+              </p>
+            </div>
             <div className="flex items-center gap-2">
-              {dataset.pnlTotal >= 0 ? (
-                <ArrowUpRight size={16} className="text-success" />
-              ) : (
-                <ArrowDownRight size={16} className="text-destructive" />
-              )}
-              <span
+              {/* Mode toggle */}
+              <div className="flex rounded-md border border-border overflow-hidden text-sm">
+                <button
+                  className={cn(
+                    'px-3 py-1.5 transition-colors',
+                    mode === 'paper'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50',
+                  )}
+                  onClick={() => switchMode('paper')}
+                >
+                  Paper
+                </button>
+                <button
+                  className={cn(
+                    'px-3 py-1.5 transition-colors',
+                    mode === 'live'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50',
+                  )}
+                  onClick={() => switchMode('live')}
+                >
+                  Live
+                </button>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void load(mode)}
+                disabled={loading}
+              >
+                <RefreshCw
+                  size={14}
+                  className={cn(loading && 'animate-spin')}
+                />
+                <span className="ml-1.5">Refresh</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-6xl mx-auto flex flex-col gap-6">
+          {/* Bot Status Banner */}
+          {botState === 'RUNNING' || botState === 'ORDERED' ? (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 flex items-center justify-between gap-3 text-sm text-foreground max-w-full">
+              <div className="flex items-center gap-2">
+                <Zap size={16} className="text-primary animate-pulse" />
+                <span>
+                  Strategy engine is actively running in{' '}
+                  <span className="font-semibold uppercase">
+                    {activeConfigMode}
+                  </span>{' '}
+                  mode.
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => (window.location.href = '/?page=strategies')}
+              >
+                Manage Strategy
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 flex items-center justify-between gap-3 text-sm text-foreground max-w-full">
+              <div className="flex items-center gap-2">
+                <Info size={16} className="text-warning" />
+                <span>
+                  Automated trading is currently stopped. No live or paper
+                  trades are being executed.
+                </span>
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 bg-warning hover:bg-warning/90 text-warning-foreground"
+                onClick={() => (window.location.href = '/?page=strategies')}
+              >
+                <Power size={14} className="mr-1.5" />
+                Start Strategies
+              </Button>
+            </div>
+          )}
+
+          {/* No token warning (live only) */}
+          {mode === 'live' && !token && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive max-w-2xl">
+              No active broker token. Connect an Upstox account from the Brokers
+              page first.
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive max-w-2xl">
+              {error}
+            </div>
+          )}
+
+          {/* Loading skeleton */}
+          {loading && !dataset && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Card key={i} className="animate-pulse">
+                  <CardHeader>
+                    <div className="h-4 w-28 rounded bg-muted" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-7 w-24 rounded bg-muted mb-2" />
+                    <div className="h-3 w-36 rounded bg-muted" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Data */}
+          {dataset && (
+            <>
+              <StatCards stats={dataset.stats} />
+
+              {/* Day P&L summary bar */}
+              <div
                 className={cn(
-                  'font-semibold',
-                  dataset.pnlTotal >= 0 ? 'text-success' : 'text-destructive',
+                  'rounded-md border px-4 py-3 flex items-center justify-between gap-4 text-sm',
+                  dataset.pnlTotal >= 0
+                    ? 'border-success/30 bg-success/5'
+                    : 'border-destructive/30 bg-destructive/5',
                 )}
               >
-                {fmtCurrency(dataset.pnlTotal, true)}
-              </span>
-              <span className="text-muted-foreground">realized today</span>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {dataset.sourceNote}
-            </span>
-          </div>
+                <div className="flex items-center gap-2">
+                  {dataset.pnlTotal >= 0 ? (
+                    <ArrowUpRight size={16} className="text-success" />
+                  ) : (
+                    <ArrowDownRight size={16} className="text-destructive" />
+                  )}
+                  <span
+                    className={cn(
+                      'font-semibold',
+                      dataset.pnlTotal >= 0
+                        ? 'text-success'
+                        : 'text-destructive',
+                    )}
+                  >
+                    {fmtCurrency(dataset.pnlTotal, true)}
+                  </span>
+                  <span className="text-muted-foreground">realized today</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {dataset.sourceNote}
+                </span>
+              </div>
 
-          <TradesPanel dataset={dataset} />
-        </>
-      )}
+              <div className="flex flex-col gap-6 lg:gap-8 pb-12">
+                <TradesPanel dataset={dataset} onExit={handleForceExit} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
