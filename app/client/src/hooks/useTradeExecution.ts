@@ -295,7 +295,7 @@ export function useTradeExecution() {
                 mkLog(
                   'warn',
                   'paper',
-                  `Skipping paper entry for ${sym}: balance ₹${paperBalance.toFixed(2)} cannot afford 1 lot`,
+                  `Skipping paper entry for ${sym}: balance ₹${paperBalance.toFixed(2)} cannot afford 1 lot (needs ₹${lotReq.toFixed(2)})`,
                 ),
               )
               continue

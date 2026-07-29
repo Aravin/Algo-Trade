@@ -689,6 +689,9 @@ export async function handleVix(request: Request): Promise<Response> {
       { status: 502 },
     )
   }
+  if (!upstream.ok) {
+    return Response.json(raw, { status: upstream.status })
+  }
   const entry = Object.values(
     (raw as { data?: Record<string, { last_price?: number }> })?.data ?? {},
   )[0]
@@ -779,6 +782,9 @@ export async function handleBreadth(request: Request): Promise<Response> {
       { error: 'Invalid response from Upstox API' },
       { status: 502 },
     )
+  }
+  if (!upstream.ok) {
+    return Response.json(raw, { status: upstream.status })
   }
   const data = (
     raw as {
