@@ -491,7 +491,15 @@ function BotResetSection() {
       await resetPaperAccount()
     } catch (err) {
       console.error('Failed to reset paper trading database:', err)
+      alert(
+        err instanceof Error ? err.message : 'Failed to reset paper account',
+      )
+      setLoading(false)
+      return
     }
+
+    // Force the bot to OFF immediately so background hooks stop writing to logs
+    localStorage.setItem(STORAGE_KEY_BOT_STATE, 'OFF')
 
     // Clear localStorage keys
     localStorage.removeItem(STORAGE_KEY_BOT_STATE)
@@ -507,9 +515,8 @@ function BotResetSection() {
     localStorage.removeItem(STORAGE_KEY_BOT_EXIT_TIMES)
     localStorage.removeItem(STORAGE_KEY_TICK_LOG)
 
-    setTimeout(() => {
-      window.location.reload()
-    }, 500)
+    // Reload immediately before any queued microtasks/websockets can write new logs
+    window.location.reload()
   }
 
   return (
