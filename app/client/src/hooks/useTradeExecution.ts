@@ -44,6 +44,12 @@ export interface ExecutionContext {
   primaryVrdData: VrdData | null
   indicators: IndicatorsResult | null
   hardStop: { blocked: boolean; blockedDirection?: string; reasons: string[] }
+  symbolHardStops?: Partial<
+    Record<
+      UnderlyingSymbol,
+      { blocked: boolean; blockedDirection?: string; reasons: string[] }
+    >
+  >
   afterCutoff: boolean
   allowEntries: boolean
   curPositions: Record<UnderlyingSymbol, ActivePosition | null>
@@ -176,18 +182,21 @@ export function useTradeExecution() {
           continue
         }
 
+        // Use per-symbol hard stop if available, fall back to shared primary hard stop
+        const symHardStop = ctx.symbolHardStops?.[sym] ?? hardStop
         if (
-          hardStop.blocked &&
-          (hardStop.blockedDirection === 'BOTH' ||
-            (hardStop.blockedDirection === 'CE' &&
+          symHardStop.blocked &&
+          (symHardStop.blockedDirection === 'BOTH' ||
+            (symHardStop.blockedDirection === 'CE' &&
               symSig.signal === 'BUY_CE') ||
-            (hardStop.blockedDirection === 'PE' && symSig.signal === 'BUY_PE'))
+            (symHardStop.blockedDirection === 'PE' &&
+              symSig.signal === 'BUY_PE'))
         ) {
           addLog(
             mkLog(
               'warn',
               'bot',
-              `[${sym}] Entry ${symSig.signal} blocked by hard stop: ${hardStop.reasons.join(', ')}`,
+              `[${sym}] Entry ${symSig.signal} blocked by hard stop: ${symHardStop.reasons.join(', ')}`,
             ),
           )
           continue
@@ -698,9 +707,11 @@ export function useTradeExecution() {
           legs: updatedLegs,
         }
 
+        // Use per-symbol hard stop if available, fall back to shared primary hard stop
+        const symHardStop = ctx.symbolHardStops?.[sym] ?? hardStop
         const forcedExit =
           afterCutoff ||
-          (hardStop.blocked && hardStop.blockedDirection === 'BOTH')
+          (symHardStop.blocked && symHardStop.blockedDirection === 'BOTH')
         const exitIndicators = symbolIndicators[sym] ?? indicators
         let signalExit = false
         let signalReason = ''
@@ -719,7 +730,7 @@ export function useTradeExecution() {
         const exit = signalExit || forcedExit
         const reason = afterCutoff
           ? `EOD forced exit`
-          : hardStop.blocked && hardStop.blockedDirection === 'BOTH'
+          : symHardStop.blocked && symHardStop.blockedDirection === 'BOTH'
             ? `Hard Stop triggered`
             : signalReason
 

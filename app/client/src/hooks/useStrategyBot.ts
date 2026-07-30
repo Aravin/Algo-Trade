@@ -227,6 +227,7 @@ export function useStrategyBot(token: string | null) {
             symbolVrds: cur.vrdData
               ? { [primaryMarket.underlyingSymbol]: cur.vrdData }
               : {},
+            symbolHardStops: {},
             primaryMarket,
             primaryVrdData: cur.vrdData,
             indicators: cur.indicators,
@@ -314,6 +315,16 @@ export function useStrategyBot(token: string | null) {
         Record<UnderlyingSymbol, IndicatorsResult | null>
       > = {}
       const symbolVrds: Partial<Record<UnderlyingSymbol, VrdData>> = {}
+      const symbolHardStops: Partial<
+        Record<
+          UnderlyingSymbol,
+          {
+            blocked: boolean
+            blockedDirection: 'CE' | 'PE' | 'BOTH' | 'NONE'
+            reasons: string[]
+          }
+        >
+      > = {}
 
       await Promise.all(
         targetSymbols.map(async (sym) => {
@@ -350,6 +361,7 @@ export function useStrategyBot(token: string | null) {
           symbolSignals[sym] = symSignal
           symbolIndicators[sym] = symIndicators
           symbolVrds[sym] = symVrdData
+          symbolHardStops[sym] = runHardStopChecks(symVrdData)
 
           log(
             'info',
@@ -370,9 +382,13 @@ export function useStrategyBot(token: string | null) {
         )
       }
 
-      const hardStop = primaryVrdData
-        ? runHardStopChecks(primaryVrdData)
-        : { blocked: false, blockedDirection: 'NONE' as const, reasons: [] }
+      // Primary hard stop comes from the primary market symbol's own VRD;
+      // each symbol's individual hard stop is tracked in symbolHardStops.
+      const hardStop =
+        symbolHardStops[primaryMarket.underlyingSymbol] ??
+        (primaryVrdData
+          ? runHardStopChecks(primaryVrdData)
+          : { blocked: false, blockedDirection: 'NONE' as const, reasons: [] })
 
       const indicators =
         symbolIndicators[primaryMarket.underlyingSymbol] ??
@@ -461,6 +477,7 @@ export function useStrategyBot(token: string | null) {
         symbolSignals,
         symbolIndicators,
         symbolVrds,
+        symbolHardStops,
         primaryMarket,
         primaryVrdData,
         indicators,
