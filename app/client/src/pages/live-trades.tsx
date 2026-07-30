@@ -865,7 +865,7 @@ function TradesTable({
       <TableBody>
         {rows.map((row) => {
           const sensibullUrl = getSensibullUrl(
-            row.tradingSymbol,
+            row.displaySymbol ?? row.tradingSymbol,
             row.underlyingSymbol,
           )
           return (

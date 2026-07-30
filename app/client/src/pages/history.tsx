@@ -269,7 +269,7 @@ export function HistoryPage() {
                   }
 
                   const sensibullUrl = getSensibullUrl(
-                    metaTradingSymbol,
+                    displaySymbol ?? metaTradingSymbol,
                     metaUnderlyingSymbol,
                   )
 
