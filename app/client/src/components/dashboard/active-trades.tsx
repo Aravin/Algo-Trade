@@ -180,9 +180,7 @@ function TradesTable({ trades }: { trades: Trade[] }) {
       </TableHeader>
       <TableBody>
         {trades.map((trade) => {
-          const sensibullUrl = getSensibullUrl(
-            trade.displaySymbol ?? trade.symbol,
-          )
+          const sensibullUrl = getSensibullUrl(trade.symbol)
           return (
             <TableRow key={trade.id}>
               <TableCell>
@@ -195,10 +193,12 @@ function TradesTable({ trades }: { trades: Trade[] }) {
                       className="font-medium text-sm text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       title="Open in Sensibull"
                     >
-                      {trade.symbol}
+                      {trade.displaySymbol ?? trade.symbol}
                     </a>
                   ) : (
-                    <p className="font-medium text-sm">{trade.symbol}</p>
+                    <p className="font-medium text-sm">
+                      {trade.displaySymbol ?? trade.symbol}
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground">
                     {trade.side} · {trade.entryTime}

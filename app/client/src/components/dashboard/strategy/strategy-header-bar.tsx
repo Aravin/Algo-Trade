@@ -1,6 +1,6 @@
 import type { ExecutionMode, ActivePosition } from '@/lib/types'
 import type { BotState } from '@/hooks/useStrategyBot'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   AlertTriangle,
   Play,
@@ -11,12 +11,13 @@ import {
   Terminal,
   Settings,
   ExternalLink,
+  ChevronDown,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { InfoTooltip } from '@/components/ui/tooltip'
 import { getUpcomingIndexExpiry, getSensibullOptionChainUrl } from '@/lib/utils'
-import { getLotSizeForSymbol } from '@/utils/tradeUtils'
+import { getLotSizeForSymbol, calculatePositionPnL } from '@/utils/tradeUtils'
 
 const STATE_DOT: Record<BotState, string> = {
   IDLE: 'bg-muted-foreground',
@@ -76,36 +77,9 @@ export function StrategyHeaderBar({
     return () => clearInterval(id)
   }, [state, pollingIntervalSec, lastUpdated])
 
-  const positionSummary = position
-    ? (() => {
-        let totalPnl = 0
-        let totalEntryValue = 0
-        if (position.legs && position.legs.length > 0) {
-          for (const leg of position.legs) {
-            const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
-            const legPnl =
-              leg.tradeType === 'selling'
-                ? (leg.entryPrice - legCurrentPrice) * leg.quantity
-                : (legCurrentPrice - leg.entryPrice) * leg.quantity
-            totalPnl += legPnl
-            totalEntryValue += leg.entryPrice * leg.quantity
-          }
-        } else {
-          const pos = position as ActivePosition & {
-            currentPrice?: number
-            tradeType?: 'buying' | 'selling' | 'both'
-          }
-          const currentPrice = pos.currentPrice ?? pos.entryPrice
-          const isSelling = pos.tradeType === 'selling'
-          totalPnl = isSelling
-            ? (pos.entryPrice - currentPrice) * pos.quantity
-            : (currentPrice - pos.entryPrice) * pos.quantity
-          totalEntryValue = pos.entryPrice * pos.quantity
-        }
-        const pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
-        return { totalPnl, pct }
-      })()
-    : null
+  const positionSummary = useMemo(() => {
+    return position ? calculatePositionPnL(position) : null
+  }, [position])
 
   return (
     <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border pb-3 pt-2 -mx-4 px-4 shadow-sm mb-4">
@@ -115,7 +89,8 @@ export function StrategyHeaderBar({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-semibold tracking-tight">
-                Nifty Strategy V5
+                {underlyingMode === 'NIFTY' ? 'Nifty 50' : underlyingMode}{' '}
+                Strategy V5
               </h1>
               <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-muted border border-border">
                 <span
@@ -226,16 +201,7 @@ export function StrategyHeaderBar({
 
         {/* Right: Primary Controls & Action Shortcuts */}
         <div className="flex items-center gap-2 ml-auto">
-          <a
-            href={getSensibullOptionChainUrl(underlyingMode)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors h-9"
-            title={`Open ${underlyingMode} Option Chain in Sensibull`}
-          >
-            <ExternalLink size={13} />
-            Option Chain
-          </a>
+          <OptionChainDropdown underlyingMode={underlyingMode} />
           {/* Start/Stop Button */}
           {state === 'IDLE' || state === 'STOPPED' ? (
             <Button
@@ -306,6 +272,54 @@ export function StrategyHeaderBar({
             Position supervision is paused. EOD and hard-stop exits will not run
             until the bot is resumed.
           </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OptionChainDropdown({
+  underlyingMode = 'NIFTY',
+}: {
+  underlyingMode?: string
+}) {
+  const [open, setOpen] = useState(false)
+
+  // Make sure the current underlying is always available and highlighted
+  const defaultMode = underlyingMode === 'NIFTY' ? 'NIFTY 50' : underlyingMode
+  const options = useMemo(
+    () =>
+      Array.from(new Set([defaultMode, 'NIFTY 50', 'BANKNIFTY', 'FINNIFTY'])),
+    [defaultMode],
+  )
+
+  return (
+    <div className="relative" onMouseLeave={() => setOpen(false)}>
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-md transition-colors h-9 cursor-pointer"
+      >
+        <ExternalLink size={13} />
+        Option Chain
+        <ChevronDown size={13} className="opacity-70" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-36 bg-popover text-popover-foreground rounded-md border border-border shadow-md overflow-hidden z-50 animate-in fade-in zoom-in-95">
+          {options.map((opt) => (
+            <a
+              key={opt}
+              href={getSensibullOptionChainUrl(opt)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground transition-colors"
+              onClick={() => setOpen(false)}
+            >
+              {opt} Option Chain
+            </a>
+          ))}
         </div>
       )}
     </div>

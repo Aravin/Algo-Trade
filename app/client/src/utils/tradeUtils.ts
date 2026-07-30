@@ -1,3 +1,35 @@
+import type { ActivePosition } from '../lib/types'
+
+export function calculatePositionPnL(position: ActivePosition): {
+  totalPnl: number
+  pct: number
+} {
+  let totalPnl = 0
+  let totalEntryValue = 0
+
+  if (position.legs && position.legs.length > 0) {
+    for (const leg of position.legs) {
+      const legCurrentPrice = leg.currentPrice ?? leg.entryPrice
+      const legPnl =
+        leg.tradeType === 'selling'
+          ? (leg.entryPrice - legCurrentPrice) * leg.quantity
+          : (legCurrentPrice - leg.entryPrice) * leg.quantity
+      totalPnl += legPnl
+      totalEntryValue += leg.entryPrice * leg.quantity
+    }
+  } else {
+    const currentPrice = position.currentPrice ?? position.entryPrice
+    const isSelling = position.tradeType === 'selling'
+    totalPnl = isSelling
+      ? (position.entryPrice - currentPrice) * position.quantity
+      : (currentPrice - position.entryPrice) * position.quantity
+    totalEntryValue = position.entryPrice * position.quantity
+  }
+
+  const pct = totalEntryValue > 0 ? (totalPnl / totalEntryValue) * 100 : 0
+  return { totalPnl, pct }
+}
+
 export function getLotSizeForSymbol(
   symbol: string,
   defaultHint?: number,

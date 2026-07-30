@@ -641,12 +641,27 @@ export async function fetchSymbolSentiment(
 }
 
 // ─── Market fetch ─────────────────────────────────────────────────────────────
+type BreadthFetchResult = [
+  { advances: number; declines: number; ratio: number; total: number } | null,
+  string | null,
+]
+type GlobalFetchResult = [
+  {
+    status: string
+    data?: GlobalIndexItem[]
+    giftNifty: VrdData['giftNifty']
+  } | null,
+  string | null,
+]
+
 export async function fetchMarket(
   token: string,
   addLog: (l: BotLog) => void,
   sourceUpdate: (k: string, s: SourceStatus) => void,
   underlyingSymbol: UnderlyingSymbol = 'NIFTY 50',
   abortSignal?: AbortSignal,
+  sharedBreadthRes?: PromiseSettledResult<BreadthFetchResult>,
+  sharedGlobalRes?: PromiseSettledResult<GlobalFetchResult>,
 ): Promise<{
   underlyingSymbol: UnderlyingSymbol
   candles: Candle[]
@@ -694,17 +709,23 @@ export async function fetchMarket(
           signal: abortSignal,
         },
       ),
-      safeFetch<{
-        advances: number
-        declines: number
-        ratio: number
-        total: number
-      }>(API_MARKET_BREADTH, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-        signal: abortSignal,
-      }),
+      sharedBreadthRes
+        ? Promise.resolve<BreadthFetchResult>(
+            sharedBreadthRes.status === 'fulfilled'
+              ? sharedBreadthRes.value
+              : [null, String(sharedBreadthRes.reason as unknown)],
+          )
+        : safeFetch<{
+            advances: number
+            declines: number
+            ratio: number
+            total: number
+          }>(API_MARKET_BREADTH, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+            signal: abortSignal,
+          }),
       safeFetch<{
         data?: OptionContract[]
         expiries?: string[]
@@ -714,16 +735,22 @@ export async function fetchMarket(
         body: JSON.stringify({ token, instrumentKey: targetInstrumentKey }),
         signal: abortSignal,
       }),
-      safeFetch<{
-        status: string
-        data?: GlobalIndexItem[]
-        giftNifty: VrdData['giftNifty']
-      }>(API_MARKET_GLOBAL_INDICES, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-        signal: abortSignal,
-      }),
+      sharedGlobalRes
+        ? Promise.resolve<GlobalFetchResult>(
+            sharedGlobalRes.status === 'fulfilled'
+              ? sharedGlobalRes.value
+              : [null, String(sharedGlobalRes.reason as unknown)],
+          )
+        : safeFetch<{
+            status: string
+            data?: GlobalIndexItem[]
+            giftNifty: VrdData['giftNifty']
+          }>(API_MARKET_GLOBAL_INDICES, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+            signal: abortSignal,
+          }),
     ])
 
   // candles
@@ -945,21 +972,58 @@ export async function fetchMarketForSymbols(
   symbols: UnderlyingSymbol[],
   abortSignal?: AbortSignal,
 ): Promise<Record<UnderlyingSymbol, Awaited<ReturnType<typeof fetchMarket>>>> {
-  const results = await Promise.allSettled(
-    symbols.map((sym) =>
-      fetchMarket(token, addLog, sourceUpdate, sym, abortSignal),
-    ),
-  )
   const map = {} as Record<
     UnderlyingSymbol,
     Awaited<ReturnType<typeof fetchMarket>>
   >
-  results.forEach((res, idx) => {
-    const sym = symbols[idx]
-    if (res.status === 'fulfilled') {
-      map[sym] = res.value
+
+  const sharedRes = await Promise.allSettled([
+    safeFetch<{
+      advances: number
+      declines: number
+      ratio: number
+      total: number
+    }>(API_MARKET_BREADTH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+      signal: abortSignal,
+    }),
+    safeFetch<{
+      status: string
+      data?: GlobalIndexItem[]
+      giftNifty: VrdData['giftNifty']
+    }>(API_MARKET_GLOBAL_INDICES, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+      signal: abortSignal,
+    }),
+  ])
+
+  for (const sym of symbols) {
+    if (abortSignal?.aborted) break
+    try {
+      const res = await fetchMarket(
+        token,
+        addLog,
+        sourceUpdate,
+        sym,
+        abortSignal,
+        sharedRes[0],
+        sharedRes[1],
+      )
+      map[sym] = res
+    } catch (err) {
+      addLog(
+        mkLog(
+          'error',
+          'market',
+          `Failed to fetch market data for ${sym}: ${(err as Error).message}`,
+        ),
+      )
     }
-  })
+  }
   return map
 }
 
