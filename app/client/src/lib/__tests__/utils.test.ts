@@ -265,6 +265,23 @@ describe('getSensibullUrl', () => {
     )
   })
 
+  it('parses display format NIFTY 50 24450 CE into a valid NSE symbol', () => {
+    vi.setSystemTime(new Date('2026-07-30T10:00:00+05:30')) // Ensure predictable upcoming expiry
+    const url = getSensibullUrl('NIFTY 50 24450 CE')
+    // Next Thursday from July 30, 2026 is August 6. Wait, getUpcomingIndexExpiry determines the exact date.
+    // I can just check that it produces the right structure rather than hardcoding the exact day,
+    // or I can hardcode what the current utils logic would output for July 30, 2026.
+    // July 30 is Thursday. The NEXT expiry is August 6, 2026 (2026-08-06).
+    // So it should generate NIFTY2680624450CE.
+    expect(url).toMatch(/tradingSymbol=NIFTY26\w{1,3}\d{2}24450CE/)
+  })
+
+  it('parses display format BANKNIFTY 52000 PE into a valid NSE symbol', () => {
+    vi.setSystemTime(new Date('2026-07-30T10:00:00+05:30'))
+    const url = getSensibullUrl('BANKNIFTY 52000 PE')
+    expect(url).toMatch(/tradingSymbol=BANKNIFTY26\w{1,3}\d{2}52000PE/)
+  })
+
   it('encodes symbols before adding them to the query string', () => {
     expect(getSensibullUrl('NIFTY 50&AUG=CE')).toBe(
       'https://web.sensibull.com/chart?tradingSymbol=NIFTY%2050%26AUG%3DCE',

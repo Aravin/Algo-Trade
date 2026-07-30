@@ -94,6 +94,41 @@ export function getSensibullUrl(
     return `https://web.sensibull.com/option-chain?tradingsymbol=${encodeURIComponent(sym)}`
   }
 
+  // Handle display format like "NIFTY 50 24450 CE" -> NSE option symbol
+  const optionMatch =
+    /^(NIFTY\s*50|NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX)\s+(\d+)\s+(CE|PE)$/.exec(
+      upper,
+    )
+  if (optionMatch) {
+    const underlying = optionMatch[1].replace(/\s*50$/, '')
+    const strike = optionMatch[2]
+    const type = optionMatch[3]
+
+    const iso = getUpcomingIndexExpiry(underlying).expiryDateStr
+    if (iso && iso.length >= 10) {
+      const yy = iso.slice(2, 4)
+      const mm = iso.slice(5, 7)
+      const dd = iso.slice(8, 10)
+      const monthCodes: Record<string, string> = {
+        '01': '1',
+        '02': '2',
+        '03': '3',
+        '04': '4',
+        '05': '5',
+        '06': '6',
+        '07': '7',
+        '08': '8',
+        '09': '9',
+        '10': 'O',
+        '11': 'N',
+        '12': 'D',
+      }
+      const m = monthCodes[mm] || '1'
+      const nseSymbol = `${underlying}${yy}${m}${dd}${strike}${type}`
+      return `https://web.sensibull.com/chart?tradingSymbol=${encodeURIComponent(nseSymbol)}`
+    }
+  }
+
   return `https://web.sensibull.com/chart?tradingSymbol=${encodeURIComponent(cleanSym)}`
 }
 
