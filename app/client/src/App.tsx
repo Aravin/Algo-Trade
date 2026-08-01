@@ -112,17 +112,79 @@ interface Auth0Props {
   user?: { sub?: string }
 }
 
+const PAGE_PATH_MAP: Record<string, string> = {
+  'live-trades': '/live-trades',
+  strategies: '/strategies',
+  history: '/history',
+  'broker-accounts': '/broker-accounts',
+  profile: '/profile',
+  settings: '/settings',
+}
+
+const PATH_PAGE_MAP: Record<string, string> = {
+  '/': 'live-trades',
+  '/live-trades': 'live-trades',
+  '/strategies': 'strategies',
+  '/history': 'history',
+  '/broker-accounts': 'broker-accounts',
+  '/profile': 'profile',
+  '/settings': 'settings',
+}
+
+function getPageFromLocation(): string {
+  const searchParams = new URLSearchParams(window.location.search)
+  const pageParam = searchParams.get('page')
+  if (pageParam && PAGE_PATH_MAP[pageParam]) {
+    return pageParam
+  }
+
+  const pathname = window.location.pathname
+  const normalized =
+    pathname.length > 1 && pathname.endsWith('/')
+      ? pathname.slice(0, -1)
+      : pathname
+
+  if (PATH_PAGE_MAP[normalized]) {
+    return PATH_PAGE_MAP[normalized]
+  }
+
+  return 'live-trades'
+}
+
+function getPathFromPage(pageId: string): string {
+  return PAGE_PATH_MAP[pageId] ?? '/'
+}
+
 function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
-  const isBrokerCallback = window.location.pathname === '/broker/callback'
-  const urlParams = new URLSearchParams(window.location.search)
-  const initialPage = !isBrokerCallback
-    ? (urlParams.get('page') ?? 'live-trades')
-    : 'live-trades'
+  const isBrokerCallback =
+    window.location.pathname === '/broker/callback' ||
+    window.location.pathname === '/broker-callback'
+  const initialPage = !isBrokerCallback ? getPageFromLocation() : 'live-trades'
 
   const [activeItem, setActiveItem] = useState(initialPage)
   const [isHydrated, setIsHydrated] = useState(isBrokerCallback)
   const [brokerToken, setBrokerToken] = useState<string | null>(null)
   const [hydratedUserId, setHydratedUserId] = useState<string | null>(null)
+
+  const handleSelectPage = (id: string) => {
+    setActiveItem(id)
+    if (!isBrokerCallback) {
+      const targetPath = getPathFromPage(id)
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({}, '', targetPath)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (isBrokerCallback) return
+    const onPopState = () => {
+      const page = getPageFromLocation()
+      setActiveItem(page)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [isBrokerCallback])
 
   const auth0Enabled = isAuth0Enabled()
   const {
@@ -164,10 +226,29 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
       if (!isLoading) {
         window.history.replaceState({}, '', window.location.pathname)
       }
-    } else if (search) {
-      window.history.replaceState({}, '', window.location.pathname)
+    } else if (search?.includes('page=')) {
+      const searchParams = new URLSearchParams(window.location.search)
+      searchParams.delete('page')
+      const remaining = searchParams.toString()
+      const basePath = getPathFromPage(initialPage)
+      const targetPath = basePath + (remaining ? `?${remaining}` : '')
+      if (window.location.pathname + window.location.search !== targetPath) {
+        window.history.replaceState({}, '', targetPath)
+      }
+    } else {
+      const pathname = window.location.pathname
+      const normalized =
+        pathname.length > 1 && pathname.endsWith('/')
+          ? pathname.slice(0, -1)
+          : pathname
+      if (!PATH_PAGE_MAP[normalized]) {
+        const targetPath = getPathFromPage(initialPage) + search
+        if (window.location.pathname + window.location.search !== targetPath) {
+          window.history.replaceState({}, '', targetPath)
+        }
+      }
     }
-  }, [isBrokerCallback, isLoading])
+  }, [isBrokerCallback, isLoading, initialPage])
 
   useEffect(() => {
     // If Auth0 is enabled, wait until authenticated to run hydration
@@ -294,7 +375,7 @@ function AppContent({ auth0Props }: { auth0Props: Auth0Props | null }) {
   return (
     <DashboardShell
       activeItem={activeItem}
-      onSelect={setActiveItem}
+      onSelect={handleSelectPage}
       brokerToken={brokerToken}
     />
   )

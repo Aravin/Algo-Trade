@@ -140,3 +140,53 @@ it('keeps one bot controller mounted while dashboard pages change', async () => 
   expect(appMocks.botMounts).toBe(1)
   expect(appMocks.botUnmounts).toBe(0)
 })
+
+it('loads directly on path route like /strategies and syncs pushState on navigation', async () => {
+  window.history.replaceState({}, '', '/strategies')
+  const pushSpy = vi.spyOn(window.history, 'pushState')
+
+  render(<App />)
+  expect(await screen.findByText('Strategies')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByText('Live nav'))
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+  expect(pushSpy).toHaveBeenCalledWith({}, '', '/live-trades')
+
+  pushSpy.mockRestore()
+})
+
+it('handles popstate event when navigating back in browser history', async () => {
+  window.history.replaceState({}, '', '/live-trades')
+
+  render(<App />)
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+
+  act(() => {
+    window.history.replaceState({}, '', '/strategies')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  })
+
+  expect(await screen.findByText('Strategies')).toBeInTheDocument()
+})
+
+it('cleans up legacy ?page= parameter while preserving remaining search parameters', async () => {
+  window.history.replaceState({}, '', '/?page=strategies&symbol=NIFTY')
+  const replaceSpy = vi.spyOn(window.history, 'replaceState')
+
+  render(<App />)
+  expect(await screen.findByText('Strategies')).toBeInTheDocument()
+  expect(replaceSpy).toHaveBeenCalledWith({}, '', '/strategies?symbol=NIFTY')
+
+  replaceSpy.mockRestore()
+})
+
+it('normalizes unmapped path to default route in window.history', async () => {
+  window.history.replaceState({}, '', '/invalid-route')
+  const replaceSpy = vi.spyOn(window.history, 'replaceState')
+
+  render(<App />)
+  expect(await screen.findByTestId('live-trades')).toBeInTheDocument()
+  expect(replaceSpy).toHaveBeenCalledWith({}, '', '/live-trades')
+
+  replaceSpy.mockRestore()
+})

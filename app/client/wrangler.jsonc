@@ -6,7 +6,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "algo-trade",
   "main": "worker/index.ts",
-  "compatibility_date": "2026-07-28",
+  "compatibility_date": "2026-06-16",
   "assets": {
     "not_found_handling": "single-page-application",
   },
